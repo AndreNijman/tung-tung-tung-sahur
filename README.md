@@ -1,4 +1,4 @@
-# Tung Tung Tung Sahur
+# Tung Tung Tung Sahorror
 
 A first-person raycaster horror game that runs in one HTML file. No build step,
 no dependencies, no assets — every sprite is drawn with canvas calls and every
