@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 //
-// Headless balance harness for Tung Tung Tung Sahur.
+// Headless balance harness for Tung Tung Tung Sahorror.
 //
 // index.html is split by the ">>> SIM CUT <<<" marker: everything above it is
 // pure simulation, everything below is browser-only. This loads the top half
