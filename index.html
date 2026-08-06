@@ -1172,9 +1172,43 @@ function screenIntro(ctx) {
     drawText(ctx, ln, cx, y, ln ? INK : INK_DIM, { center: true, font: '16px monospace' });
     y += 26;
   }
-  drawText(ctx, 'press any key to wake', cx, 424, INK_DIM, { center: true, font: 'bold 20px monospace' });
-  drawText(ctx, 'WASD move   SHIFT sprint   F torch   E hide   mouse to look',
-           cx, 470, INK_DIM, { center: true, font: '14px monospace' });
+  drawText(ctx, 'press any key to wake', cx, 418, INK_DIM, { center: true, font: 'bold 20px monospace' });
+  drawText(ctx, 'WASD move   SHIFT sprint   F torch   E hide   ESC pause',
+           cx, 458, INK_DIM, { center: true, font: '14px monospace' });
+  drawText(ctx, 'originally by tim', cx, 500, INK_DIM, { center: true, font: '13px monospace' });
+}
+// The frozen frame is snapshotted once on pause rather than re-rendered, so the
+// world genuinely stops -- no torch flicker, no drifting creature behind the
+// overlay -- and repeated translucent fills cannot compound frame over frame.
+function screenPaused(ctx, game, snapshot) {
+  if (snapshot) ctx.drawImage(snapshot, 0, 0);
+  else { ctx.fillStyle = 'black'; ctx.fillRect(0, 0, WIN_W, WIN_H); }
+  ctx.fillStyle = 'rgba(6,5,4,0.82)';
+  ctx.fillRect(0, 0, WIN_W, WIN_H);
+
+  const cx = WIN_W / 2;
+  drawText(ctx, 'PAUSED', cx, 122, AMBER, { center: true, font: 'bold 40px monospace' });
+  drawText(ctx, 'The street holds its breath.', cx, 172, INK_DIM, { center: true, font: '15px monospace' });
+
+  drawText(ctx, `SUBUH IN ${fmtClock(game.timeLeft)}`, cx - 110, 236, INK, { center: true, font: '15px monospace' });
+  drawText(ctx, `OFFERINGS ${game.collected} / ${N_ITEMS}`, cx + 110, 236, INK, { center: true, font: '15px monospace' });
+
+  const rows = [
+    ['WASD', 'move'],
+    ['SHIFT', 'sprint'],
+    ['F', 'torch'],
+    ['E', 'hide in an alcove'],
+    ['R', 'abandon the night, start over'],
+  ];
+  let y = 292;
+  for (const [k, what] of rows) {
+    drawText(ctx, k, cx - 160, y, AMBER, { font: '14px monospace' });
+    drawText(ctx, what, cx - 90, y, INK_DIM, { font: '14px monospace' });
+    y += 24;
+  }
+
+  drawText(ctx, 'click to resume', cx, WIN_H - 74, INK, { center: true, font: 'bold 20px monospace' });
+  drawText(ctx, 'originally by tim', cx, WIN_H - 40, INK_DIM, { center: true, font: '13px monospace' });
 }
 function screenDawn(ctx, game) {
   ctx.fillStyle = 'rgb(22,16,10)'; ctx.fillRect(0, 0, WIN_W, WIN_H);
@@ -1238,6 +1272,39 @@ let droneStarted = false, droneHandle = null, whisperHandle = null;
 let caughtTimer = 0;
 let lastTime = performance.now();
 
+let paused = false;
+const pauseCanvas = document.createElement('canvas');
+pauseCanvas.width = WIN_W; pauseCanvas.height = WIN_H;
+const pauseCtx = pauseCanvas.getContext('2d');
+let pauseSnapshotTaken = false;
+
+function pauseGame() {
+  if (paused || game.state !== 'play') return;
+  paused = true;
+  // grab the live frame before anything is drawn over it
+  pauseCtx.clearRect(0, 0, WIN_W, WIN_H);
+  pauseCtx.drawImage(canvas, 0, 0);
+  pauseSnapshotTaken = true;
+  if (document.exitPointerLock) document.exitPointerLock();
+  if (whisperHandle) whisperHandle.gain.gain.value = 0;
+  if (droneHandle) droneHandle.gain.gain.value = 0.25;
+}
+
+let resumeGuardUntil = 0;
+
+function resumeGame() {
+  if (!paused) return;
+  paused = false;
+  if (droneHandle) droneHandle.gain.gain.value = 1.0;
+  // Briefly ignore pointerlockchange: if the re-lock is refused we must not
+  // bounce straight back into the pause menu.
+  resumeGuardUntil = performance.now() + 700;
+  // Re-locking has to ride a user gesture, and browsers impose a short cooldown
+  // after an Escape-triggered exit. If it is refused the game still resumes --
+  // mouse look just stays off until the next click.
+  startGesture();
+}
+
 function startGesture() {
   audio.init();
   if (audio.ctx.state === 'suspended') audio.ctx.resume();
@@ -1259,21 +1326,46 @@ window.addEventListener('keydown', (e) => {
   if (code === 'KeyD') keys.d = true;
   if (code === 'ShiftLeft' || code === 'ShiftRight') keys.shift = true;
 
+  if (paused) {
+    // While paused the only keys that mean anything are resume and restart.
+    if (code === 'Escape' || code === 'Enter') resumeGame();
+    else if (code === 'KeyR') { restart(); }
+    e.preventDefault();
+    return;
+  }
+
   if (game.state === 'intro') {
     startGesture();
     game.state = 'play';
   } else if (game.state === 'play') {
+    if (code === 'Escape') { pauseGame(); e.preventDefault(); return; }
     if (code === 'KeyE') game.toggleHide();
     else if (code === 'KeyF' && !game.hidden) game.flashlight = !game.flashlight;
     else if ((code === 'KeyW' || code === 'KeyA' || code === 'KeyS' || code === 'KeyD') && game.hidden) game.hidden = false;
   } else if (code === 'KeyR' && (game.state === 'caught' || game.state === 'win' || game.state === 'dawn')) {
-    game = new Game();
-    game.state = 'play';
-    caughtTimer = 0;
-    startGesture();
+    restart();
   }
-  if (code === 'Escape' && document.exitPointerLock) document.exitPointerLock();
 });
+
+function restart() {
+  game = new Game();
+  game.state = 'play';
+  caughtTimer = 0;
+  paused = false;
+  pauseSnapshotTaken = false;
+  if (droneHandle) droneHandle.gain.gain.value = 1.0;
+  startGesture();
+}
+
+// Anything that takes the player's attention away pauses: Escape drops pointer
+// lock, so does alt-tabbing, and coming back to a creature that kept hunting
+// while you were reading email is not a fair death.
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement !== canvas && game.state === 'play'
+      && performance.now() > resumeGuardUntil) pauseGame();
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+window.addEventListener('blur', () => pauseGame());
 window.addEventListener('keyup', (e) => {
   const code = e.code;
   if (code === 'ArrowLeft') keys.left = false;
@@ -1288,6 +1380,7 @@ document.addEventListener('mousemove', (e) => {
   if (document.pointerLockElement === canvas) mdxAccum += e.movementX;
 });
 canvas.addEventListener('click', () => {
+  if (paused) { resumeGame(); return; }
   if (game.state === 'intro') { startGesture(); game.state = 'play'; }
   else if (game.state === 'play' && document.pointerLockElement !== canvas) startGesture();
 });
@@ -1297,6 +1390,12 @@ function frame(now) {
   let dt = (now - lastTime) / 1000; lastTime = now;
   dt = Math.min(dt, 0.05);
   const mdx = mdxAccum; mdxAccum = 0;
+
+  if (paused && game.state === 'play') {
+    // No update, no clock, no creature. Just the frozen frame and the menu.
+    screenPaused(ctx, game, pauseSnapshotTaken ? pauseCanvas : null);
+    return;
+  }
 
   if (game.state === 'play') {
     game.update(dt, keys, mdx);

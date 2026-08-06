@@ -68,6 +68,31 @@ async function play(page, seconds, keys = ['KeyW']) {
   if (!(t2 < t1 - 0.5)) problems.push(`clock not running: ${t1} -> ${t2}`);
   console.log(`  clock: ${t1.toFixed(1)}s -> ${t2.toFixed(1)}s`);
 
+  // pause: the menu must appear and the night must actually stop
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  if (!(await page.evaluate(() => paused))) problems.push('Escape did not pause');
+  await shot(page, '3-paused');
+  const p1 = await page.evaluate(() => game.timeLeft);
+  await page.waitForTimeout(1200);
+  const p2 = await page.evaluate(() => game.timeLeft);
+  if (p1 !== p2) problems.push(`clock kept running while paused: ${p1} -> ${p2}`);
+  console.log(`  paused clock held at ${p2.toFixed(1)}s`);
+  // and the creature must not have moved either
+  const c1 = await page.evaluate(() => [game.cx, game.cy]);
+  await page.waitForTimeout(600);
+  const c2 = await page.evaluate(() => [game.cx, game.cy]);
+  if (c1[0] !== c2[0] || c1[1] !== c2[1]) problems.push('creature moved while paused');
+
+  await page.mouse.click(500, 300);
+  await page.waitForTimeout(400);
+  if (await page.evaluate(() => paused)) problems.push('click did not resume');
+  const p3 = await page.evaluate(() => game.timeLeft);
+  await page.waitForTimeout(800);
+  if (!((await page.evaluate(() => game.timeLeft)) < p3 - 0.3)) {
+    problems.push('clock did not restart after resume');
+  }
+
   // torch toggle and hide key must not throw
   await page.keyboard.press('KeyF');
   await page.keyboard.press('KeyE');
@@ -77,14 +102,14 @@ async function play(page, seconds, keys = ['KeyW']) {
   // extraction HUD: strip the offerings and confirm the surau compass renders
   await page.evaluate(() => { game.items.length = 0; game.collected = N_ITEMS; });
   await page.waitForTimeout(400);
-  await shot(page, '3-extraction');
+  await shot(page, '4-extraction');
 
   // win: stand on the surau with everything gathered
   await page.evaluate(() => { game.px = game.surau[0]; game.py = game.surau[1]; });
   await page.waitForTimeout(400);
   let state = await page.evaluate(() => game.state);
   if (state !== 'win') problems.push(`reaching the surau with 6/6 did not win (state=${state})`);
-  await shot(page, '4-win');
+  await shot(page, '5-win');
 
   // dawn: restart, run the clock out
   await page.keyboard.press('KeyR');
@@ -93,7 +118,7 @@ async function play(page, seconds, keys = ['KeyW']) {
   await page.waitForTimeout(600);
   state = await page.evaluate(() => game.state);
   if (state !== 'dawn') problems.push(`clock expiry did not end the night (state=${state})`);
-  await shot(page, '5-dawn');
+  await shot(page, '6-dawn');
 
   // caught: restart, drop the creature on top of the player
   await page.keyboard.press('KeyR');
@@ -102,7 +127,7 @@ async function play(page, seconds, keys = ['KeyW']) {
   await page.waitForTimeout(400);
   state = await page.evaluate(() => game.state);
   if (state !== 'caught') problems.push(`contact did not catch the player (state=${state})`);
-  await shot(page, '6-caught');
+  await shot(page, '7-caught');
 
   // restart from an end screen must produce a fresh, playable night
   await page.keyboard.press('KeyR');

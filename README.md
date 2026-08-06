@@ -4,7 +4,9 @@ A first-person raycaster horror game that runs in one HTML file. No build step,
 no dependencies, no assets — every sprite is drawn with canvas calls and every
 sound is synthesised in the Web Audio API at load.
 
-**Play: https://andrenijman.github.io/tung-tung-tung-sahur/**
+**Play: https://tung.andrenijman.com/**
+
+originally by tim
 
 ---
 
@@ -24,7 +26,8 @@ fight it. You can only be somewhere it is not looking.
 | mouse / `←` `→` | look |
 | `F` | torch — you see further, so does it |
 | `E` | duck into a shelter alcove |
-| `R` | restart from an end screen |
+| `Esc` | pause — also fires on alt-tab or losing pointer lock |
+| `R` | restart, from the pause menu or an end screen |
 
 ## What it knows about you
 
