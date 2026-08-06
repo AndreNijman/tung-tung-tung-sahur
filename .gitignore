@@ -1,0 +1,8 @@
+node_modules/
+shots/
+
+# The original pygame build. It had already drifted from the web version
+# (dropped mouse input, E bound to both "turn right" and "hide") and keeping a
+# second copy of the same game in the repo guarantees the two diverge again.
+# The HTML build is the game.
+*.py

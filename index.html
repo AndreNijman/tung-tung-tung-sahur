@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tung Tung Tung Sahur</title>
+<style>
+  html, body { margin:0; padding:0; background:#000; height:100%; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; font-family:monospace; }
+  #wrap { position:relative; width:960px; height:540px; box-shadow:0 0 40px rgba(0,0,0,0.8); }
+  #main { position:absolute; top:0; left:0; image-rendering:pixelated; cursor:pointer; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="main" width="960" height="540"></canvas>
+</div>
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// config
+// ---------------------------------------------------------------------------
+const WIN_W = 960, WIN_H = 540;
+const RENDER_W = 320, RENDER_H = 180;
+
+const FOV = 1.0;
+const MAP_N = 21;
+
+const WALK_SPEED = 2.2;
+const SPRINT_SPEED = 3.6;
+const STAMINA_DRAIN = 0.34;
+const STAMINA_REGEN = 0.16;
+const TURN_SPEED = 2.6;
+const MOUSE_SENS = 0.0022;
+const PLAYER_RADIUS = 0.18;
+
+const CREATURE_WANDER_SPEED = 1.25;
+// Hunt speed must sit above WALK_SPEED. Below it, a fleeing player can neither
+// be caught nor shake him off, and the hunt degenerates into a permanent
+// low-grade chase instead of a scare that resolves. Sprint is the escape.
+const CREATURE_STALK_SPEED = 1.75;
+const CREATURE_HUNT_BASE = 2.30;
+const CREATURE_HUNT_PER_ITEM = 0.05;
+const CREATURE_HUNT_MAX = 2.75;
+const CATCH_DIST = 0.45;
+const REPATH_INTERVAL = 0.3;
+
+const DETECT_RANGE = 7.0;
+const VIEW_CONE = 1.05;        // half-angle of what he can see, radians (~60 deg)
+const HEAD_TURN_RATE = 3.4;    // rad/s -- his head lags the corner he just took
+const HEAR_SPRINT = 9.5;
+const HEAR_WALK = 3.5;
+const TORCH_BEACON = 4.0;
+const BEHIND_SENSE = 1.2;
+const ALERT_DECAY = 0.5;
+const HEARD_ALERT = 0.55;
+const RELOCATE_AFTER = 11.0;
+const RELOCATE_MIN = 5;
+const RELOCATE_MAX = 8;
+const SEARCH_SPREAD = 4;       // how far around your last position he casts about
+
+const N_HIDES = 7;
+const HIDE_DIST = 0.75;
+const HIDE_SAFE_BREAK = 0.9;
+
+const N_ITEMS = 6;
+const DARK_DIST = 9.0;
+const BATTERY_DRAIN = 0.008;
+const BATTERY_PER_ITEM = 0.3;
+
+// The night is a real clock and it does not stop while you hide.
+const NIGHT_SECONDS = 240;
+const DAWN_WARN = 45;          // the clock goes red under this
+
+// Nerve has a floor consequence: panicking makes you audible standing still,
+// and slows how fast you get your wind back. Hiding is the way out.
+const PANIC_THRESHOLD = 0.25;
+const PANIC_NOISE = 4.5;
+const PANIC_STAMINA_REGEN = 0.5;
+
+const SURAU_DIST = 0.7;        // how close you must get to count as home
+
+const AMBER = 'rgb(224,160,64)';
+const COOL = 'rgb(130,145,170)';
+const INK = 'rgb(200,200,205)';
+const INK_DIM = 'rgb(120,120,128)';
+
+function pymod(a, b) { return ((a % b) + b) % b; }
+function copysign(mag, sign) { return sign < 0 ? -mag : mag; }
+// signed smallest angle from a to b, in (-pi, pi]
+function angDiff(a, b) { return pymod(b - a + Math.PI, 2 * Math.PI) - Math.PI; }
+function fmtClock(seconds) {
+  const s = Math.max(0, Math.ceil(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// ---------------------------------------------------------------------------
+// audio (procedural, Web Audio API)
+// ---------------------------------------------------------------------------
+const SR = 44100;
+
+function lin(d) {
+  const n = Math.floor(SR * d);
+  const t = new Float32Array(n);
+  for (let i = 0; i < n; i++) t[i] = i / SR;
+  return t;
+}
+function lp(sig, passes, k) {
+  let out = sig;
+  for (let p = 0; p < passes; p++) {
+    const n = out.length;
+    const prefix = new Float64Array(n + 1);
+    for (let i = 0; i < n; i++) prefix[i + 1] = prefix[i] + out[i];
+    const half = Math.floor(k / 2);
+    const res = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const lo = Math.max(0, i - half);
+      const hi = Math.min(n - 1, i - half + k - 1);
+      res[i] = (prefix[hi + 1] - prefix[lo]) / (hi - lo + 1);
+    }
+    out = res;
+  }
+  return out;
+}
+function normalize(sig) {
+  let mx = 0;
+  for (let i = 0; i < sig.length; i++) mx = Math.max(mx, Math.abs(sig[i]));
+  const scale = 1.0 / (mx + 1e-9);
+  for (let i = 0; i < sig.length; i++) sig[i] *= scale;
+  return sig;
+}
+function randUniform(n) {
+  const a = new Float32Array(n);
+  for (let i = 0; i < n; i++) a[i] = Math.random() * 2 - 1;
+  return a;
+}
+
+function makeTung() {
+  const t = lin(0.30), n = t.length, s = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const env = Math.exp(-t[i] * 17.0);
+    const body = Math.sin(2 * Math.PI * 150 * t[i]) * 0.6 + Math.sin(2 * Math.PI * 300 * t[i]) * 0.28
+      + Math.sin(2 * Math.PI * 92 * t[i]) * 0.45;
+    s[i] = body * env;
+  }
+  const click = randUniform(n);
+  for (let i = 0; i < n; i++) s[i] += click[i] * Math.exp(-t[i] * 130) * 0.5;
+  normalize(s);
+  for (let i = 0; i < n; i++) s[i] *= 0.9;
+  return s;
+}
+function makeBoom() {
+  const t = lin(0.85), n = t.length, s = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const env = Math.exp(-t[i] * 4.0);
+    s[i] = (Math.sin(2 * Math.PI * 68 * t[i]) * 0.7 + Math.sin(2 * Math.PI * 44 * t[i]) * 0.6) * env;
+  }
+  const noise = randUniform(n);
+  for (let i = 0; i < n; i++) s[i] += noise[i] * Math.exp(-t[i] * 28) * 0.4;
+  normalize(s);
+  for (let i = 0; i < n; i++) s[i] *= 0.95;
+  return s;
+}
+function makeHeart() {
+  const t = lin(0.62), n = t.length, s = new Float32Array(n);
+  for (const [off, amp] of [[0.0, 1.0], [0.17, 0.66]]) {
+    for (let i = 0; i < n; i++) {
+      const tt = Math.max(t[i] - off, 0.0);
+      const env = t[i] >= off ? Math.exp(-tt * 15.0) : 0.0;
+      s[i] += Math.sin(2 * Math.PI * 54 * tt) * env * amp;
+    }
+  }
+  normalize(s);
+  for (let i = 0; i < n; i++) s[i] *= 0.85;
+  return s;
+}
+function makePickup() {
+  const t = lin(0.35), n = t.length, s = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const f = 420 + (880 - 420) * (i / (n - 1));
+    const env = Math.exp(-t[i] * 8.0);
+    s[i] = Math.sin(2 * Math.PI * f * t[i]) * env + Math.sin(2 * Math.PI * f * 2 * t[i]) * env * 0.3;
+  }
+  normalize(s);
+  for (let i = 0; i < n; i++) s[i] *= 0.6;
+  return s;
+}
+function makeStinger() {
+  const t = lin(0.5), n = t.length, s = new Float32Array(n);
+  const noise = randUniform(n);
+  for (let i = 0; i < n; i++) {
+    const nn = noise[i] * Math.exp(-t[i] * 8);
+    const f = 1200 + (380 - 1200) * (i / (n - 1));
+    const tone = Math.sin(2 * Math.PI * f * t[i]) * Math.exp(-t[i] * 5);
+    s[i] = nn * 0.6 + tone * 0.6;
+  }
+  normalize(s);
+  for (let i = 0; i < n; i++) s[i] *= 0.9;
+  return s;
+}
+function makeHidefx() {
+  const t = lin(0.4), n = t.length, s = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const f = 300 + (120 - 300) * (i / (n - 1));
+    s[i] = Math.sin(2 * Math.PI * f * t[i]) * Math.exp(-t[i] * 6);
+  }
+  const noise = lp(randUniform(n), 18, 5);
+  for (let i = 0; i < n; i++) s[i] += noise[i] * Math.exp(-t[i] * 10) * 0.5;
+  normalize(s);
+  for (let i = 0; i < n; i++) s[i] *= 0.55;
+  return s;
+}
+function makeBreath() {
+  const t = lin(0.95), n = t.length;
+  let s = new Float32Array(n);
+  for (const off of [0.0, 0.48]) {
+    for (let i = 0; i < n; i++) {
+      const env = t[i] >= off ? Math.exp(-Math.max(t[i] - off, 0) * 6) : 0.0;
+      s[i] += (Math.random() * 2 - 1) * env;
+    }
+  }
+  s = lp(s, 22, 5);
+  normalize(s);
+  for (let i = 0; i < n; i++) s[i] *= 0.55;
+  return s;
+}
+function makeScare() {
+  const t = lin(0.85), n = t.length, s = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const noise = (Math.random() * 2 - 1) * Math.exp(-t[i] * 3.0);
+    const f = 900 + (70 - 900) * (i / (n - 1));
+    const tone = Math.sin(2 * Math.PI * f * t[i]) * Math.exp(-t[i] * 2.0);
+    s[i] = noise * 0.7 + tone * 0.6;
+  }
+  normalize(s);
+  return s;
+}
+function makeDawn() {
+  const t = lin(1.8), n = t.length, s = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const swell = Math.min(1, t[i] / 0.6) * Math.exp(-Math.max(t[i] - 0.9, 0) * 1.2);
+    let v = 0;
+    for (const f of [220.0, 277.0, 330.0, 440.0]) v += Math.sin(2 * Math.PI * f * t[i]);
+    s[i] = (v / 4.0) * swell * 0.6;
+  }
+  return s;
+}
+function makeDrone() {
+  const t = lin(3.0), n = t.length, s = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    s[i] = Math.sin(2 * Math.PI * 42 * t[i]) + Math.sin(2 * Math.PI * 43.3 * t[i]) * 0.8;
+  }
+  const noise = lp(randUniform(n), 40, 8);
+  for (let i = 0; i < n; i++) s[i] = s[i] * 0.5 + noise[i] * 0.25;
+  normalize(s);
+  for (let i = 0; i < n; i++) s[i] *= 0.32;
+  return s;
+}
+function makeWhisper() {
+  const t = lin(2.6), n = t.length;
+  const noise = randUniform(n);
+  const smoothed = lp(noise.slice(), 30, 6);
+  let band = new Float32Array(n);
+  for (let i = 0; i < n; i++) band[i] = noise[i] - smoothed[i];
+  band = lp(band, 6, 3);
+  const s = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const am = 0.45 + 0.55 * Math.abs(Math.sin(2 * Math.PI * 0.6 * t[i]));
+    s[i] = band[i] * am;
+  }
+  normalize(s);
+  for (let i = 0; i < n; i++) s[i] *= 0.5;
+  return s;
+}
+
+class AudioManager {
+  constructor() { this.ctx = null; this.buffers = {}; this.ready = false; }
+  init() {
+    if (this.ready) return;
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const specs = {
+      tung: makeTung, boom: makeBoom, heart: makeHeart, pickup: makePickup,
+      stinger: makeStinger, hidefx: makeHidefx, breath: makeBreath, scare: makeScare,
+      dawn: makeDawn, drone: makeDrone, whisper: makeWhisper
+    };
+    for (const [name, fn] of Object.entries(specs)) {
+      const data = fn();
+      const buf = this.ctx.createBuffer(1, data.length, SR);
+      buf.copyToChannel(data, 0);
+      this.buffers[name] = buf;
+    }
+    this.ready = true;
+  }
+  playPositional(name, dist, relAngle, gain = 1.0) {
+    if (!this.ready || !this.buffers[name]) return;
+    const vol = Math.pow(Math.max(0, 1.0 - dist / 13.0), 1.5) * gain;
+    if (vol <= 0.001) return;
+    const pan = Math.max(-1, Math.min(1, Math.sin(relAngle)));
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.buffers[name];
+    const g = this.ctx.createGain(); g.gain.value = vol;
+    const p = this.ctx.createStereoPanner(); p.pan.value = pan;
+    src.connect(g).connect(p).connect(this.ctx.destination);
+    src.start();
+  }
+  playSimple(name, vol = 1.0) {
+    if (!this.ready || !this.buffers[name]) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.buffers[name];
+    const g = this.ctx.createGain(); g.gain.value = vol;
+    src.connect(g).connect(this.ctx.destination);
+    src.start();
+  }
+  playLoop(name, vol = 1.0) {
+    if (!this.ready || !this.buffers[name]) return null;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.buffers[name];
+    src.loop = true;
+    const g = this.ctx.createGain(); g.gain.value = vol;
+    src.connect(g).connect(this.ctx.destination);
+    src.start();
+    return { src, gain: g };
+  }
+}
+const audio = new AudioManager();
+
+// ---------------------------------------------------------------------------
+// maze (braided: no dead ends)
+// ---------------------------------------------------------------------------
+function genMaze(n) {
+  const grid = Array.from({ length: n }, () => new Array(n).fill(1));
+  const stack = [[1, 1]];
+  grid[1][1] = 0;
+  while (stack.length) {
+    const [cx, cy] = stack[stack.length - 1];
+    const nbrs = [];
+    for (const [dx, dy] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx >= 1 && nx < n - 1 && ny >= 1 && ny < n - 1 && grid[ny][nx] === 1) nbrs.push([nx, ny, dx, dy]);
+    }
+    if (nbrs.length) {
+      const [nx, ny, dx, dy] = nbrs[Math.floor(Math.random() * nbrs.length)];
+      grid[cy + dy / 2][cx + dx / 2] = 0;
+      grid[ny][nx] = 0;
+      stack.push([nx, ny]);
+    } else stack.pop();
+  }
+
+  const odds = [];
+  for (let y = 1; y < n - 1; y += 2) for (let x = 1; x < n - 1; x += 2) odds.push([x, y]);
+  for (const [x, y] of odds) {
+    let opens = 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (grid[y + dy][x + dx] === 0) opens++;
+    }
+    if (opens > 1) continue;
+    const cands = [];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const wx = x + dx, wy = y + dy, bx = x + 2 * dx, by = y + 2 * dy;
+      if (bx >= 1 && bx < n - 1 && by >= 1 && by < n - 1 && grid[wy][wx] === 1) cands.push([wx, wy]);
+    }
+    if (cands.length) {
+      const [wx, wy] = cands[Math.floor(Math.random() * cands.length)];
+      grid[wy][wx] = 0;
+    }
+  }
+
+  function randOdd(lo, hiExclusive) {
+    const count = Math.floor((hiExclusive - lo) / 2);
+    return lo + 2 * Math.floor(Math.random() * count);
+  }
+  for (let k = 0; k < 2; k++) {
+    const rx = randOdd(1, n - 4), ry = randOdd(1, n - 4);
+    for (let yy = ry; yy < ry + 3; yy++) for (let xx = rx; xx < rx + 3; xx++) grid[yy][xx] = 0;
+    grid[ry + 1][rx + 1] = 1;
+  }
+  return grid;
+}
+function openCells(grid) {
+  const n = grid.length, out = [];
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (grid[y][x] === 0) out.push([x, y]);
+  return out;
+}
+function bfsNext(grid, start, goal) {
+  if (start[0] === goal[0] && start[1] === goal[1]) return goal;
+  const n = grid.length;
+  const key = (x, y) => y * n + x;
+  const prev = new Map();
+  prev.set(key(start[0], start[1]), null);
+  const q = [start]; let qi = 0;
+  while (qi < q.length) {
+    const c = q[qi++];
+    if (c[0] === goal[0] && c[1] === goal[1]) break;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = c[0] + dx, ny = c[1] + dy;
+      if (nx >= 0 && nx < n && ny >= 0 && ny < n && grid[ny][nx] === 0 && !prev.has(key(nx, ny))) {
+        prev.set(key(nx, ny), c);
+        q.push([nx, ny]);
+      }
+    }
+  }
+  if (!prev.has(key(goal[0], goal[1]))) return null;
+  let cur = goal;
+  while (true) {
+    const p = prev.get(key(cur[0], cur[1]));
+    if (p === null) break;
+    if (p[0] === start[0] && p[1] === start[1]) break;
+    cur = p;
+  }
+  return cur;
+}
+
+// ---------------------------------------------------------------------------
+// sprites
+// ---------------------------------------------------------------------------
+// `away` draws the same figure with its back to you: no eyes, no mouth, the
+// drum strap crossing the shoulders instead. This is what makes the view cone
+// readable -- if you cannot see his eyes, he cannot see you.
+function createCreatureSprite(hunting, away) {
+  const w = 64, h = 128;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const wood = 'rgb(104,78,52)', woodD = 'rgb(70,52,34)', woodL = 'rgb(138,104,70)';
+  g.fillStyle = woodD; g.fillRect(24, 104, 6, 22); g.fillRect(34, 104, 6, 22);
+  g.fillStyle = wood; g.fillRect(20, 30, 24, 78);
+  g.fillStyle = woodL; g.fillRect(20, 30, 5, 78);
+  g.fillStyle = woodD; g.fillRect(39, 30, 5, 78);
+  g.strokeStyle = woodD; g.lineWidth = 1;
+  for (let gy = 40; gy < 104; gy += 12) { g.beginPath(); g.moveTo(20, gy + 0.5); g.lineTo(43, gy + 0.5); g.stroke(); }
+  g.fillStyle = wood; g.fillRect(18, 14, 28, 22);
+  g.strokeStyle = woodD; g.strokeRect(18.5, 14.5, 27, 21);
+
+  if (away) {
+    // blank back of the head, plus a strap over the shoulder
+    g.fillStyle = woodD; g.fillRect(20, 16, 24, 18);
+    g.strokeStyle = woodL; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(20, 38); g.lineTo(44, 54); g.stroke();
+  } else {
+    const eyeGlow = hunting ? 'rgb(255,90,60)' : 'rgb(250,235,200)';
+    const eyeW = hunting ? 7 : 6;
+    for (const ex of [24, 36]) {
+      g.fillStyle = 'rgb(12,10,8)'; g.fillRect(ex, 19, eyeW, 8);
+      g.fillStyle = eyeGlow; g.fillRect(ex + 1, 20, eyeW - 3, 5);
+    }
+    if (hunting) {
+      g.fillStyle = 'rgb(8,6,6)'; g.fillRect(24, 30, 16, 5);
+      g.strokeStyle = 'rgb(200,200,200)'; g.lineWidth = 1;
+      for (let gx = 25; gx < 39; gx += 4) { g.beginPath(); g.moveTo(gx + 0.5, 30); g.lineTo(gx + 0.5, 34); g.stroke(); }
+    } else {
+      g.strokeStyle = 'rgb(12,10,8)'; g.lineWidth = 2;
+      for (let gx = 22; gx < 42; gx += 4) { g.beginPath(); g.moveTo(gx, 31); g.lineTo(gx + 2, 33); g.stroke(); }
+    }
+  }
+
+  g.strokeStyle = wood;
+  if (hunting) {
+    g.lineWidth = 6; g.beginPath(); g.moveTo(44, 46); g.lineTo(60, 40); g.stroke();
+    g.fillStyle = woodL; g.fillRect(52, 34, 10, 9);
+    g.fillStyle = wood; g.fillRect(56, 30, 12, 12);
+  } else {
+    g.lineWidth = 5; g.beginPath(); g.moveTo(44, 46); g.lineTo(54, 30); g.stroke();
+    g.fillStyle = woodL; g.fillRect(50, 6, 8, 30);
+    g.fillStyle = wood; g.fillRect(49, 4, 10, 10);
+  }
+  g.strokeStyle = wood; g.lineWidth = 5;
+  g.beginPath(); g.moveTo(20, 46); g.lineTo(12, 64); g.stroke();
+  return c;
+}
+// the doorway you left before the call: warm, unmistakable, and a long way off
+function createSurauSprite() {
+  const w = 64, h = 112;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  for (const [r, a] of [[30, 0.10], [22, 0.16], [14, 0.24]]) {
+    g.fillStyle = `rgba(224,160,64,${a})`;
+    g.beginPath(); g.arc(32, 56, r, 0, Math.PI * 2); g.fill();
+  }
+  g.fillStyle = 'rgb(46,36,24)'; g.fillRect(12, 18, 40, 92);
+  g.fillStyle = 'rgb(20,16,12)'; g.fillRect(18, 30, 28, 80);
+  // lit doorway
+  const grd = g.createLinearGradient(0, 30, 0, 110);
+  grd.addColorStop(0, 'rgb(255,214,150)');
+  grd.addColorStop(1, 'rgb(150,96,32)');
+  g.fillStyle = grd; g.fillRect(21, 34, 22, 76);
+  g.fillStyle = 'rgb(46,36,24)'; g.fillRect(31, 34, 2, 76);
+  // little dome and finial
+  g.fillStyle = 'rgb(60,48,32)';
+  g.beginPath(); g.arc(32, 18, 15, Math.PI, 0); g.fill();
+  g.fillStyle = AMBER; g.fillRect(31, 0, 2, 6);
+  g.beginPath(); g.arc(32, 2, 3, 0, Math.PI * 2); g.fill();
+  return c;
+}
+function createItemSprite() {
+  const w = 32, h = 32;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  for (const [r, a] of [[14, 40 / 255], [11, 70 / 255], [8, 110 / 255]]) {
+    g.fillStyle = `rgba(224,160,64,${a})`;
+    g.beginPath(); g.arc(16, 16, r, 0, Math.PI * 2); g.fill();
+  }
+  g.fillStyle = 'rgb(60,44,20)'; g.fillRect(11, 8, 10, 16);
+  g.fillStyle = 'rgb(224,160,64)'; g.fillRect(12, 11, 8, 10);
+  g.fillStyle = 'rgb(255,240,210)'; g.fillRect(14, 13, 4, 5);
+  g.fillStyle = 'rgb(40,30,16)'; g.fillRect(12, 6, 8, 3);
+  return c;
+}
+function createHideSprite() {
+  const w = 48, h = 100;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgb(18,20,26)'; g.fillRect(8, 6, 32, 88);
+  g.strokeStyle = COOL; g.lineWidth = 2; g.strokeRect(9, 7, 30, 86);
+  g.strokeStyle = 'rgb(70,78,94)'; g.lineWidth = 1; g.strokeRect(10, 8, 28, 84);
+  g.strokeStyle = COOL; g.beginPath(); g.moveTo(24, 8); g.lineTo(24, 92); g.stroke();
+  g.fillStyle = 'rgb(170,182,205)'; g.fillRect(26, 48, 3, 8); g.fillRect(19, 48, 3, 8);
+  return c;
+}
+function createVignette(w, h) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const cx = w / 2, cy = h * 0.52, maxr = Math.hypot(cx, cy);
+  const img = g.createImageData(w, h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const d = Math.hypot(x - cx, y - cy) / maxr;
+      let a = Math.max(0, Math.min(1, (d - 0.22) / 0.78));
+      a = Math.pow(a, 1.6) * 255;
+      const idx = (y * w + x) * 4;
+      img.data[idx + 3] = a;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return c;
+}
+
+const SPR = {};
+let vignetteCanvas;
+
+// Every sprite used to be rescaled and re-shaded from scratch every frame, and
+// resizing the scratch canvas reallocated its backing buffer each time. Height
+// and brightness are quantised so walking toward something reuses one of a
+// handful of variants instead of minting a new one every frame. At 320x180 the
+// quantisation is not visible.
+const SPRITE_CACHE_MAX = 600;
+const spriteCache = new Map();
+let spriteIdSeq = 0;
+function spriteId(src) {
+  if (src.__id === undefined) src.__id = ++spriteIdSeq;
+  return src.__id;
+}
+function getScaledSprite(src, sw, sh, brightness) {
+  const qh = Math.max(2, Math.round(sh / 2) * 2);
+  const qw = Math.max(1, Math.round(qh * src.width / src.height));
+  const qb = Math.round(brightness * 12) / 12;
+  const key = `${spriteId(src)}|${qh}|${qb}`;
+  let c = spriteCache.get(key);
+  if (c) return c;
+  c = document.createElement('canvas');
+  c.width = qw; c.height = qh;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.filter = `brightness(${qb})`;
+  g.drawImage(src, 0, 0, qw, qh);
+  g.filter = 'none';
+  if (spriteCache.size >= SPRITE_CACHE_MAX) spriteCache.clear();
+  spriteCache.set(key, c);
+  return c;
+}
+
+// ---------------------------------------------------------------------------
+// game
+// ---------------------------------------------------------------------------
+class Game {
+  constructor() { this.reset(); }
+
+  reset() {
+    this.grid = genMaze(MAP_N);
+    this.cells = openCells(this.grid);
+
+    this.px = 1.5; this.py = 1.5; this.angle = 0.0;
+    this.stamina = 1.0; this.composure = 1.0; this.battery = 1.0;
+    this.flashlight = true; this.isMoving = false; this.isSprinting = false; this.hidden = false;
+
+    // You left the surau before the call. Everything you gather comes back here.
+    this.surau = [this.px, this.py];
+    this.timeLeft = NIGHT_SECONDS;
+    this.panicking = false;
+
+    let far = this.cells[0], bestD = -1;
+    for (const c of this.cells) {
+      const d = (c[0] - 1) ** 2 + (c[1] - 1) ** 2;
+      if (d > bestD) { bestD = d; far = c; }
+    }
+    this.cx = far[0] + 0.5; this.cy = far[1] + 0.5;
+    this.cangle = Math.atan2(this.py - this.cy, this.px - this.cx);
+
+    let pool = this.cells.filter(c => (c[0] - 1) ** 2 + (c[1] - 1) ** 2 > 16);
+    shuffle(pool);
+    let chosen = [];
+    for (const c of pool) {
+      if (chosen.every(o => ((c[0] - o[0]) ** 2 + (c[1] - o[1]) ** 2) > 6)) chosen.push(c);
+      if (chosen.length === N_ITEMS) break;
+    }
+    this.items = chosen.map(c => [c[0] + 0.5, c[1] + 0.5]);
+    this.collected = 0;
+
+    const takenSet = new Set(chosen.map(c => c[0] + ',' + c[1]));
+    let pool2 = this.cells.filter(c => (c[0] - 1) ** 2 + (c[1] - 1) ** 2 > 9);
+    shuffle(pool2);
+    let hides = [];
+    for (const c of pool2) {
+      if (takenSet.has(c[0] + ',' + c[1])) continue;
+      if (hides.every(o => ((c[0] - o[0]) ** 2 + (c[1] - o[1]) ** 2) > 6)) hides.push(c);
+      if (hides.length === N_HIDES) break;
+    }
+    this.hides = hides.map(c => [c[0] + 0.5, c[1] + 0.5]);
+    this.nearHide = false;
+    this.nearestHide = this.hides.length ? this.hides[0] : [this.px, this.py];
+
+    this.cstate = 'wander'; this.prevCstate = 'wander';
+    this.alert = 0.0; this.lastKnown = null; this.lostT = 0.0; this.hideT = 0.0;
+    this.wanderTarget = null;
+    this.creatureTarget = [Math.floor(this.cx), Math.floor(this.cy)];
+    this.repathT = 0.0; this.tungT = 0.0; this.heartT = 0.0; this.breathT = 2.0;
+
+    this.cdist = 99.0; this.crel = 0.0; this.shake = 0.0; this.redAlpha = 0; this.flicker = 1.0;
+    this.state = 'intro';
+  }
+
+  isWall(x, y) {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    if (ix < 0 || iy < 0 || ix >= MAP_N || iy >= MAP_N) return true;
+    return this.grid[iy][ix] !== 0;
+  }
+  tryMove(nx, ny) {
+    const r = PLAYER_RADIUS;
+    if (!this.isWall(nx + copysign(r, nx - this.px), this.py)) this.px = nx;
+    if (!this.isWall(this.px, ny + copysign(r, ny - this.py))) this.py = ny;
+  }
+  hasLos(ax, ay, bx, by, maxD) {
+    const dx = bx - ax, dy = by - ay;
+    const dist = Math.hypot(dx, dy);
+    if (dist > maxD) return false;
+    const steps = Math.floor(dist / 0.12) + 1;
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      if (this.isWall(ax + dx * t, ay + dy * t)) return false;
+    }
+    return true;
+  }
+  updateNearestHide() {
+    let best = null, bd = 1e9;
+    for (const h of this.hides) {
+      const d = (h[0] - this.px) ** 2 + (h[1] - this.py) ** 2;
+      if (d < bd) { bd = d; best = h; }
+    }
+    this.nearestHide = best || [this.px, this.py];
+    this.nearHide = bd < HIDE_DIST ** 2;
+  }
+  toggleHide() {
+    if (this.hidden) {
+      this.hidden = false;
+      audio.playSimple('hidefx', 0.5);
+    } else if (this.nearHide) {
+      this.hidden = true;
+      this.px = this.nearestHide[0]; this.py = this.nearestHide[1];
+      this.hideT = 0.0;
+      audio.playSimple('hidefx', 0.6);
+    }
+  }
+
+  update(dt, keys, mdx) {
+    // Dawn does not wait while you cower. The clock runs before anything else
+    // so hiding always costs you night.
+    this.timeLeft -= dt;
+    this.panicking = this.composure < PANIC_THRESHOLD;
+
+    this.updateNearestHide();
+    this.angle += mdx * MOUSE_SENS;
+    if (keys.left) this.angle -= TURN_SPEED * dt;
+    if (keys.right) this.angle += TURN_SPEED * dt;
+
+    if (this.hidden) {
+      this.isMoving = false; this.isSprinting = false;
+      this.stamina = Math.min(1.0, this.stamina + STAMINA_REGEN * dt);
+      this.hideT += dt;
+      this.updateCreature(dt);
+      this.updateComposure(dt);
+      this.checkEnd();
+      return;
+    }
+
+    const dirx = Math.cos(this.angle), diry = Math.sin(this.angle);
+    const sx = -diry, sy = dirx;
+    let mx = 0, my = 0;
+    if (keys.w) { mx += dirx; my += diry; }
+    if (keys.s) { mx -= dirx; my -= diry; }
+    if (keys.a) { mx -= sx; my -= sy; }
+    if (keys.d) { mx += sx; my += sy; }
+
+    this.isMoving = !!(mx || my);
+    const wantSprint = keys.shift && this.stamina > 0.02;
+    this.isSprinting = this.isMoving && wantSprint;
+
+    let speed;
+    if (this.isSprinting) {
+      speed = SPRINT_SPEED;
+      this.stamina = Math.max(0.0, this.stamina - STAMINA_DRAIN * dt);
+    } else {
+      speed = WALK_SPEED;
+      const regen = STAMINA_REGEN * (this.panicking ? PANIC_STAMINA_REGEN : 1.0);
+      this.stamina = Math.min(1.0, this.stamina + regen * dt);
+    }
+
+    if (this.isMoving) {
+      const mag = Math.hypot(mx, my);
+      mx /= mag; my /= mag;
+      const step = speed * dt;
+      this.tryMove(this.px + mx * step, this.py + my * step);
+    }
+
+    if (this.flashlight) this.battery = Math.max(0.0, this.battery - BATTERY_DRAIN * dt);
+
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const it = this.items[i];
+      if ((this.px - it[0]) ** 2 + (this.py - it[1]) ** 2 < 0.30) {
+        this.items.splice(i, 1);
+        this.collected++;
+        this.battery = Math.min(1.0, this.battery + BATTERY_PER_ITEM);
+        this.alert = 1.0;
+        this.lastKnown = [Math.floor(this.px), Math.floor(this.py)];
+        audio.playSimple('pickup', 0.7);
+        // The sixth does not end the night -- it starts the run home.
+        if (this.collected >= N_ITEMS) audio.playSimple('boom', 0.8);
+        break;
+      }
+    }
+
+    this.updateCreature(dt);
+    this.updateComposure(dt);
+    this.checkEnd();
+  }
+
+  // Every way the night can end, in one place. Called from both paths through
+  // update() so a hidden player is subject to the same three outcomes.
+  checkEnd() {
+    if (this.state !== 'play') return;
+    if (this.timeLeft <= 0) {
+      // Deliberately NOT the 'dawn' chord -- that is the win sting, and the two
+      // opposite endings must not sound the same in the second before the
+      // screen registers.
+      this.state = 'dawn';
+      audio.playSimple('boom', 0.9);
+      return;
+    }
+    if (this.cdist < CATCH_DIST && !this.hidden) {
+      this.state = 'caught';
+      return;
+    }
+    if (this.items.length === 0 && !this.hidden) {
+      const dx = this.px - this.surau[0], dy = this.py - this.surau[1];
+      if (Math.hypot(dx, dy) < SURAU_DIST) {
+        this.state = 'win';
+        audio.playSimple('dawn', 0.9);
+      }
+    }
+  }
+
+  updateCreature(dt) {
+    const pcell = [Math.floor(this.px), Math.floor(this.py)];
+    const ccell = [Math.floor(this.cx), Math.floor(this.cy)];
+    const dx = this.cx - this.px, dy = this.cy - this.py;
+    const dist = Math.hypot(dx, dy);
+    this.cdist = dist;
+    this.crel = Math.atan2(dy, dx) - this.angle;
+
+    let seen = false, behind = false, heard = false;
+    if (this.hidden) {
+      if (this.alert > HEARD_ALERT && this.hideT > HIDE_SAFE_BREAK) this.alert = HEARD_ALERT;
+    } else {
+      // Sight needs range, an unbroken line, AND you inside the cone he is
+      // facing. Getting behind him is now a real move; his head turns at a
+      // finite rate, so the moment after he rounds a corner is your window.
+      const detect = DETECT_RANGE * (this.flashlight ? 1.0 : 0.5);
+      const toPlayer = Math.atan2(this.py - this.cy, this.px - this.cx);
+      const offAxis = Math.abs(angDiff(this.cangle, toPlayer));
+      seen = offAxis < VIEW_CONE && this.hasLos(this.cx, this.cy, this.px, this.py, detect);
+      // close enough to smell you regardless of where he is looking
+      behind = dist < BEHIND_SENSE;
+
+      let hear;
+      if (this.isSprinting) hear = HEAR_SPRINT;
+      else if (this.isMoving) hear = HEAR_WALK;
+      else hear = 0.0;
+      if (this.flashlight) hear = Math.max(hear, TORCH_BEACON);
+      // Hearing is not directional. Panicked breathing carries even if you
+      // stand perfectly still, which is what makes low nerve dangerous rather
+      // than merely ugly.
+      if (this.panicking) {
+        const panic = 1.0 - this.composure / PANIC_THRESHOLD;
+        hear = Math.max(hear, PANIC_NOISE * panic);
+      }
+      heard = dist < hear;
+    }
+
+    if (seen || behind) { this.alert = 1.0; this.lastKnown = pcell; this.lostT = 0.0; }
+    else if (heard) { this.alert = Math.max(this.alert, HEARD_ALERT); this.lastKnown = pcell; this.lostT = 0.0; }
+    else { this.alert = Math.max(0.0, this.alert - ALERT_DECAY * dt); this.lostT += dt; }
+
+    this.prevCstate = this.cstate;
+    if (this.alert > 0.66) this.cstate = 'hunt';
+    else if (this.alert > 0.30) this.cstate = 'stalk';
+    else this.cstate = 'wander';
+    if (this.cstate === 'hunt' && this.prevCstate !== 'hunt') {
+      audio.playSimple('stinger', 0.85);
+      this.composure = Math.max(0.0, this.composure - 0.12);
+    }
+
+    if (this.alert < 0.18 && dist > 9.0 && this.lostT > RELOCATE_AFTER && !this.hidden) {
+      this.relocate();
+      return;
+    }
+
+    let goal;
+    if (this.cstate === 'hunt' || this.cstate === 'stalk') {
+      goal = this.lastKnown || pcell;
+      if (ccell[0] === goal[0] && ccell[1] === goal[1] && !seen) {
+        // He arrives and you are not there. He does not know where you went --
+        // snapping to your true cell here would make breaking line of sight
+        // pointless. He casts about near the spot instead.
+        this.alert *= 0.5;
+        this.lastKnown = this.searchPointNear(goal, SEARCH_SPREAD);
+        goal = this.lastKnown;
+      }
+    } else {
+      if (!this.wanderTarget || (ccell[0] === this.wanderTarget[0] && ccell[1] === this.wanderTarget[1])) {
+        this.wanderTarget = this.cells[Math.floor(Math.random() * this.cells.length)];
+      }
+      goal = this.wanderTarget;
+    }
+
+    this.repathT -= dt;
+    if (this.repathT <= 0.0) {
+      this.repathT = REPATH_INTERVAL;
+      const nxt = bfsNext(this.grid, ccell, goal);
+      this.creatureTarget = nxt || ccell;
+    }
+
+    let speed;
+    if (this.cstate === 'hunt') {
+      speed = Math.min(CREATURE_HUNT_MAX, CREATURE_HUNT_BASE + CREATURE_HUNT_PER_ITEM * this.collected);
+      if (!this.flashlight) speed = Math.min(CREATURE_HUNT_MAX, speed + 0.12);
+    } else if (this.cstate === 'stalk') speed = CREATURE_STALK_SPEED;
+    else speed = CREATURE_WANDER_SPEED;
+
+    const tx = this.creatureTarget[0] + 0.5, ty = this.creatureTarget[1] + 0.5;
+    const ddx = tx - this.cx, ddy = ty - this.cy;
+    const d = Math.hypot(ddx, ddy);
+    if (d > 1e-4) {
+      this.cx += ddx / d * Math.min(speed * dt, d);
+      this.cy += ddy / d * Math.min(speed * dt, d);
+      // He looks where he is walking. During a hunt that means he is walking at
+      // where he thinks you are, so the cone bites on first detection and on
+      // re-acquisition, not mid-chase -- which is the intent.
+      const want = Math.atan2(ddy, ddx);
+      const maxTurn = HEAD_TURN_RATE * dt;
+      this.cangle += Math.max(-maxTurn, Math.min(maxTurn, angDiff(this.cangle, want)));
+    }
+
+    let interval;
+    if (this.cstate === 'hunt') interval = Math.max(0.34, Math.min(0.8, dist / 7.0));
+    else if (this.cstate === 'stalk') interval = 1.1;
+    else interval = 1.9;
+    this.tungT -= dt;
+    if (this.tungT <= 0.0) { this.tungT = interval; audio.playPositional('tung', dist, this.crel); }
+
+    if (this.cstate === 'hunt' && dist < 6.0) {
+      this.heartT -= dt;
+      if (this.heartT <= 0.0) {
+        this.heartT = Math.max(0.42, dist / 7.0);
+        audio.playSimple('heart', Math.max(0.0, 1.0 - dist / 6.0));
+      }
+    }
+
+    if (!this.hidden && dist < BEHIND_SENSE * 2.2 &&
+        Math.abs(pymod(this.crel + Math.PI, 2 * Math.PI) - Math.PI) > 1.1) {
+      this.breathT -= dt;
+      if (this.breathT <= 0.0) { this.breathT = 2.4; audio.playPositional('breath', dist, this.crel, 1.0); }
+    }
+
+    // the catch itself is resolved in checkEnd(), with the other two endings
+  }
+
+  // A random open cell within `spread` of `cell` -- where he goes looking when
+  // he loses you.
+  searchPointNear(cell, spread) {
+    const near = this.cells.filter(c => {
+      const dd = (c[0] - cell[0]) ** 2 + (c[1] - cell[1]) ** 2;
+      return dd > 0 && dd <= spread * spread;
+    });
+    if (!near.length) return cell;
+    return near[Math.floor(Math.random() * near.length)];
+  }
+
+  relocate() {
+    const cands = this.cells.filter(c => {
+      const dd = (c[0] + 0.5 - this.px) ** 2 + (c[1] + 0.5 - this.py) ** 2;
+      return dd >= RELOCATE_MIN ** 2 && dd <= RELOCATE_MAX ** 2;
+    });
+    if (!cands.length) return;
+    const dirx = Math.cos(this.angle), diry = Math.sin(this.angle);
+    cands.sort((a, b) => {
+      const sa = (a[0] + 0.5 - this.px) * dirx + (a[1] + 0.5 - this.py) * diry;
+      const sb = (b[0] + 0.5 - this.px) * dirx + (b[1] + 0.5 - this.py) * diry;
+      return sa - sb;
+    });
+    const topN = Math.max(1, Math.floor(cands.length / 3));
+    const pick = cands[Math.floor(Math.random() * topN)];
+    this.cx = pick[0] + 0.5; this.cy = pick[1] + 0.5;
+    // He reappears roughly facing you but not exactly -- he drifted toward the
+    // noise, he did not teleport onto your throat. Without this his facing is
+    // whatever it was across the map, which reads as a bug.
+    this.cangle = Math.atan2(this.py - this.cy, this.px - this.cx)
+      + (Math.random() - 0.5) * 2.0;
+    this.lostT = 0.0; this.alert = 0.4; this.lastKnown = null;
+    this.composure = Math.max(0.0, this.composure - 0.1);
+    const d = Math.hypot(this.cx - this.px, this.cy - this.py);
+    const rel = Math.atan2(this.cy - this.py, this.cx - this.px) - this.angle;
+    audio.playPositional('boom', d, rel, 1.2);
+  }
+
+  updateComposure(dt) {
+    const threat = this.cstate === 'hunt' ? 1.0 : (this.cstate === 'stalk' ? 0.5 : 0.0);
+    const prox = Math.max(0.0, 1.0 - this.cdist / 6.0);
+    if (this.hidden) {
+      this.composure = Math.min(1.0, this.composure + 0.12 * dt);
+    } else {
+      const drain = (0.08 + 0.30 * threat) * prox;
+      this.composure -= drain * dt;
+      if (this.cdist > 8.0 && this.cstate !== 'hunt') this.composure += 0.07 * dt;
+    }
+    this.composure = Math.max(0.0, Math.min(1.0, this.composure));
+
+    this.shake = 0.0;
+    if (!this.hidden && this.cstate === 'hunt' && this.cdist < 5.0) this.shake += (5.0 - this.cdist) / 5.0 * 3.0;
+    if (this.composure < 0.3) this.shake += (0.3 - this.composure) * 9.0;
+
+    let pulse = 0.0;
+    if (!this.hidden && this.cstate === 'hunt') {
+      pulse = (0.5 + 0.5 * Math.sin(performance.now() * 0.012)) * prox * 60;
+    }
+    this.redAlpha = Math.min(110, (1.0 - this.composure) * 60 + pulse);
+  }
+
+  computeFlicker() {
+    const prox = Math.max(0.0, 1.0 - this.cdist / 6.0);
+    const intensity = prox * 0.5 + (1.0 - this.composure) * 0.5;
+    if (this.flashlight && Math.random() < intensity * 0.35) return 0.45 + Math.random() * (0.82 - 0.45);
+    return 1.0;
+  }
+
+  renderWorld(rctx) {
+    rctx.fillStyle = 'rgb(6,6,9)'; rctx.fillRect(0, 0, RENDER_W, RENDER_H / 2);
+    rctx.fillStyle = 'rgb(11,10,9)'; rctx.fillRect(0, RENDER_H / 2, RENDER_W, RENDER_H / 2);
+
+    this.flicker = this.computeFlicker();
+    const fov = FOV * (0.82 + 0.18 * this.composure);
+    const dirx = Math.cos(this.angle), diry = Math.sin(this.angle);
+    const planex = -diry * fov, planey = dirx * fov;
+    const zbuf = new Float64Array(RENDER_W).fill(1e9);
+    const lightFinal = this.hidden
+      ? 0.13
+      : (this.flashlight ? (0.25 + 0.75 * this.battery) : 0.10) * this.flicker;
+
+    for (let x = 0; x < RENDER_W; x++) {
+      const camx = 2 * x / RENDER_W - 1;
+      const rdx = dirx + planex * camx;
+      const rdy = diry + planey * camx;
+      let mapx = Math.floor(this.px), mapy = Math.floor(this.py);
+      const ddx = rdx !== 0 ? Math.abs(1 / rdx) : 1e30;
+      const ddy = rdy !== 0 ? Math.abs(1 / rdy) : 1e30;
+      let stepx, sdx, stepy, sdy;
+      if (rdx < 0) { stepx = -1; sdx = (this.px - mapx) * ddx; } else { stepx = 1; sdx = (mapx + 1 - this.px) * ddx; }
+      if (rdy < 0) { stepy = -1; sdy = (this.py - mapy) * ddy; } else { stepy = 1; sdy = (mapy + 1 - this.py) * ddy; }
+
+      let side = 0;
+      for (let i = 0; i < 64; i++) {
+        if (sdx < sdy) { sdx += ddx; mapx += stepx; side = 0; }
+        else { sdy += ddy; mapy += stepy; side = 1; }
+        if (mapx >= 0 && mapx < MAP_N && mapy >= 0 && mapy < MAP_N && this.grid[mapy][mapx] !== 0) break;
+      }
+
+      let perp = side === 0 ? (sdx - ddx) : (sdy - ddy);
+      perp = Math.max(perp, 1e-4);
+      zbuf[x] = perp;
+      const lineH = Math.floor(RENDER_H / perp);
+      const y0 = Math.max(0, Math.floor(-lineH / 2 + RENDER_H / 2));
+      const y1 = Math.min(RENDER_H, Math.floor(lineH / 2 + RENDER_H / 2));
+
+      const cone = 1.0 - Math.pow(Math.abs(x - RENDER_W / 2) / (RENDER_W / 2), 2) * 0.55;
+      let bright = Math.max(0, 1.0 - perp / DARK_DIST) * lightFinal * cone;
+      if (side === 1) bright *= 0.72;
+      bright = Math.max(0.045, Math.min(1.0, bright));
+      const r = Math.floor(150 * bright), g = Math.floor(130 * bright), b = Math.floor(110 * bright);
+      rctx.strokeStyle = `rgb(${r},${g},${b})`;
+      rctx.beginPath();
+      rctx.moveTo(x + 0.5, y0);
+      rctx.lineTo(x + 0.5, y1);
+      rctx.stroke();
+    }
+
+    this.renderSprites(rctx, zbuf, dirx, diry, planex, planey, lightFinal);
+  }
+
+  renderSprites(rctx, zbuf, dirx, diry, planex, planey, light) {
+    let sprites = this.items.map(it => ({ x: it[0], y: it[1], kind: 'item' }));
+    sprites = sprites.concat(this.hides.map(h => ({ x: h[0], y: h[1], kind: 'hide' })));
+    sprites.push({ x: this.surau[0], y: this.surau[1], kind: 'surau' });
+    sprites.push({ x: this.cx, y: this.cy, kind: 'creature' });
+    sprites.sort((a, b) => {
+      const da = (a.x - this.px) ** 2 + (a.y - this.py) ** 2;
+      const db = (b.x - this.px) ** 2 + (b.y - this.py) ** 2;
+      return db - da;
+    });
+
+    const inv = 1.0 / (planex * diry - dirx * planey);
+    for (const s of sprites) {
+      const rx = s.x - this.px, ry = s.y - this.py;
+      const tx = inv * (diry * rx - dirx * ry);
+      const ty = inv * (-planey * rx + planex * ry);
+      if (ty <= 0.05) continue;
+      const screenX = Math.floor((RENDER_W / 2) * (1 + tx / ty));
+      let src;
+      if (s.kind === 'creature') {
+        // If you cannot see his eyes, you are outside his cone. The sprite is
+        // the only tell the player gets, so it has to be honest.
+        const away = Math.abs(angDiff(this.cangle,
+          Math.atan2(this.py - this.cy, this.px - this.cx))) > VIEW_CONE;
+        if (this.cstate === 'hunt') src = away ? SPR.creatureHuntBack : SPR.creatureHunt;
+        else src = away ? SPR.creatureBack : SPR.creature;
+      } else if (s.kind === 'hide') src = SPR.hide;
+      else if (s.kind === 'surau') src = SPR.surau;
+      else src = SPR.item;
+
+      let sh = Math.abs(Math.floor(RENDER_H / ty));
+      if (s.kind === 'creature') sh = Math.floor(sh * 1.15);
+      if (sh < 2 || sh > RENDER_H * 6) continue;
+
+      // alcoves and the surau stay faintly lit so they can be found in the dark
+      const emissive = s.kind === 'hide' ? 0.45 : (s.kind === 'surau' ? 0.7 : 0.0);
+      let b = Math.max(0, 1.0 - ty / DARK_DIST) * (0.3 + 0.7 * light);
+      b = Math.max(emissive || 0.06, Math.min(1.0, b + emissive * 0.5));
+
+      // the cache quantises size, so trust the buffer it hands back
+      const buf = getScaledSprite(src, 0, sh, b);
+      const bw = buf.width, bh = buf.height;
+
+      const drawY = Math.floor(RENDER_H / 2 - bh / 2);
+      const startX = screenX - Math.floor(bw / 2);
+      const colFrom = Math.max(0, startX), colTo = Math.min(RENDER_W, startX + bw);
+      for (let col = colFrom; col < colTo; col++) {
+        if (ty < zbuf[col]) {
+          const lx = col - startX;
+          if (lx >= 0 && lx < bw) rctx.drawImage(buf, lx, 0, 1, bh, col, drawY, 1, bh);
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// HUD + screens
+// ---------------------------------------------------------------------------
+function drawText(ctx, text, x, y, color, opts = {}) {
+  const { center = false, font = '18px monospace' } = opts;
+  ctx.font = font;
+  ctx.fillStyle = color;
+  if (center) { ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; }
+  else { ctx.textAlign = 'left'; ctx.textBaseline = 'top'; }
+  ctx.fillText(text, x, y);
+}
+function bar(ctx, x, y, w, h, frac, color, label) {
+  drawText(ctx, label, x, y - 16, INK_DIM, { font: '14px monospace' });
+  ctx.fillStyle = 'rgb(40,40,44)'; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = color; ctx.fillRect(x, y, w * Math.max(0, Math.min(1, frac)), h);
+  ctx.strokeStyle = INK_DIM; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+}
+// One arrow, two jobs kept apart: pointing at cover only matters while he is
+// interested in you, pointing home only matters once you are carrying all six.
+function drawCompass(ctx, game, wx, wy, label, color, y) {
+  const rel = Math.atan2(wy - game.py, wx - game.px) - game.angle;
+  const cx = WIN_W / 2, cy = y;
+  const pts = [[0, -16], [-11, 9], [0, 3], [11, 9]];
+  const ca = Math.cos(rel), sa = Math.sin(rel);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  pts.forEach(([px, py], i) => {
+    const rx = cx + (px * ca - py * sa), ry = cy + (px * sa + py * ca);
+    if (i === 0) ctx.moveTo(rx, ry); else ctx.lineTo(rx, ry);
+  });
+  ctx.closePath(); ctx.fill();
+  drawText(ctx, label, cx, cy + 26, color, { center: true, font: '14px monospace' });
+}
+function drawHud(ctx, game) {
+  const extracting = game.items.length === 0;
+
+  drawText(ctx, 'OFFERINGS', 24, 18, INK_DIM, { font: '14px monospace' });
+  drawText(ctx, `${game.collected} / ${N_ITEMS}`, 24, 34, AMBER, { font: 'bold 24px monospace' });
+
+  const bw = 150;
+  bar(ctx, WIN_W - bw - 24, 30, bw, 12, game.battery, game.battery > 0.25 ? AMBER : 'rgb(180,60,50)',
+      'TORCH' + (game.flashlight ? '' : '  [OFF]'));
+  bar(ctx, WIN_W - bw - 24, 64, bw, 12, game.stamina, 'rgb(90,170,200)', 'STAMINA');
+  const nerveCol = game.panicking ? 'rgb(220,60,50)' : (game.composure > 0.4 ? INK : 'rgb(200,70,60)');
+  bar(ctx, WIN_W - bw - 24, 98, bw, 12, game.composure, nerveCol,
+      game.panicking ? 'NERVE  [HE CAN HEAR YOU]' : 'NERVE');
+
+  const urgent = game.timeLeft < DAWN_WARN;
+  drawText(ctx, `SUBUH IN ${fmtClock(game.timeLeft)}`, WIN_W / 2, 22,
+           urgent ? 'rgb(220,80,60)' : INK_DIM,
+           { center: true, font: urgent ? 'bold 16px monospace' : '14px monospace' });
+
+  if (extracting) {
+    drawText(ctx, 'ALL SIX GATHERED — GET BACK TO THE SURAU', WIN_W / 2, 46, AMBER,
+             { center: true, font: 'bold 14px monospace' });
+  }
+
+  if (game.hidden) {
+    drawText(ctx, 'HIDDEN', WIN_W / 2, WIN_H - 90, COOL, { center: true, font: 'bold 24px monospace' });
+    drawText(ctx, 'move or press E to leave', WIN_W / 2, WIN_H - 60, INK_DIM, { center: true, font: '14px monospace' });
+  } else if (game.nearHide) {
+    drawText(ctx, '[E] HIDE', WIN_W / 2, WIN_H - 70, COOL, { center: true, font: 'bold 24px monospace' });
+  } else if (game.cstate !== 'wander') {
+    drawCompass(ctx, game, game.nearestHide[0], game.nearestHide[1], 'SHELTER', COOL, WIN_H - 70);
+  }
+
+  // the way home is shown whatever he is doing -- it is the goal, not a hint
+  if (extracting && !game.hidden) {
+    drawCompass(ctx, game, game.surau[0], game.surau[1], 'SURAU', AMBER, 96);
+  }
+}
+function drawHiddenSlats(ctx) {
+  ctx.fillStyle = 'rgba(0,0,0,0.47)';
+  ctx.fillRect(0, 0, WIN_W, WIN_H);
+  ctx.fillStyle = 'rgba(0,0,0,0.92)';
+  for (let i = -1; i < WIN_W / 150 + 2; i++) ctx.fillRect(i * 150, 0, 70, WIN_H);
+}
+function screenIntro(ctx) {
+  ctx.fillStyle = 'black'; ctx.fillRect(0, 0, WIN_W, WIN_H);
+  const cx = WIN_W / 2;
+  drawText(ctx, 'TUNG TUNG TUNG SAHUR', cx, 96, AMBER, { center: true, font: 'bold 40px monospace' });
+  const lines = [
+    'The drumming thing walks the streets before dawn.',
+    'It hears your running. It sees your torchlight.',
+    'It cannot be fought and it does not stop.',
+    '',
+    'Gather six offerings and carry them back to the surau',
+    `before the call to Subuh. You have ${Math.round(NIGHT_SECONDS / 60)} minutes of dark.`,
+    '',
+    'It only sees what it is facing — get behind it and it is blind.',
+    'It always hears panic. Duck into an alcove with E to breathe.'
+  ];
+  let y = 162;
+  for (const ln of lines) {
+    drawText(ctx, ln, cx, y, ln ? INK : INK_DIM, { center: true, font: '16px monospace' });
+    y += 26;
+  }
+  drawText(ctx, 'press any key to wake', cx, 424, INK_DIM, { center: true, font: 'bold 20px monospace' });
+  drawText(ctx, 'WASD move   SHIFT sprint   F torch   E hide   mouse to look',
+           cx, 470, INK_DIM, { center: true, font: '14px monospace' });
+}
+function screenDawn(ctx, game) {
+  ctx.fillStyle = 'rgb(22,16,10)'; ctx.fillRect(0, 0, WIN_W, WIN_H);
+  const cx = WIN_W / 2;
+  drawText(ctx, 'DAWN', cx, 130, 'rgb(190,140,70)', { center: true, font: 'bold 40px monospace' });
+  drawText(ctx, 'The call to Subuh went up over the rooftops without you.', cx, 210, INK, { center: true, font: '16px monospace' });
+  drawText(ctx, `You were still out there with ${game.collected} of ${N_ITEMS} offerings.`, cx, 244, INK, { center: true, font: '16px monospace' });
+  drawText(ctx, 'The drumming has stopped. That is somehow worse.', cx, 286, INK_DIM, { center: true, font: '16px monospace' });
+  drawText(ctx, 'press R to try again', cx, WIN_H - 70, INK_DIM, { center: true, font: 'bold 20px monospace' });
+}
+function screenCaught(ctx, t) {
+  const flash = (Math.floor(t * 14) % 2 === 0) && t < 1.4;
+  ctx.fillStyle = flash ? 'rgb(34,0,0)' : 'black';
+  ctx.fillRect(0, 0, WIN_W, WIN_H);
+  const fw = 240, fh = 480;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(SPR.creatureHunt, WIN_W / 2 - fw / 2, WIN_H / 2 - 10 - fh / 2, fw, fh);
+  ctx.fillStyle = 'rgba(0,0,0,0.47)';
+  ctx.fillRect(0, 0, WIN_W, WIN_H);
+  drawText(ctx, 'CAUGHT', WIN_W / 2, 90, 'rgb(200,60,50)', { center: true, font: 'bold 40px monospace' });
+  drawText(ctx, 'You slept through the call.', WIN_W / 2, 150, INK, { center: true, font: '16px monospace' });
+  drawText(ctx, 'press R to restart', WIN_W / 2, WIN_H - 60, INK_DIM, { center: true, font: 'bold 20px monospace' });
+}
+function screenWin(ctx, game) {
+  ctx.fillStyle = 'rgb(14,11,6)'; ctx.fillRect(0, 0, WIN_W, WIN_H);
+  const cx = WIN_W / 2;
+  drawText(ctx, 'SUBUH', cx, 140, AMBER, { center: true, font: 'bold 40px monospace' });
+  drawText(ctx, 'You set the sixth offering down inside the surau door.', cx, 220, INK, { center: true, font: '16px monospace' });
+  drawText(ctx, 'Dawn breaks. The drumming fades down the empty street.', cx, 254, INK, { center: true, font: '16px monospace' });
+  drawText(ctx, `home with ${fmtClock(game.timeLeft)} of dark to spare`, cx, 302, AMBER, { center: true, font: 'bold 18px monospace' });
+  drawText(ctx, 'press R to play again', cx, WIN_H - 70, INK_DIM, { center: true, font: 'bold 20px monospace' });
+}
+
+// ---------------------------------------------------------------------------
+// main
+//
+// Everything below this line touches the DOM, audio hardware or rAF. Everything
+// above it is pure simulation. tools/sim.js cuts the file here and runs the top
+// half headless, so keep browser-only code below the marker.
+// ---------------------------------------------------------------------------
+// >>> SIM CUT <<<
+SPR.creature = createCreatureSprite(false, false);
+SPR.creatureHunt = createCreatureSprite(true, false);
+SPR.creatureBack = createCreatureSprite(false, true);
+SPR.creatureHuntBack = createCreatureSprite(true, true);
+SPR.item = createItemSprite();
+SPR.hide = createHideSprite();
+SPR.surau = createSurauSprite();
+vignetteCanvas = createVignette(WIN_W, WIN_H);
+
+const canvas = document.getElementById('main');
+const ctx = canvas.getContext('2d');
+const renderCanvas = document.createElement('canvas');
+renderCanvas.width = RENDER_W; renderCanvas.height = RENDER_H;
+const rctx = renderCanvas.getContext('2d');
+
+let game = new Game();
+const keys = { w: false, a: false, s: false, d: false, shift: false, left: false, right: false };
+let mdxAccum = 0;
+let droneStarted = false, droneHandle = null, whisperHandle = null;
+let caughtTimer = 0;
+let lastTime = performance.now();
+
+function startGesture() {
+  audio.init();
+  if (audio.ctx.state === 'suspended') audio.ctx.resume();
+  canvas.requestPointerLock();
+  if (!droneStarted) {
+    droneHandle = audio.playLoop('drone', 1.0);
+    whisperHandle = audio.playLoop('whisper', 0.0);
+    droneStarted = true;
+  }
+}
+
+window.addEventListener('keydown', (e) => {
+  const code = e.code;
+  if (code === 'ArrowLeft') keys.left = true;
+  if (code === 'ArrowRight') keys.right = true;
+  if (code === 'KeyW') keys.w = true;
+  if (code === 'KeyA') keys.a = true;
+  if (code === 'KeyS') keys.s = true;
+  if (code === 'KeyD') keys.d = true;
+  if (code === 'ShiftLeft' || code === 'ShiftRight') keys.shift = true;
+
+  if (game.state === 'intro') {
+    startGesture();
+    game.state = 'play';
+  } else if (game.state === 'play') {
+    if (code === 'KeyE') game.toggleHide();
+    else if (code === 'KeyF' && !game.hidden) game.flashlight = !game.flashlight;
+    else if ((code === 'KeyW' || code === 'KeyA' || code === 'KeyS' || code === 'KeyD') && game.hidden) game.hidden = false;
+  } else if (code === 'KeyR' && (game.state === 'caught' || game.state === 'win' || game.state === 'dawn')) {
+    game = new Game();
+    game.state = 'play';
+    caughtTimer = 0;
+    startGesture();
+  }
+  if (code === 'Escape' && document.exitPointerLock) document.exitPointerLock();
+});
+window.addEventListener('keyup', (e) => {
+  const code = e.code;
+  if (code === 'ArrowLeft') keys.left = false;
+  if (code === 'ArrowRight') keys.right = false;
+  if (code === 'KeyW') keys.w = false;
+  if (code === 'KeyA') keys.a = false;
+  if (code === 'KeyS') keys.s = false;
+  if (code === 'KeyD') keys.d = false;
+  if (code === 'ShiftLeft' || code === 'ShiftRight') keys.shift = false;
+});
+document.addEventListener('mousemove', (e) => {
+  if (document.pointerLockElement === canvas) mdxAccum += e.movementX;
+});
+canvas.addEventListener('click', () => {
+  if (game.state === 'intro') { startGesture(); game.state = 'play'; }
+  else if (game.state === 'play' && document.pointerLockElement !== canvas) startGesture();
+});
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  let dt = (now - lastTime) / 1000; lastTime = now;
+  dt = Math.min(dt, 0.05);
+  const mdx = mdxAccum; mdxAccum = 0;
+
+  if (game.state === 'play') {
+    game.update(dt, keys, mdx);
+    if (game.state !== 'play') {
+      if (game.state === 'caught') audio.playSimple('scare', 1.0);
+      if (document.exitPointerLock) document.exitPointerLock();
+    }
+
+    game.renderWorld(rctx);
+    let sx = 0, sy = 0;
+    if (game.shake > 0.2) {
+      sx = Math.round((Math.random() * 2 - 1) * game.shake);
+      sy = Math.round((Math.random() * 2 - 1) * game.shake);
+    }
+    ctx.fillStyle = 'black'; ctx.fillRect(0, 0, WIN_W, WIN_H);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(renderCanvas, 0, 0, RENDER_W, RENDER_H, sx, sy, WIN_W, WIN_H);
+    ctx.drawImage(vignetteCanvas, 0, 0);
+    if (game.hidden) drawHiddenSlats(ctx);
+    if (game.redAlpha > 0) {
+      ctx.fillStyle = `rgba(130,0,0,${game.redAlpha / 255})`;
+      ctx.fillRect(0, 0, WIN_W, WIN_H);
+    }
+    drawHud(ctx, game);
+    if (whisperHandle) whisperHandle.gain.gain.value = (1 - game.composure) * 0.8;
+  } else {
+    if (whisperHandle) whisperHandle.gain.gain.value = 0;
+    if (game.state === 'intro') screenIntro(ctx);
+    else if (game.state === 'caught') { caughtTimer += dt; screenCaught(ctx, caughtTimer); }
+    else if (game.state === 'dawn') screenDawn(ctx, game);
+    else if (game.state === 'win') screenWin(ctx, game);
+  }
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "tung-tung-tung-sahur",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A first-person raycaster horror game in a single HTML file",
+  "scripts": {
+    "sim": "node tools/sim.js --knowledge blind --threat flee",
+    "smoke": "node tools/smoke.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}
