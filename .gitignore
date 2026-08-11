@@ -1,5 +1,6 @@
 node_modules/
 shots/
+.wrangler/
 
 # The original pygame build. It had already drifted from the web version
 # (dropped mouse input, E bound to both "turn right" and "hide") and keeping a

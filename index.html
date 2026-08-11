@@ -66,6 +66,16 @@
   .hint { color:var(--muted); font-size:12px; line-height:1.5; }
   .scoretab { width:100%; border-collapse:collapse; font-size:13px; }
   .scoretab td { padding:5px 6px; border-bottom:1px solid #1c1c22; }
+  .mp-connect { display:grid; grid-template-columns:minmax(0, 1fr) minmax(300px, 1.15fr);
+    gap:16px; max-width:820px; margin:0 auto; align-items:start; }
+  .lobby-browser { max-height:248px; overflow:auto; margin-top:8px; border-top:1px solid var(--divider); }
+  .lobby-row { display:grid; grid-template-columns:76px 1fr auto; gap:10px; align-items:center;
+    min-height:54px; padding:7px 2px; border-bottom:1px solid #24242b; }
+  .lobby-code { color:var(--accent); font:bold 15px monospace; letter-spacing:2px; }
+  .lobby-meta { color:var(--text); font-size:12px; line-height:1.45; min-width:0; }
+  .lobby-detail { color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lock { color:var(--muted); font-size:11px; letter-spacing:1px; }
+  .browser-state { color:var(--muted); padding:18px 4px; text-align:center; font-size:12px; }
 
   @media (max-width:700px) {
     .scr { padding:20px; }
@@ -75,6 +85,8 @@
     .code { font-size:24px; }
     .credit { position:static; margin-top:24px; padding-bottom:12px; }
     #scr-main .credit { position:absolute; }
+    .mp-connect { grid-template-columns:1fr; }
+    .lobby-browser { max-height:none; }
   }
   @media (max-width:430px) {
     .scr { padding:16px 12px; }
@@ -134,18 +146,36 @@
     <div class="scr" id="scr-mp">
       <div class="title">PLAY TOGETHER</div>
       <div class="sub">lobbies of five — one of you is the Tung</div>
-      <div class="card" style="max-width:520px;margin:0 auto">
-        <div class="col">
-          <label for="i-name">YOUR NAME</label>
-          <input id="i-name" maxlength="14" placeholder="name">
-          <label for="i-relay" style="margin-top:8px">RELAY</label>
-          <input id="i-relay" spellcheck="false" placeholder="wss://relay.example.com">
-          <div class="hint" id="relay-hint"></div>
+      <div class="mp-connect">
+        <div class="card">
+          <div class="col">
+            <label for="i-name">YOUR NAME</label>
+            <input id="i-name" maxlength="14" placeholder="name" autocomplete="nickname">
+            <label for="i-password" style="margin-top:8px">LOBBY PASSWORD <span class="tag">OPTIONAL</span></label>
+            <input id="i-password" type="password" maxlength="64" placeholder="leave blank for public access" autocomplete="off">
+          </div>
+          <div class="row" style="margin-top:16px;flex-wrap:wrap">
+            <button id="b-create">CREATE</button>
+            <input id="i-code" maxlength="5" aria-label="Lobby code" placeholder="CODE" style="width:96px;text-transform:uppercase">
+            <button id="b-join">JOIN CODE</button>
+          </div>
+          <details style="margin-top:10px">
+            <summary class="hint" style="cursor:pointer">relay settings</summary>
+            <div class="col" style="margin-top:8px">
+              <label for="i-relay">RELAY</label>
+              <input id="i-relay" spellcheck="false" placeholder="wss://relay.example.com">
+              <div class="hint" id="relay-hint"></div>
+            </div>
+          </details>
         </div>
-        <div class="row" style="margin-top:16px">
-          <button id="b-create">CREATE LOBBY</button>
-          <input id="i-code" maxlength="6" placeholder="CODE" style="width:96px;text-transform:uppercase">
-          <button id="b-join">JOIN</button>
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-top:0">
+            <label>AVAILABLE LOBBIES</label>
+            <button class="ghost small" id="b-refresh-lobbies">REFRESH</button>
+          </div>
+          <div id="lobby-browser" class="lobby-browser" role="status" aria-live="polite">
+            <div class="browser-state">checking the street...</div>
+          </div>
         </div>
       </div>
       <div class="err" id="mp-err" role="status" aria-live="polite"></div>
@@ -2324,7 +2354,90 @@ if (matchMedia('(pointer: coarse)').matches) {
   $('relay-hint').textContent += ' A keyboard and mouse are required for the match.';
 }
 
+let lobbyBrowserTimer = null;
+let lobbyBrowserRequest = 0;
+
+function lobbyListUrl(relay) {
+  const url = new URL(relay, location.href);
+  url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+  url.pathname = '/lobbies';
+  url.search = '';
+  url.hash = '';
+  return url;
+}
+
+function renderAvailableLobbies(lobbies) {
+  const browser = $('lobby-browser');
+  browser.replaceChildren();
+  if (!lobbies.length) {
+    const empty = document.createElement('div');
+    empty.className = 'browser-state'; empty.textContent = 'no open lobbies';
+    browser.appendChild(empty);
+    return;
+  }
+  for (const lobby of lobbies.slice(0, 40)) {
+    const row = document.createElement('div'); row.className = 'lobby-row';
+    const code = document.createElement('div'); code.className = 'lobby-code';
+    code.textContent = String(lobby.code || '').slice(0, 5);
+    const meta = document.createElement('div'); meta.className = 'lobby-meta';
+    const primary = document.createElement('div');
+    primary.textContent = `${String(lobby.host || 'guest').slice(0, 14)}  ·  ${Number(lobby.players) || 0}/${Number(lobby.max) || 5}`;
+    const detail = document.createElement('div'); detail.className = 'lobby-detail';
+    const settings = clampGameSettings(lobby.settings);
+    detail.textContent = `${settings.mapN}x${settings.mapN}  ·  ${settings.lanterns} lanterns  ·  ${fmtClock(settings.night)}`;
+    const lock = document.createElement('span'); lock.className = 'lock';
+    lock.textContent = lobby.locked ? 'LOCKED' : 'OPEN';
+    primary.append(' ', lock); meta.append(primary, detail);
+    const join = document.createElement('button'); join.className = 'ghost small'; join.textContent = 'JOIN';
+    join.setAttribute('aria-label', `Join lobby ${code.textContent}${lobby.locked ? ', password required' : ''}`);
+    join.onclick = () => {
+      $('i-code').value = code.textContent;
+      if (lobby.locked && !$('i-password').value) {
+        $('mp-err').textContent = 'enter this lobby\'s password first';
+        $('i-password').focus();
+        return;
+      }
+      connectMultiplayer('join', code.textContent);
+    };
+    row.append(code, meta, join); browser.appendChild(row);
+  }
+}
+
+async function refreshAvailableLobbies(showLoading = false) {
+  const browser = $('lobby-browser');
+  const request = ++lobbyBrowserRequest;
+  if (showLoading) {
+    const loading = document.createElement('div');
+    loading.className = 'browser-state'; loading.textContent = 'checking the street...';
+    browser.replaceChildren(loading);
+  }
+  try {
+    const response = await fetch(lobbyListUrl($('i-relay').value.trim() || defaultRelayUrl()), { cache: 'no-store' });
+    if (!response.ok) throw new Error(`relay returned ${response.status}`);
+    const data = await response.json();
+    if (request !== lobbyBrowserRequest) return;
+    renderAvailableLobbies(Array.isArray(data.lobbies) ? data.lobbies : []);
+  } catch (error) {
+    if (request !== lobbyBrowserRequest) return;
+    const failed = document.createElement('div'); failed.className = 'browser-state';
+    failed.textContent = `lobby list unavailable: ${error.message}`;
+    browser.replaceChildren(failed);
+  }
+}
+
+function startLobbyBrowser() {
+  stopLobbyBrowser();
+  refreshAvailableLobbies(true);
+  lobbyBrowserTimer = setInterval(() => refreshAvailableLobbies(false), 6000);
+}
+function stopLobbyBrowser() {
+  if (lobbyBrowserTimer) clearInterval(lobbyBrowserTimer);
+  lobbyBrowserTimer = null;
+  lobbyBrowserRequest++;
+}
+
 function goMain() {
+  stopLobbyBrowser();
   if (net) { net.close(); net = null; }
   paused = false;
   game.state = 'menu';
@@ -2345,8 +2458,9 @@ $('b-howto').onclick = () => {
 };
 $('b-solo-start').onclick = () => beginSolo();
 $('b-solo-back').onclick = () => showScreen('scr-main');
-$('b-mp').onclick = () => { $('mp-err').textContent = ''; showScreen('scr-mp'); };
-$('b-mp-back').onclick = () => showScreen('scr-main');
+$('b-mp').onclick = () => { $('mp-err').textContent = ''; showScreen('scr-mp'); startLobbyBrowser(); };
+$('b-mp-back').onclick = () => { stopLobbyBrowser(); showScreen('scr-main'); };
+$('b-refresh-lobbies').onclick = () => refreshAvailableLobbies(true);
 
 function beginSolo() {
   game = new Game({ ...soloSettings, mode: 'solo' });
@@ -2414,6 +2528,7 @@ class Net {
       else {
         $('mp-err').textContent = this.lastError || 'relay disconnected';
         showScreen('scr-mp');
+        startLobbyBrowser();
       }
     });
   }
@@ -2448,6 +2563,7 @@ class Net {
   }
 
   onLobby(msg) {
+    stopLobbyBrowser();
     this.phase = 'lobby'; this.host = msg.host; this.code = msg.code;
     this.settings = clampGameSettings(msg.settings);
     const old = this.players;
@@ -2608,17 +2724,19 @@ class Net {
   }
 }
 
-function connectMultiplayer(kind) {
+function connectMultiplayer(kind, codeOverride) {
   const name = $('i-name').value.trim() || 'guest';
   const relay = $('i-relay').value.trim() || defaultRelayUrl();
-  const code = $('i-code').value.trim().toUpperCase();
+  const code = String(codeOverride || $('i-code').value).trim().toUpperCase();
+  const password = $('i-password').value.slice(0, 64);
   if (kind === 'join' && !code) { $('mp-err').textContent = 'enter a lobby code'; return; }
+  stopLobbyBrowser();
   store('tung-identity', { name, relay });
   if (net) net.close();
   net = new Net(relay);
   net.connect(kind === 'create'
-    ? { t: 'create', name, settings: DEFAULT_SETTINGS }
-    : { t: 'join', name, code });
+    ? { t: 'create', name, password, settings: DEFAULT_SETTINGS }
+    : { t: 'join', name, code, password });
 }
 $('b-create').onclick = () => connectMultiplayer('create');
 $('b-join').onclick = () => connectMultiplayer('join');

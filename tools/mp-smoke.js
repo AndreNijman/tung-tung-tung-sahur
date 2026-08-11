@@ -78,20 +78,54 @@ async function moveTo(page, x, y, movingFlags = 1) {
       await page.goto(URL);
       await page.click('#b-mp');
       await page.fill('#i-name', name);
-      if (relayOverride) await page.fill('#i-relay', relayOverride);
+      if (relayOverride) {
+        await page.locator('#i-relay').evaluate(input => { input.closest('details').open = true; });
+        await page.fill('#i-relay', relayOverride);
+      }
       return page;
     }
 
+    async function listedLobby(page, code) {
+      await page.click('#b-refresh-lobbies');
+      await page.waitForFunction((wanted) =>
+        [...document.querySelectorAll('.lobby-code')].some(el => el.textContent === wanted), code);
+      return page.locator('.lobby-row').filter({ hasText: code });
+    }
+    async function fillPassword(page, value) {
+      await page.fill('#i-password', value);
+      if (await page.inputValue('#i-password') !== value) await page.fill('#i-password', value);
+    }
+
+    const password = 'nightfall';
     const host = await openPlayer('Host');
+    await fillPassword(host, password);
     await host.click('#b-create');
     await host.waitForSelector('#scr-lobby.on');
     const code = (await host.textContent('#lobby-code')).trim();
     console.log(`  lobby: ${code}`);
 
+    // Public listing exposes the room and lock state, but a bad password is
+    // rejected before the player consumes a slot.
+    const wrong = await openPlayer('WrongPassword');
+    const wrongRow = await listedLobby(wrong, code);
+    if (!(await wrongRow.textContent()).includes('LOCKED')) problems.push('protected lobby was not marked LOCKED');
+    await fillPassword(wrong, 'not-it');
+    await wrongRow.locator('button').click();
+    await wrong.waitForFunction(() => document.getElementById('mp-err').textContent.includes('wrong lobby password'));
+    await wrong.close();
+
     const guests = [];
-    for (let i = 1; i <= 4; i++) {
+    const first = await openPlayer('Guest1');
+    const firstRow = await listedLobby(first, code);
+    await fillPassword(first, password);
+    await firstRow.locator('button').click();
+    await first.waitForSelector('#scr-lobby.on');
+    guests.push(first);
+
+    for (let i = 2; i <= 4; i++) {
       const page = await openPlayer(`Guest${i}`);
       await page.fill('#i-code', code);
+      await fillPassword(page, password);
       if ((await page.inputValue('#i-code')).trim() !== code) await page.fill('#i-code', code);
       await page.click('#b-join');
       try {
@@ -115,6 +149,7 @@ async function moveTo(page, x, y, movingFlags = 1) {
     await host.waitForFunction(() => net.players.size === 4);
     const replacement = await openPlayer('Guest4');
     await replacement.fill('#i-code', code);
+    await fillPassword(replacement, password);
     if ((await replacement.inputValue('#i-code')).trim() !== code) await replacement.fill('#i-code', code);
     await replacement.click('#b-join');
     await replacement.waitForSelector('#scr-lobby.on');
@@ -143,6 +178,12 @@ async function moveTo(page, x, y, movingFlags = 1) {
     await host.click('#b-start');
     await Promise.all(pages.map(p => p.waitForFunction(() => game.state === 'play' && net.phase === 'play')));
     await host.waitForTimeout(500);
+    const stillListed = await host.evaluate(async (wanted) => {
+      const response = await fetch(lobbyListUrl(net.url), { cache: 'no-store' });
+      const data = await response.json();
+      return data.lobbies.some(lobby => lobby.code === wanted);
+    }, code);
+    if (stillListed) problems.push('started lobby remained in the public listing');
 
     const roles = await Promise.all(pages.map(p => p.evaluate(() => game.role)));
     if (roles.filter(r => r === 'tung').length !== 1 || roles[0] !== 'tung') {
@@ -231,6 +272,20 @@ async function moveTo(page, x, y, movingFlags = 1) {
     const over = (await newHost.textContent('#over-title')).trim();
     if (over !== 'NIGHT ABANDONED') problems.push(`last-survivor disconnect did not end match: ${over}`);
 
+    // Blank really is optional: an unprotected room must list as OPEN and join
+    // without a password. This catches either relay accidentally hashing ''.
+    const openHost = await openPlayer('OpenHost');
+    await openHost.click('#b-create');
+    await openHost.waitForSelector('#scr-lobby.on');
+    const openCode = (await openHost.textContent('#lobby-code')).trim();
+    await openHost.waitForFunction(async (wanted) => {
+      const response = await fetch(lobbyListUrl(net.url), { cache: 'no-store' });
+      const data = await response.json();
+      const lobby = data.lobbies.find(entry => entry.code === wanted);
+      return !!lobby && lobby.locked === false;
+    }, openCode);
+    await openHost.close();
+
     // Static serving must not expose the repository internals.
     const dotGit = await fetch(`${URL}.git/config`);
     if (dotGit.status !== 404) problems.push(`relay exposed .git/config (${dotGit.status})`);
@@ -240,7 +295,7 @@ async function moveTo(page, x, y, movingFlags = 1) {
       for (const p of problems) console.error('  - ' + p);
       process.exitCode = 1;
     } else {
-      console.log('\nPASS - five clients, settings/vote, trail, alcove, item, catch and host/manifest failover');
+      console.log('\nPASS - listing/password, five clients, settings/vote, trail, alcove, catch and failover');
     }
   } finally {
     if (browser) await browser.close();

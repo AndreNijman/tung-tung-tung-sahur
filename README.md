@@ -55,10 +55,12 @@ the rooftops while you are still out there.
 
 ## Multiplayer
 
-Create a lobby and share its five-character code. A lobby holds at most five
-players and starts with two or more. Everyone votes for a player to become the
-Tung, or votes to leave it random. A strict plurality wins; ties and a winning
-random vote are resolved randomly.
+Create a lobby and share its five-character code, or join directly from the live
+available-lobbies list. A lobby holds at most five players and starts with two
+or more. An optional password can protect the room; relays store only its
+SHA-256 digest and the public list exposes only a `LOCKED` marker. Everyone
+votes for a player to become the Tung, or votes to leave it random. A strict
+plurality wins; ties and a winning random vote are resolved randomly.
 
 The host controls the map size, number of lanterns, night timer, torch duration,
 and how clearly the Tung can read tracks.
@@ -123,6 +125,12 @@ to avoid input latency; the relay bounds movement by elapsed wall time. Hidden
 positions and swap destinations are withheld from other players. This is a
 friends' game, not a ranked anti-cheat system: a modified client can still read
 visible position snapshots or walk through walls.
+
+`GET /lobbies` returns only joinable 1-4 player rooms with their code, host
+display name, lock status and gameplay settings. Started, full and abandoned
+rooms are not listed. The Cloudflare deployment keeps this directory in a
+persistent Registry Durable Object; individual room/password state stays
+isolated inside its Room Durable Object.
 
 Run it directly:
 
@@ -227,9 +235,10 @@ it brutal. Nothing in the harness settles this — only playing it does.
 `tools/smoke.js` covers the menu, paired-alcove transit, sprite cache, HUD,
 compass arrows, pause and all four solo end screens. `tools/mp-smoke.js` starts a
 real relay and five independent Chromium pages, then verifies lobby capacity,
-host settings, voting, seeded map agreement, pickup/delivery, delayed tracks,
-private alcove swaps, catches, and disconnect cleanup. Both fail on any console,
-page or request error; the solo test writes screenshots to `shots/`.
+public listing, locked/open rooms, wrong/correct password handling, host settings,
+voting, seeded map agreement, pickup/delivery, delayed tracks, private alcove
+swaps, catches, and disconnect cleanup. Both fail on any console, page or request
+error; the solo test writes screenshots to `shots/`.
 
 ## Licence
 

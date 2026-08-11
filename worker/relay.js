@@ -14,6 +14,10 @@ const ROOM_IDLE_MS = 45 * 60 * 1000;
 const MAINTENANCE_MS = 25000;
 const HANDSHAKE_MS = 15000;
 const MAX_MESSAGE_BYTES = 1024 * 1024;
+const PASSWORD_ATTEMPT_MAX = 6;
+const PASSWORD_ATTEMPT_WINDOW_MS = 60000;
+const RESERVATION_MS = 15000;
+const REGISTRY_STALE_MS = 60 * 60 * 1000;
 
 const CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXYZ23456789';
 const PLAYER_COLORS = ['#e0a040', '#68c0d8', '#8ad06a', '#d878b8', '#c8c0a8'];
@@ -53,6 +57,33 @@ function clampSettings(raw) {
     settings.tracks = raw.tracks;
   }
   return settings;
+}
+
+function normalizePassword(value) {
+  return String(value || '').slice(0, 64);
+}
+
+async function digestPassword(password) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password));
+  return new Uint8Array(digest);
+}
+
+async function hashPassword(value) {
+  const password = normalizePassword(value);
+  return password ? digestPassword(password) : null;
+}
+
+function constantTimeEqual(expected, actual) {
+  if (!(expected instanceof Uint8Array) || !(actual instanceof Uint8Array) ||
+      expected.byteLength !== actual.byteLength) return false;
+  let difference = 0;
+  for (let i = 0; i < expected.byteLength; i++) difference |= expected[i] ^ actual[i];
+  return difference === 0;
+}
+
+async function passwordMatches(expected, value) {
+  if (!expected) return true;
+  return constantTimeEqual(expected, await digestPassword(normalizePassword(value)));
 }
 
 function sanitizeName(name) {
@@ -98,6 +129,149 @@ function round3(value) {
   return Math.round(value * 1000) / 1000;
 }
 
+const lobbyKey = code => `lobby:${code}`;
+const activeRoomKey = code => `active:${code}`;
+const reservationKey = code => `reservation:${code}`;
+
+function cleanLobbySummary(raw) {
+  const code = normalizeCode(raw?.code);
+  const players = Number(raw?.players);
+  if (code.length !== 5 || !Number.isInteger(players) || players < 1 || players >= MAX_PLAYERS) {
+    return null;
+  }
+  return {
+    code,
+    players,
+    max: MAX_PLAYERS,
+    locked: !!raw.locked,
+    host: sanitizeName(raw.host),
+    settings: clampSettings(raw.settings),
+  };
+}
+
+export class Registry {
+  constructor(state) {
+    this.state = state;
+    this.operationQueue = Promise.resolve();
+  }
+
+  fetch(request) {
+    const operation = this.operationQueue.then(() => this.handleRequest(request));
+    this.operationQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  async handleRequest(request) {
+    const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/lobbies') return this.listLobbies();
+    if (request.method === 'POST' && url.pathname === '/allocate') return this.allocate();
+    if (request.method === 'POST' && url.pathname === '/lobby') return this.upsert(request);
+    if (request.method === 'DELETE' && url.pathname === '/lobby') return this.remove(request);
+    return new Response('not found', { status: 404 });
+  }
+
+  async listLobbies() {
+    const now = Date.now();
+    const [storedLobbies, storedRooms, storedReservations] = await Promise.all([
+      this.state.storage.list({ prefix: 'lobby:' }),
+      this.state.storage.list({ prefix: 'active:' }),
+      this.state.storage.list({ prefix: 'reservation:' }),
+    ]);
+    const expired = [];
+    const available = [];
+
+    for (const [key, entry] of storedLobbies) {
+      const summary = cleanLobbySummary(entry?.summary);
+      if (!summary || !Number.isFinite(entry?.updatedAt) || now - entry.updatedAt > REGISTRY_STALE_MS) {
+        expired.push(key);
+        continue;
+      }
+      available.push({ summary, updatedAt: entry.updatedAt });
+    }
+    for (const [key, reservation] of storedReservations) {
+      if (!Number.isFinite(reservation?.expiresAt) || reservation.expiresAt <= now) expired.push(key);
+    }
+    for (const [key, room] of storedRooms) {
+      if (!Number.isFinite(room?.updatedAt) || now - room.updatedAt > REGISTRY_STALE_MS) expired.push(key);
+    }
+    await Promise.all(expired.map(key => this.state.storage.delete(key)));
+    available.sort((a, b) => b.updatedAt - a.updatedAt);
+
+    return Response.json({ lobbies: available.map(entry => entry.summary) }, {
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  }
+
+  async allocate() {
+    const now = Date.now();
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const code = makeCode();
+      const [lobby, activeRoom, reservation] = await Promise.all([
+        this.state.storage.get(lobbyKey(code)),
+        this.state.storage.get(activeRoomKey(code)),
+        this.state.storage.get(reservationKey(code)),
+      ]);
+      const lobbyActive = lobby && Number.isFinite(lobby.updatedAt) &&
+        now - lobby.updatedAt <= REGISTRY_STALE_MS;
+      const roomActive = activeRoom && Number.isFinite(activeRoom.updatedAt) &&
+        now - activeRoom.updatedAt <= REGISTRY_STALE_MS;
+      const reservationActive = reservation && Number.isFinite(reservation.expiresAt) &&
+        reservation.expiresAt > now;
+      if (lobbyActive || roomActive || reservationActive) continue;
+
+      if (lobby) await this.state.storage.delete(lobbyKey(code));
+      if (activeRoom) await this.state.storage.delete(activeRoomKey(code));
+      await this.state.storage.put(reservationKey(code), { expiresAt: now + RESERVATION_MS });
+      return Response.json({ code }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+    return Response.json({ error: 'could not allocate a lobby code' }, { status: 503 });
+  }
+
+  async upsert(request) {
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return new Response('invalid registry update', { status: 400 });
+    }
+    const summary = cleanLobbySummary(body?.summary);
+    if (!summary) return new Response('invalid lobby summary', { status: 400 });
+
+    if (body.confirm) {
+      const reservation = await this.state.storage.get(reservationKey(summary.code));
+      if (!reservation || !Number.isFinite(reservation.expiresAt) || reservation.expiresAt <= Date.now()) {
+        if (reservation) await this.state.storage.delete(reservationKey(summary.code));
+        return new Response('lobby reservation expired', { status: 409 });
+      }
+    }
+    const updatedAt = Date.now();
+    await Promise.all([
+      this.state.storage.put(lobbyKey(summary.code), { summary, updatedAt }),
+      this.state.storage.put(activeRoomKey(summary.code), { updatedAt }),
+    ]);
+    if (body.confirm) await this.state.storage.delete(reservationKey(summary.code));
+    return new Response(null, { status: 204 });
+  }
+
+  async remove(request) {
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return new Response('invalid registry removal', { status: 400 });
+    }
+    const code = normalizeCode(body?.code);
+    if (code.length !== 5) return new Response('invalid room code', { status: 400 });
+    await this.state.storage.delete(lobbyKey(code));
+    if (body.release) {
+      await this.state.storage.delete(activeRoomKey(code));
+    } else {
+      await this.state.storage.put(activeRoomKey(code), { updatedAt: Date.now() });
+    }
+    return new Response(null, { status: 204 });
+  }
+}
+
 class Player {
   constructor(id, socket, name) {
     this.id = id;
@@ -140,10 +314,14 @@ export class Room {
     this.sessions = new Set();
     this.tickTimer = null;
     this.maintenanceTimer = null;
+    this.initializationQueue = Promise.resolve();
+    this.registryQueue = Promise.resolve();
     this.resetRoom();
   }
 
-  resetRoom() {
+  resetRoom(notifyRegistry = false) {
+    const previousCode = this.code;
+    if (notifyRegistry && previousCode) this.removeFromRegistry(previousCode, true);
     this.stopTick();
     this.created = false;
     this.code = null;
@@ -162,6 +340,8 @@ export class Room {
     this.result = null;
     this.manifestWaitSince = 0;
     this.manifestRequestedAt = 0;
+    this.passwordHash = null;
+    this.passwordAttempts = new Map();
   }
 
   async fetch(request) {
@@ -185,6 +365,8 @@ export class Room {
       initialized: false,
       closed: false,
       handshakeTimer: null,
+      messageQueue: Promise.resolve(),
+      ip: request.headers.get('CF-Connecting-IP') || 'unknown',
     };
 
     server.accept();
@@ -195,12 +377,12 @@ export class Room {
     }, HANDSHAKE_MS);
 
     server.addEventListener('message', (event) => {
-      try {
-        this.onSocketMessage(session, event.data);
-      } catch (error) {
-        console.error('room message handler failed', error);
-        this.closeSession(session, 1011, 'relay error');
-      }
+      session.messageQueue = session.messageQueue
+        .then(() => this.onSocketMessage(session, event.data))
+        .catch((error) => {
+          console.error('room message handler failed', error);
+          this.closeSession(session, 1011, 'relay error');
+        });
     });
     server.addEventListener('close', () => this.closeSession(session));
     server.addEventListener('error', () => this.closeSession(session));
@@ -208,7 +390,7 @@ export class Room {
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  onSocketMessage(session, data) {
+  async onSocketMessage(session, data) {
     if (session.closed) return;
     if (typeof data !== 'string') {
       this.closeSession(session, 1003, 'text messages only');
@@ -228,7 +410,13 @@ export class Room {
     if (!message || typeof message !== 'object' || Array.isArray(message)) return;
 
     if (!session.initialized) {
-      this.initializeSession(session, message);
+      const initialization = this.initializationQueue
+        .then(() => {
+          if (session.initialized || session.closed) return;
+          return this.initializeSession(session, message);
+        });
+      this.initializationQueue = initialization.catch(() => {});
+      await initialization;
       return;
     }
 
@@ -241,7 +429,7 @@ export class Room {
     this.handleMessage(session, message);
   }
 
-  initializeSession(session, message) {
+  async initializeSession(session, message) {
     clearTimeout(session.handshakeTimer);
     session.handshakeTimer = null;
     session.initialized = true;
@@ -252,14 +440,23 @@ export class Room {
     }
 
     if (session.action === 'create') {
-      if (this.created && this.players.size > 0) {
+      if (this.created) {
         this.fatal(session, 'lobby code collision; create another lobby');
         return;
       }
-      if (this.created) this.resetRoom();
       this.created = true;
       this.code = session.code;
       this.settings = clampSettings(message.settings);
+      try {
+        this.passwordHash = await hashPassword(message.password);
+      } catch (error) {
+        this.resetRoom(true);
+        throw error;
+      }
+      if (session.closed) {
+        this.resetRoom(true);
+        return;
+      }
     } else {
       const requestedCode = normalizeCode(message.code);
       if (requestedCode !== session.code) {
@@ -278,11 +475,53 @@ export class Room {
         this.fatal(session, 'lobby is full (5)');
         return;
       }
+      const now = Date.now();
+      const attempts = (this.passwordAttempts.get(session.ip) || [])
+        .filter(at => now - at < PASSWORD_ATTEMPT_WINDOW_MS);
+      if (this.passwordHash && attempts.length >= PASSWORD_ATTEMPT_MAX) {
+        this.passwordAttempts.set(session.ip, attempts);
+        this.fatal(session, 'too many password attempts; wait a minute');
+        return;
+      }
+      const matches = await passwordMatches(this.passwordHash, message.password);
+      if (session.closed) return;
+      if (!this.created || this.code !== session.code || this.players.size === 0) {
+        this.fatal(session, 'no lobby with that code');
+        return;
+      }
+      if (this.phase !== 'lobby') {
+        this.fatal(session, 'that night has already started');
+        return;
+      }
+      if (this.players.size >= MAX_PLAYERS) {
+        this.fatal(session, 'lobby is full (5)');
+        return;
+      }
+      if (!matches) {
+        attempts.push(Date.now()); this.passwordAttempts.set(session.ip, attempts);
+        this.fatal(session, 'wrong lobby password');
+        return;
+      }
+      this.passwordAttempts.delete(session.ip);
     }
 
     const player = new Player(this.nextPlayerId++, session.socket, message.name);
     this.addPlayer(player);
     session.player = player;
+    if (session.action === 'create') {
+      try {
+        await this.syncRegistry(true);
+      } catch {
+        session.player = null;
+        this.players.delete(player.id);
+        this.resetRoom(true);
+        this.fatal(session, 'lobby reservation expired; create another lobby');
+        return;
+      }
+      if (session.closed) return;
+    } else {
+      this.syncRegistry();
+    }
     this.send(session.socket, {
       t: 'welcome',
       you: player.id,
@@ -299,12 +538,14 @@ export class Room {
         if (this.phase !== 'lobby') break;
         me.name = sanitizeName(message.name);
         this.sendLobby();
+        this.syncRegistry();
         break;
 
       case 'settings':
         if (me.id !== this.hostId || this.phase !== 'lobby') break;
         this.settings = clampSettings(message.settings);
         this.sendLobby();
+        this.syncRegistry();
         break;
 
       case 'vote': {
@@ -425,15 +666,17 @@ export class Room {
     }
 
     if (this.players.size === 0) {
-      this.resetRoom();
+      this.resetRoom(true);
     } else if (this.phase === 'lobby') {
       this.sendLobby();
+      this.syncRegistry();
     } else {
       this.broadcast({
         t: 'roster',
         players: [...this.players.values()].map(player => player.publicLobby()),
         host: this.hostId,
       });
+      this.syncRegistry();
     }
   }
 
@@ -448,6 +691,49 @@ export class Room {
       min: MIN_PLAYERS,
       players: [...this.players.values()].map(player => player.publicLobby()),
     });
+  }
+
+  lobbySummary() {
+    const host = this.players.get(this.hostId);
+    return {
+      code: this.code,
+      players: this.players.size,
+      max: MAX_PLAYERS,
+      locked: !!this.passwordHash,
+      host: host ? host.name : 'guest',
+      settings: { ...this.settings },
+    };
+  }
+
+  queueRegistryRequest(method, body) {
+    const encoded = JSON.stringify(body);
+    const operation = this.registryQueue.then(async () => {
+      const registry = this.env.REGISTRY.getByName('global');
+      const response = await registry.fetch(new Request('https://registry.internal/lobby', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: encoded,
+      }));
+      if (!response.ok) {
+        throw new Error(`registry update failed (${response.status}): ${await response.text()}`);
+      }
+    });
+    this.registryQueue = operation.catch(error => console.error(error));
+    this.state.waitUntil(this.registryQueue);
+    return operation;
+  }
+
+  syncRegistry(confirm = false) {
+    if (!this.code) return Promise.resolve();
+    const joinable = this.created && this.phase === 'lobby' &&
+      this.players.size > 0 && this.players.size < MAX_PLAYERS;
+    if (!joinable) return this.removeFromRegistry(this.code);
+    return this.queueRegistryRequest('POST', { summary: this.lobbySummary(), confirm });
+  }
+
+  removeFromRegistry(code = this.code, release = false) {
+    if (!code) return Promise.resolve();
+    return this.queueRegistryRequest('DELETE', { code, release });
   }
 
   pickTung() {
@@ -488,6 +774,7 @@ export class Room {
     const { id: tungId, how } = this.pickTung();
     this.seed = randomInt(0x7fffffff);
     this.phase = 'play';
+    this.syncRegistry();
     this.manifest = null;
     this.items = [];
     this.timeLeft = this.settings.night;
@@ -762,6 +1049,7 @@ export class Room {
     this.phase = 'over';
     this.result = result;
     this.stopTick();
+    this.syncRegistry();
     const delivered = this.items.filter(item => item.state === 2).length;
     this.broadcast({
       t: 'over',
@@ -794,6 +1082,7 @@ export class Room {
       player.vote = null;
     }
     this.sendLobby();
+    this.syncRegistry();
   }
 
   handleInput(player, message) {
@@ -901,6 +1190,29 @@ export class Room {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/lobbies') {
+      const registry = env.REGISTRY.getByName('global');
+      let status = 200;
+      let lobbies = [];
+      try {
+        const response = await registry.fetch(new Request('https://registry.internal/lobbies'));
+        status = response.status;
+        if (response.ok) {
+          const body = await response.json();
+          lobbies = Array.isArray(body?.lobbies) ? body.lobbies : [];
+        }
+      } catch (error) {
+        console.error('lobby registry read failed', error);
+        status = 503;
+      }
+      const headers = new Headers({
+        'Cache-Control': 'no-store',
+        Vary: 'Origin',
+      });
+      const origin = request.headers.get('Origin');
+      if (originAllowed(origin)) headers.set('Access-Control-Allow-Origin', origin);
+      return Response.json({ lobbies }, { status, headers });
+    }
     if (url.pathname === '/health') {
       return Response.json({ ok: true, service: 'tung-relay' }, {
         headers: { 'Cache-Control': 'no-store' },
@@ -927,7 +1239,20 @@ export default {
     }
 
     const action = creating ? 'create' : 'join';
-    const code = creating ? makeCode() : suppliedCode;
+    let code = suppliedCode;
+    if (creating) {
+      try {
+        const registry = env.REGISTRY.getByName('global');
+        const response = await registry.fetch(new Request('https://registry.internal/allocate', {
+          method: 'POST',
+        }));
+        if (!response.ok) return new Response('could not allocate a lobby code', { status: 503 });
+        code = normalizeCode((await response.json()).code);
+      } catch (error) {
+        console.error('lobby code allocation failed', error);
+        return new Response('could not allocate a lobby code', { status: 503 });
+      }
+    }
     if (code.length !== 5) {
       return new Response('room codes must be five characters', { status: 400 });
     }

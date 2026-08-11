@@ -69,6 +69,8 @@ const MIN_PLAYERS = 2;
 const ROOM_IDLE_MS = 45 * 60 * 1000;
 const PING_MS = 25000;
 const MAX_MESSAGE_BYTES = 1024 * 1024;
+const PASSWORD_ATTEMPT_MAX = 6;
+const PASSWORD_ATTEMPT_WINDOW_MS = 60000;
 
 // A room code you can read out loud over a call: no O/0, no I/1, no vowels
 // that could accidentally spell something.
@@ -97,6 +99,22 @@ function clampSettings(raw) {
   if (Number.isFinite(raw.torch)) s.torch = Math.max(20, Math.min(900, Math.round(raw.torch)));
   if (['off', 'faint', 'normal', 'strong'].includes(raw.tracks)) s.tracks = raw.tracks;
   return s;
+}
+
+function normalizePassword(value) {
+  return String(value || '').slice(0, 64);
+}
+
+function hashPassword(value) {
+  const password = normalizePassword(value);
+  if (!password) return null;
+  return crypto.createHash('sha256').update(password, 'utf8').digest();
+}
+
+function passwordMatches(expected, value) {
+  if (!expected) return true;
+  const actual = hashPassword(value);
+  return !!actual && actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +273,20 @@ function acceptUpgrade(req, socket) {
 // rooms
 // ---------------------------------------------------------------------------
 const rooms = new Map();
+const passwordAttempts = new Map();
 let nextPlayerId = 1;
+
+function passwordAttemptKey(session, code) {
+  return `${session.ip || 'unknown'}|${code}`;
+}
+
+function recentPasswordAttempts(key) {
+  const now = Date.now();
+  const recent = (passwordAttempts.get(key) || []).filter(at => now - at < PASSWORD_ATTEMPT_WINDOW_MS);
+  if (recent.length) passwordAttempts.set(key, recent);
+  else passwordAttempts.delete(key);
+  return recent;
+}
 
 function makeCode() {
   for (let attempt = 0; attempt < 50; attempt++) {
@@ -318,6 +349,7 @@ class Room {
     this.result = null;
     this.manifestWaitSince = 0;
     this.manifestRequestedAt = 0;
+    this.passwordHash = null;
   }
 
   broadcast(msg, exceptId) {
@@ -385,6 +417,18 @@ class Room {
       min: MIN_PLAYERS,
       players: [...this.players.values()].map(p => p.publicLobby()),
     });
+  }
+
+  lobbySummary() {
+    const host = this.players.get(this.hostId);
+    return {
+      code: this.code,
+      players: this.players.size,
+      max: MAX_PLAYERS,
+      locked: !!this.passwordHash,
+      host: host ? host.name : 'guest',
+      settings: this.settings,
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -713,6 +757,7 @@ function handle(session, msg) {
     if (t === 'create') {
       room = new Room(makeCode());
       room.settings = clampSettings(msg.settings);
+      room.passwordHash = hashPassword(msg.password);
       rooms.set(room.code, room);
     } else {
       const code = String(msg.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -720,6 +765,20 @@ function handle(session, msg) {
       if (!room) { session.conn.send({ t: 'err', m: 'no lobby with that code', fatal: true }); return; }
       if (room.phase !== 'lobby') { session.conn.send({ t: 'err', m: 'that night has already started', fatal: true }); return; }
       if (room.players.size >= MAX_PLAYERS) { session.conn.send({ t: 'err', m: 'lobby is full (5)', fatal: true }); return; }
+      if (room.passwordHash) {
+        const attemptKey = passwordAttemptKey(session, code);
+        const attempts = recentPasswordAttempts(attemptKey);
+        if (attempts.length >= PASSWORD_ATTEMPT_MAX) {
+          session.conn.send({ t: 'err', m: 'too many password attempts; wait a minute', fatal: true });
+          return;
+        }
+        if (!passwordMatches(room.passwordHash, msg.password)) {
+          attempts.push(Date.now()); passwordAttempts.set(attemptKey, attempts);
+          session.conn.send({ t: 'err', m: 'wrong lobby password', fatal: true });
+          return;
+        }
+        passwordAttempts.delete(attemptKey);
+      }
     }
     room.add(player);
     session.conn.socket.setTimeout(0);
@@ -889,6 +948,19 @@ function main() {
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
+    if (url.pathname === '/lobbies') {
+      const available = [...rooms.values()]
+        .filter(room => room.phase === 'lobby' && room.players.size > 0 && room.players.size < MAX_PLAYERS)
+        .sort((a, b) => b.touched - a.touched)
+        .map(room => room.lobbySummary());
+      res.writeHead(200, {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+        'access-control-allow-origin': '*',
+      });
+      res.end(JSON.stringify({ lobbies: available }));
+      return;
+    }
     if (url.pathname === '/health') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: true, rooms: rooms.size, uptime: process.uptime() }));
@@ -929,7 +1001,8 @@ function main() {
     // A connection that never creates or joins a room is outside the room ping
     // loop. Do not let it hold a megabyte parse buffer forever.
     socket.setTimeout(15000, () => conn.destroy());
-    const session = { conn, room: null, player: null, joinAttempts: [] };
+    const forwarded = String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    const session = { conn, room: null, player: null, joinAttempts: [], ip: forwarded || socket.remoteAddress };
     conn.onmessage = (msg) => {
       try { handle(session, msg); }
       catch (e) { console.error('handler:', e && e.stack || e); }
