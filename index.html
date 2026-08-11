@@ -2,17 +2,224 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Tung Tung Tung Sahorror</title>
 <style>
-  html, body { margin:0; padding:0; background:#000; height:100%; overflow:hidden;
+  :root {
+    --bg:#030304; --surface:#0c0c10; --elevated:#131318;
+    --text:#c8c8cd; --muted:#85858d; --divider:#34343d;
+    --accent:#e0a040; --accent-hi:#f0b860; --danger:#d8604c;
+    --fast:150ms; --ease:cubic-bezier(0, 0, .2, 1);
+  }
+  html, body { margin:0; padding:0; background:var(--bg); height:100%; overflow:hidden;
     display:flex; align-items:center; justify-content:center; font-family:monospace; }
-  #wrap { position:relative; width:960px; height:540px; box-shadow:0 0 40px rgba(0,0,0,0.8); }
-  #main { position:absolute; top:0; left:0; image-rendering:pixelated; cursor:pointer; }
+  #wrap { position:relative; width:min(960px, 100vw); height:min(540px, 100vh);
+    box-shadow:0 0 40px rgba(0,0,0,0.8); }
+  #main { position:absolute; top:50%; left:0; width:100%; height:auto; aspect-ratio:16/9;
+    transform:translateY(-50%); image-rendering:pixelated; cursor:pointer; }
+
+  /* Menus are DOM because lobbies need real form controls and focus handling. */
+  #ui { position:absolute; inset:0; display:none; color:var(--text); font:14px monospace;
+    background:rgba(4,4,6,0.90); overflow:auto; }
+  #ui.on { display:block; }
+  #ui.thin { background:rgba(4,4,6,0.72); }
+  .scr { display:none; position:absolute; inset:0; padding:26px 34px; box-sizing:border-box; }
+  .scr.on { display:block; }
+  .title { color:var(--accent); font-weight:bold; font-size:clamp(24px, 5vw, 34px);
+    letter-spacing:2px; text-align:center; margin:8px 0 2px; }
+  .sub { text-align:center; color:var(--muted); font-size:13px; margin-bottom:16px; }
+  .credit { position:absolute; left:0; right:0; bottom:14px; text-align:center;
+    color:var(--muted); font-size:12px; }
+  .row { display:flex; gap:10px; align-items:center; margin:8px 0; }
+  .row.center { justify-content:center; }
+  .col { display:flex; flex-direction:column; gap:6px; }
+  button { min-height:44px; font:bold 14px monospace; color:#101014; background:var(--accent);
+    border:0; padding:9px 16px; cursor:pointer; letter-spacing:1px;
+    transition:background-color var(--fast) var(--ease), color var(--fast) var(--ease); }
+  button:hover { background:var(--accent-hi); }
+  button:disabled { background:#3a3a40; color:#7a7a80; cursor:default; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid #4a4a52; }
+  button.ghost:hover { background:#1c1c22; color:var(--accent); }
+  button.ghost.sel { border-color:var(--accent); color:var(--accent); background:#241c10; }
+  button.small { font-size:12px; padding:7px 10px; }
+  input, select { min-height:44px; box-sizing:border-box; }
+  input { font:14px monospace; color:#e8e8ee; background:var(--elevated);
+    border:1px solid #3a3a44; padding:8px 10px; }
+  button:focus-visible, input:focus-visible, select:focus-visible {
+    outline:2px solid var(--accent); outline-offset:2px;
+  }
+  label { color:var(--muted); font-size:12px; letter-spacing:1px; }
+  .card { background:var(--surface); border:1px solid #26262e; padding:14px 16px; }
+  .panels { display:flex; gap:16px; align-items:flex-start; }
+  .panels > * { flex:1 1 0; min-width:0; }
+  .code { color:var(--accent); font-size:30px; font-weight:bold; letter-spacing:8px; }
+  .plist { list-style:none; margin:0; padding:0; }
+  .plist li { display:flex; align-items:center; gap:8px; padding:6px 4px; border-bottom:1px solid #1c1c22; }
+  .dot { width:9px; height:9px; flex:0 0 9px; border-radius:50%; }
+  .pname { flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tag { font-size:11px; color:var(--muted); letter-spacing:1px; }
+  .tally { color:var(--accent); font-size:12px; min-width:34px; text-align:right; }
+  .setting { display:flex; align-items:center; gap:8px; margin:7px 0; }
+  .setting label { flex:0 0 118px; }
+  .setting .val { color:#e8e8ee; min-width:74px; }
+  .err { color:var(--danger); min-height:18px; text-align:center; margin-top:8px; }
+  .hint { color:var(--muted); font-size:12px; line-height:1.5; }
+  .scoretab { width:100%; border-collapse:collapse; font-size:13px; }
+  .scoretab td { padding:5px 6px; border-bottom:1px solid #1c1c22; }
+
+  @media (max-width:700px) {
+    .scr { padding:20px; }
+    .panels { flex-direction:column; }
+    .panels > * { width:100%; box-sizing:border-box; }
+    .row.center { flex-wrap:wrap; }
+    .code { font-size:24px; }
+    .credit { position:static; margin-top:24px; padding-bottom:12px; }
+    #scr-main .credit { position:absolute; }
+  }
+  @media (max-width:430px) {
+    .scr { padding:16px 12px; }
+    .title { letter-spacing:1px; }
+    .setting label { flex-basis:104px; }
+    .plist li { flex-wrap:wrap; }
+    .plist .pname { min-width:120px; }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
+  }
 </style>
 </head>
 <body>
 <div id="wrap">
-  <canvas id="main" width="960" height="540"></canvas>
+  <canvas id="main" width="960" height="540" aria-label="First-person horror game view"></canvas>
+  <div id="ui">
+
+    <!-- main menu -->
+    <div class="scr" id="scr-main">
+      <div class="title">TUNG TUNG TUNG SAHORROR</div>
+      <div class="sub">the drumming thing walks the streets before dawn</div>
+      <div class="row center" style="margin-top:34px">
+        <button id="b-solo">PLAY ALONE</button>
+        <button id="b-mp">PLAY TOGETHER</button>
+      </div>
+      <div class="row center" style="margin-top:18px">
+        <button class="ghost small" id="b-solo-settings">NIGHT SETTINGS</button>
+        <button class="ghost small" id="b-howto" aria-expanded="false" aria-controls="howto">HOW TO PLAY</button>
+      </div>
+      <div id="howto" class="card hint" style="display:none;max-width:640px;margin:18px auto 0">
+        <b style="color:#c8c8cd">Alone.</b> Gather every offering and carry them back to the surau
+        before the call to Subuh. The thing only sees what it is facing. It always hears panic.<br><br>
+        <b style="color:#c8c8cd">Together.</b> Five to a lobby, one of you is the Tung. The rest
+        carry offerings home one at a time. The Tung cannot see in colour and cannot hear well —
+        it reads the <span style="color:#8ab0d8">footprints you left a moment ago</span>.
+        Sprinting leaves a brighter, longer-lasting trail. Standing still leaves none.<br><br>
+        <b style="color:#c8c8cd">Alcoves come in pairs.</b> Hide in one and you can slip through to
+        its partner, so camping a door is a waste of the Tung's night.
+      </div>
+      <div class="credit">originally by tim</div>
+    </div>
+
+    <!-- solo settings -->
+    <div class="scr" id="scr-solo">
+      <div class="title">THE NIGHT</div>
+      <div class="sub">how long, how big, how many</div>
+      <div class="card" style="max-width:460px;margin:0 auto" id="solo-settings"></div>
+      <div class="row center" style="margin-top:20px">
+        <button id="b-solo-start">STEP OUTSIDE</button>
+        <button class="ghost" id="b-solo-back">BACK</button>
+      </div>
+      <div class="credit">originally by tim</div>
+    </div>
+
+    <!-- multiplayer connect -->
+    <div class="scr" id="scr-mp">
+      <div class="title">PLAY TOGETHER</div>
+      <div class="sub">lobbies of five — one of you is the Tung</div>
+      <div class="card" style="max-width:520px;margin:0 auto">
+        <div class="col">
+          <label for="i-name">YOUR NAME</label>
+          <input id="i-name" maxlength="14" placeholder="name">
+          <label for="i-relay" style="margin-top:8px">RELAY</label>
+          <input id="i-relay" spellcheck="false" placeholder="wss://relay.example.com">
+          <div class="hint" id="relay-hint"></div>
+        </div>
+        <div class="row" style="margin-top:16px">
+          <button id="b-create">CREATE LOBBY</button>
+          <input id="i-code" maxlength="6" placeholder="CODE" style="width:96px;text-transform:uppercase">
+          <button id="b-join">JOIN</button>
+        </div>
+      </div>
+      <div class="err" id="mp-err" role="status" aria-live="polite"></div>
+      <div class="row center" style="margin-top:8px">
+        <button class="ghost" id="b-mp-back">BACK</button>
+      </div>
+      <div class="credit">originally by tim</div>
+    </div>
+
+    <!-- lobby -->
+    <div class="scr" id="scr-lobby">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div>
+          <label>LOBBY CODE</label>
+          <div class="code" id="lobby-code">----</div>
+        </div>
+        <div style="text-align:right">
+          <label>WHO IS THE TUNG</label>
+          <div class="hint">vote, or leave it to the dark</div>
+        </div>
+      </div>
+      <div class="panels" style="margin-top:14px">
+        <div class="card">
+          <label>THE STREET (<span id="lobby-count">0</span>/5)</label>
+          <ul class="plist" id="lobby-players"></ul>
+          <div class="row" style="margin-top:10px">
+            <button class="ghost small" id="b-vote-random">VOTE: LET IT BE RANDOM</button>
+          </div>
+        </div>
+        <div class="card">
+          <label>SETTINGS <span class="tag" id="lobby-hosttag"></span></label>
+          <div id="lobby-settings"></div>
+        </div>
+      </div>
+      <div class="err" id="lobby-err" role="status" aria-live="polite"></div>
+      <div class="row center" style="margin-top:6px">
+        <button id="b-start">START THE NIGHT</button>
+        <button class="ghost" id="b-leave">LEAVE</button>
+      </div>
+    </div>
+
+    <!-- in-match pause / spectate overlay -->
+    <div class="scr" id="scr-pause">
+      <div class="title" id="pause-title">PAUSED</div>
+      <div class="sub" id="pause-sub">the street holds its breath</div>
+      <div class="card hint" style="max-width:520px;margin:0 auto">
+        <div class="row" style="justify-content:space-between"><span>WASD</span><span>move</span></div>
+        <div class="row" style="justify-content:space-between"><span>SHIFT</span><span id="k-shift">sprint</span></div>
+        <div class="row" style="justify-content:space-between"><span>F</span><span>torch</span></div>
+        <div class="row" style="justify-content:space-between"><span>E</span><span>hide in an alcove</span></div>
+        <div class="row" style="justify-content:space-between"><span>Q</span><span>slip through to the paired alcove</span></div>
+      </div>
+      <div class="row center" style="margin-top:18px">
+        <button id="b-resume">RESUME</button>
+        <button class="ghost" id="b-quit">LEAVE THE NIGHT</button>
+      </div>
+      <div class="credit">originally by tim</div>
+    </div>
+
+    <!-- multiplayer result -->
+    <div class="scr" id="scr-over">
+      <div class="title" id="over-title">DAWN</div>
+      <div class="sub" id="over-sub"></div>
+      <div class="card" style="max-width:520px;margin:0 auto">
+        <table class="scoretab" id="over-scores"></table>
+      </div>
+      <div class="row center" style="margin-top:18px">
+        <button id="b-again">BACK TO THE LOBBY</button>
+        <button class="ghost" id="b-over-leave">LEAVE</button>
+      </div>
+      <div class="credit">originally by tim</div>
+    </div>
+
+  </div>
 </div>
 <script>
 "use strict";
@@ -24,7 +231,7 @@ const WIN_W = 960, WIN_H = 540;
 const RENDER_W = 320, RENDER_H = 180;
 
 const FOV = 1.0;
-const MAP_N = 21;
+const MAP_N = 21;               // default map size; per-night in the settings
 
 const WALK_SPEED = 2.2;
 const SPRINT_SPEED = 3.6;
@@ -63,9 +270,24 @@ const N_HIDES = 7;
 const HIDE_DIST = 0.75;
 const HIDE_SAFE_BREAK = 0.9;
 
+// Alcoves are paired, and hiding in one lets you slip through to its partner.
+// This exists to make camping a door a losing move: the hunter who plants
+// himself outside the alcove he watched you enter is watching the wrong door
+// within a couple of seconds, and has spent his night to find that out.
+//
+// The pairing is deliberately mid-range, not map-wide. SWAP_GAP_FRAC of the map
+// is far enough that the camper genuinely loses you, but with SWAP_COOLDOWN on
+// it the average ground gained is well under walking pace -- so it is an escape
+// hatch, never a shortcut to the surau.
+const SWAP_COOLDOWN = 12.0;
+const SWAP_TRANSIT = 1.2;
+const SWAP_GAP_FRAC = 0.38;
+const SWAP_GAP_MIN = 5;
+
 const N_ITEMS = 6;
 const DARK_DIST = 9.0;
-const BATTERY_DRAIN = 0.008;
+const TORCH_SECONDS = 125;      // default; BATTERY_DRAIN is derived per night
+const BATTERY_DRAIN = 1 / TORCH_SECONDS;
 const BATTERY_PER_ITEM = 0.3;
 
 // The night is a real clock and it does not stop while you hide.
@@ -80,6 +302,81 @@ const PANIC_STAMINA_REGEN = 0.5;
 
 const SURAU_DIST = 0.7;        // how close you must get to count as home
 
+// ---------------------------------------------------------------------------
+// multiplayer
+//
+// These four distances are duplicated in server/relay.js, which is the only
+// place the two halves have to agree on a number. The relay resolves pickups,
+// deliveries and catches; if these drift the player sees a catch that the
+// server does not, which is the worst class of bug in a game like this.
+// ---------------------------------------------------------------------------
+const CATCH_DIST_MP = 0.52;
+const PICKUP_DIST = 0.62;
+const SURAU_DIST_MP = 0.9;
+
+// The Tung is a player, so the AI numbers do not apply. It walks faster than a
+// survivor walks (2.2) and slower than one sprints (3.6): you cannot stroll
+// away from it and you cannot be run down while you still have wind. A survivor
+// sprinting flat out from full stamina averages ~2.64 over the drain/regen
+// cycle, so an honest straight-line chase is very slightly in the Tung's favour
+// and gets decided by corners, alcoves and the surge.
+const TUNG_SPEED = 2.62;
+// The surge is what stops a survivor kiting forever on a long corridor. Short,
+// loud (it is on a cooldown the survivor can learn to count) and not quite
+// enough on its own to close a full sprint gap.
+const TUNG_SURGE_SPEED = 3.85;
+const TUNG_SURGE_TIME = 1.4;
+const TUNG_SURGE_COOLDOWN = 11.0;
+const TUNG_DARK_DIST = 12.5;   // it sees further than you, in no colour at all
+
+// Footprints. The Tung reads where you *were*, never where you are: a print is
+// invisible until FOOT_DELAY has passed, so at a walk it is always at least
+// ~3 units of corridor behind you. They are drawn into the depth buffer like
+// everything else, so a trail through a wall is not visible -- the Tung has to
+// walk the corridor to find the trail, which is the main thing keeping this
+// fair.
+const FOOT_DELAY = 1.4;
+const FOOT_LIFE_WALK = 4.0;
+const FOOT_LIFE_SPRINT = 7.0;
+const FOOT_LIFE_CARRY = 1.4;   // multiplier: a carried lantern drips light
+const FOOT_STRIDE_WALK = 0.62;
+const FOOT_STRIDE_SPRINT = 0.46;
+const FOOT_MAX_DIST = 14.0;
+const FOOT_PER_PLAYER = 48;
+// Lobby dial, because this is the number most likely to need tuning against
+// real players rather than against my own reasoning.
+const TRACK_PRESETS = {
+  off:    { on: false, delay: 0,   life: 1.0, alpha: 0 },
+  faint:  { on: true,  delay: 2.2, life: 0.6, alpha: 0.70 },
+  normal: { on: true,  delay: 1.4, life: 1.0, alpha: 1.0 },
+  strong: { on: true,  delay: 0.8, life: 1.5, alpha: 1.25 },
+};
+
+const HEAR_MP_SPRINT = 7.0;    // the Tung is not deaf, just half-deaf
+const HEAR_MP_WALK = 3.2;
+
+const DEFAULT_SETTINGS = {
+  mapN: MAP_N,
+  lanterns: N_ITEMS,
+  night: NIGHT_SECONDS,
+  torch: TORCH_SECONDS,
+  tracks: 'normal',
+};
+function clampGameSettings(raw) {
+  const s = Object.assign({}, DEFAULT_SETTINGS);
+  if (!raw || typeof raw !== 'object') return s;
+  if (Number.isFinite(raw.mapN)) {
+    let n = Math.max(15, Math.min(33, Math.round(raw.mapN)));
+    if (n % 2 === 0) n += n < 33 ? 1 : -1;
+    s.mapN = n;
+  }
+  if (Number.isFinite(raw.lanterns)) s.lanterns = Math.max(2, Math.min(12, Math.round(raw.lanterns)));
+  if (Number.isFinite(raw.night)) s.night = Math.max(60, Math.min(900, Math.round(raw.night)));
+  if (Number.isFinite(raw.torch)) s.torch = Math.max(20, Math.min(900, Math.round(raw.torch)));
+  if (TRACK_PRESETS[raw.tracks]) s.tracks = raw.tracks;
+  return s;
+}
+
 const AMBER = 'rgb(224,160,64)';
 const COOL = 'rgb(130,145,170)';
 const INK = 'rgb(200,200,205)';
@@ -93,12 +390,26 @@ function fmtClock(seconds) {
   const s = Math.max(0, Math.ceil(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
-function shuffle(arr) {
+function shuffle(arr, rnd = Math.random) {
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rnd() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
+}
+// Everyone in a lobby has to walk the same street. The relay hands out a seed
+// and every client builds the level from it, so no map data crosses the wire
+// and the relay never needs to know what a maze is. Solo play passes no seed
+// and keeps using Math.random, which is also what lets tools/sim.js seed a run
+// by swapping Math.random in its sandbox.
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -231,6 +542,22 @@ function makeBreath() {
   for (let i = 0; i < n; i++) s[i] *= 0.55;
   return s;
 }
+// A single soft footfall on wet ground. Short, dull, and quiet enough that it
+// never competes with the drum -- in multiplayer it is the only thing either
+// side hears of the other apart from that drum, so it has to read as "someone
+// is close" without ever reading as "someone is exactly there".
+function makeStep() {
+  const t = lin(0.14), n = t.length;
+  let s = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const env = Math.exp(-t[i] * 46.0);
+    s[i] = ((Math.random() * 2 - 1) * 0.8 + Math.sin(2 * Math.PI * 96 * t[i]) * 0.5) * env;
+  }
+  s = lp(s, 6, 4);
+  normalize(s);
+  for (let i = 0; i < n; i++) s[i] *= 0.42;
+  return s;
+}
 function makeScare() {
   const t = lin(0.85), n = t.length, s = new Float32Array(n);
   for (let i = 0; i < n; i++) {
@@ -288,7 +615,7 @@ class AudioManager {
     const specs = {
       tung: makeTung, boom: makeBoom, heart: makeHeart, pickup: makePickup,
       stinger: makeStinger, hidefx: makeHidefx, breath: makeBreath, scare: makeScare,
-      dawn: makeDawn, drone: makeDrone, whisper: makeWhisper
+      dawn: makeDawn, drone: makeDrone, whisper: makeWhisper, step: makeStep
     };
     for (const [name, fn] of Object.entries(specs)) {
       const data = fn();
@@ -334,7 +661,7 @@ const audio = new AudioManager();
 // ---------------------------------------------------------------------------
 // maze (braided: no dead ends)
 // ---------------------------------------------------------------------------
-function genMaze(n) {
+function genMaze(n, rnd = Math.random) {
   const grid = Array.from({ length: n }, () => new Array(n).fill(1));
   const stack = [[1, 1]];
   grid[1][1] = 0;
@@ -346,7 +673,7 @@ function genMaze(n) {
       if (nx >= 1 && nx < n - 1 && ny >= 1 && ny < n - 1 && grid[ny][nx] === 1) nbrs.push([nx, ny, dx, dy]);
     }
     if (nbrs.length) {
-      const [nx, ny, dx, dy] = nbrs[Math.floor(Math.random() * nbrs.length)];
+      const [nx, ny, dx, dy] = nbrs[Math.floor(rnd() * nbrs.length)];
       grid[cy + dy / 2][cx + dx / 2] = 0;
       grid[ny][nx] = 0;
       stack.push([nx, ny]);
@@ -367,16 +694,19 @@ function genMaze(n) {
       if (bx >= 1 && bx < n - 1 && by >= 1 && by < n - 1 && grid[wy][wx] === 1) cands.push([wx, wy]);
     }
     if (cands.length) {
-      const [wx, wy] = cands[Math.floor(Math.random() * cands.length)];
+      const [wx, wy] = cands[Math.floor(rnd() * cands.length)];
       grid[wy][wx] = 0;
     }
   }
 
   function randOdd(lo, hiExclusive) {
     const count = Math.floor((hiExclusive - lo) / 2);
-    return lo + 2 * Math.floor(Math.random() * count);
+    return lo + 2 * Math.floor(rnd() * count);
   }
-  for (let k = 0; k < 2; k++) {
+  // Courtyards scale with the map, otherwise a 33x33 street is corridor all the
+  // way down and a 15x15 is nothing but courtyard.
+  const courtyards = Math.max(1, Math.round(n * n / 220));
+  for (let k = 0; k < courtyards; k++) {
     const rx = randOdd(1, n - 4), ry = randOdd(1, n - 4);
     for (let yy = ry; yy < ry + 3; yy++) for (let xx = rx; xx < rx + 3; xx++) grid[yy][xx] = 0;
     grid[ry + 1][rx + 1] = 1;
@@ -415,6 +745,39 @@ function bfsNext(grid, start, goal) {
     cur = p;
   }
   return cur;
+}
+
+// Pair every alcove with exactly one other. The target separation is a
+// fraction of the map rather than "as far as possible": a map-wide pair would
+// turn cover into fast travel and gut the extraction run, while a pair two
+// corners apart would not shake a camper. Deterministic given the same hide
+// list, so every client in a lobby derives the same pairing -- though the relay
+// is the authority on where a swap actually comes out.
+function pairAlcoves(hides, mapN) {
+  const target = Math.max(SWAP_GAP_MIN, SWAP_GAP_FRAC * mapN);
+  const left = hides.map((_, i) => i);
+  const pairs = [];
+  while (left.length > 1) {
+    const i = left.shift();
+    let best = 0, bestScore = Infinity;
+    for (let k = 0; k < left.length; k++) {
+      const j = left[k];
+      const d = Math.hypot(hides[i][0] - hides[j][0], hides[i][1] - hides[j][1]);
+      // Under the minimum gap is heavily penalised rather than forbidden, so a
+      // cramped map still ends up fully paired.
+      const score = Math.abs(d - target) + (d < SWAP_GAP_MIN ? 40 : 0);
+      if (score < bestScore) { bestScore = score; best = k; }
+    }
+    pairs.push([i, left.splice(best, 1)[0]]);
+  }
+  return pairs;
+}
+function pairOf(pairs, i) {
+  for (const [a, b] of pairs) {
+    if (a === i) return b;
+    if (b === i) return a;
+  }
+  return -1;
 }
 
 // ---------------------------------------------------------------------------
@@ -497,6 +860,56 @@ function createSurauSprite() {
   g.beginPath(); g.arc(32, 2, 3, 0, Math.PI * 2); g.fill();
   return c;
 }
+// The other four. Drawn per lobby colour so a glance down a corridor tells you
+// who it is, and with a back-facing variant for the same reason the creature
+// has one: facing is information.
+function createSurvivorSprite(color, carrying, away) {
+  const w = 48, h = 104;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const skin = 'rgb(120,92,66)', skinD = 'rgb(88,66,48)';
+  const cloth = color || '#c8c0a8';
+
+  if (carrying) {
+    // the lantern's halo, drawn behind everything so the body occludes it
+    for (const [r, a] of [[16, 0.13], [11, 0.20], [7, 0.30]]) {
+      g.fillStyle = `rgba(224,160,64,${a})`;
+      g.beginPath(); g.arc(38, 58, r, 0, Math.PI * 2); g.fill();
+    }
+  }
+  g.fillStyle = 'rgb(28,28,34)'; g.fillRect(18, 82, 5, 20); g.fillRect(26, 82, 5, 20);
+  g.fillStyle = cloth; g.fillRect(15, 40, 19, 44);
+  g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(28, 40, 6, 44);
+  g.fillStyle = 'rgb(38,38,46)'; g.fillRect(15, 70, 19, 14);   // sarong
+  g.fillStyle = skin; g.fillRect(19, 20, 12, 16);              // head
+  g.fillStyle = skinD; g.fillRect(19, 20, 12, 4);
+  g.fillStyle = 'rgb(24,24,30)'; g.fillRect(17, 14, 16, 8);    // songkok
+  if (away) {
+    g.fillStyle = 'rgb(20,20,26)'; g.fillRect(19, 22, 12, 12);
+  } else {
+    g.fillStyle = 'rgb(16,14,12)'; g.fillRect(21, 27, 3, 3); g.fillRect(27, 27, 3, 3);
+  }
+  g.strokeStyle = cloth; g.lineWidth = 4;
+  g.beginPath(); g.moveTo(16, 46); g.lineTo(10, 66); g.stroke();
+  if (carrying) {
+    g.beginPath(); g.moveTo(33, 46); g.lineTo(38, 52); g.stroke();
+    g.strokeStyle = 'rgb(70,60,40)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(38, 52); g.lineTo(38, 56); g.stroke();
+    g.fillStyle = 'rgb(60,44,20)'; g.fillRect(34, 55, 9, 13);
+    g.fillStyle = 'rgb(224,160,64)'; g.fillRect(35, 57, 7, 9);
+    g.fillStyle = 'rgb(255,240,210)'; g.fillRect(37, 59, 3, 4);
+  } else {
+    g.beginPath(); g.moveTo(33, 46); g.lineTo(39, 66); g.stroke();
+  }
+  return c;
+}
+const survivorSprites = new Map();
+function getSurvivorSprite(color, carrying, away) {
+  const key = `${color}|${carrying ? 1 : 0}|${away ? 1 : 0}`;
+  let s = survivorSprites.get(key);
+  if (!s) { s = createSurvivorSprite(color, carrying, away); survivorSprites.set(key, s); }
+  return s;
+}
 function createItemSprite() {
   const w = 32, h = 32;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -578,10 +991,31 @@ function getScaledSprite(src, sw, sh, brightness) {
 // game
 // ---------------------------------------------------------------------------
 class Game {
-  constructor() { this.reset(); }
+  // opts is the whole per-night configuration:
+  //   mapN, lanterns, night, torch, tracks   -- the lobby settings
+  //   seed                                   -- set in multiplayer so every
+  //                                             client builds the same street
+  //   mode 'solo'|'mp', role 'survivor'|'tung', spawnIdx
+  //
+  // `new Game()` with no arguments is still a stock solo night on Math.random,
+  // which is the contract tools/sim.js depends on.
+  constructor(opts) { this.reset(opts); }
 
-  reset() {
-    this.grid = genMaze(MAP_N);
+  reset(opts) {
+    const raw = Object.assign({}, DEFAULT_SETTINGS, this.opts || {}, opts || {});
+    const o = Object.assign({}, raw, clampGameSettings(raw));
+    this.opts = o;
+    this.mapN = o.mapN | 0;
+    this.nItems = o.lanterns | 0;
+    this.nightSeconds = o.night;
+    this.batteryDrain = 1 / Math.max(1, o.torch);
+    this.mode = o.mode || 'solo';
+    this.role = o.role || 'survivor';
+    this.tracks = TRACK_PRESETS[o.tracks] || TRACK_PRESETS.normal;
+    this.rng = (o.seed === undefined || o.seed === null) ? Math.random : mulberry32(o.seed);
+    const rnd = this.rng;
+
+    this.grid = genMaze(this.mapN, rnd);
     this.cells = openCells(this.grid);
 
     this.px = 1.5; this.py = 1.5; this.angle = 0.0;
@@ -589,8 +1023,8 @@ class Game {
     this.flashlight = true; this.isMoving = false; this.isSprinting = false; this.hidden = false;
 
     // You left the surau before the call. Everything you gather comes back here.
-    this.surau = [this.px, this.py];
-    this.timeLeft = NIGHT_SECONDS;
+    this.surau = [1.5, 1.5];
+    this.timeLeft = this.nightSeconds;
     this.panicking = false;
 
     let far = this.cells[0], bestD = -1;
@@ -598,31 +1032,46 @@ class Game {
       const d = (c[0] - 1) ** 2 + (c[1] - 1) ** 2;
       if (d > bestD) { bestD = d; far = c; }
     }
+    this.farCell = far;
     this.cx = far[0] + 0.5; this.cy = far[1] + 0.5;
     this.cangle = Math.atan2(this.py - this.cy, this.px - this.cx);
 
+    // Offerings and alcoves both keep their distance from the surau and from
+    // each other; the exclusion radii scale with the map so a big street is not
+    // just the same six things further apart.
+    const spread = Math.max(6, Math.round((this.mapN / 21) ** 2 * 6));
     let pool = this.cells.filter(c => (c[0] - 1) ** 2 + (c[1] - 1) ** 2 > 16);
-    shuffle(pool);
+    shuffle(pool, rnd);
     let chosen = [];
     for (const c of pool) {
-      if (chosen.every(o => ((c[0] - o[0]) ** 2 + (c[1] - o[1]) ** 2) > 6)) chosen.push(c);
-      if (chosen.length === N_ITEMS) break;
+      if (chosen.every(o2 => ((c[0] - o2[0]) ** 2 + (c[1] - o2[1]) ** 2) > spread)) chosen.push(c);
+      if (chosen.length === this.nItems) break;
     }
     this.items = chosen.map(c => [c[0] + 0.5, c[1] + 0.5]);
     this.collected = 0;
 
     const takenSet = new Set(chosen.map(c => c[0] + ',' + c[1]));
     let pool2 = this.cells.filter(c => (c[0] - 1) ** 2 + (c[1] - 1) ** 2 > 9);
-    shuffle(pool2);
+    shuffle(pool2, rnd);
+    // Alcoves must come in pairs -- an odd one out would be a door with no way
+    // through, which is exactly the camping spot the pairing exists to remove.
+    const wantHides = Math.max(4, Math.round(N_HIDES * (this.mapN / 21) ** 1.4) & ~1);
     let hides = [];
     for (const c of pool2) {
       if (takenSet.has(c[0] + ',' + c[1])) continue;
-      if (hides.every(o => ((c[0] - o[0]) ** 2 + (c[1] - o[1]) ** 2) > 6)) hides.push(c);
-      if (hides.length === N_HIDES) break;
+      if (hides.every(o2 => ((c[0] - o2[0]) ** 2 + (c[1] - o2[1]) ** 2) > spread)) hides.push(c);
+      if (hides.length === wantHides) break;
     }
+    if (hides.length % 2) hides.pop();
     this.hides = hides.map(c => [c[0] + 0.5, c[1] + 0.5]);
+    this.hidePairs = pairAlcoves(this.hides, this.mapN);
     this.nearHide = false;
+    this.nearHideIdx = -1;
     this.nearestHide = this.hides.length ? this.hides[0] : [this.px, this.py];
+    this.hideIdx = -1;
+    this.swapCooldown = 0;
+    this.swapTransit = 0;
+    this.swapPending = false;
 
     this.cstate = 'wander'; this.prevCstate = 'wander';
     this.alert = 0.0; this.lastKnown = null; this.lostT = 0.0; this.hideT = 0.0;
@@ -632,11 +1081,51 @@ class Game {
 
     this.cdist = 99.0; this.crel = 0.0; this.shake = 0.0; this.redAlpha = 0; this.flicker = 1.0;
     this.state = 'intro';
+
+    // --- multiplayer-only state, all of it fed by the relay ---
+    this.net = null;            // the live connection, set by the net layer
+    this.carrying = -1;         // item index in hand, -1 for empty handed
+    this.alive = true;
+    this.itemState = [];        // [state, carrierId, x, y] per offering
+    this.delivered = 0;
+    this.surge = 0;             // seconds of surge left
+    this.surgeCd = 0;
+    this.trails = new Map();    // playerId -> footprint ring buffer (Tung only)
+    this.spectating = null;
+    this.stepT = 0;
+    this.clock = 0;             // seconds since the match began, for footprints
+
+    if (this.mode === 'mp') this.placeForRole(o.spawnIdx | 0);
+  }
+
+  // Survivors wake at the surau, spread over the nearest open cells so five
+  // people do not start inside each other. The Tung starts at the far corner,
+  // the same cell the solo creature uses.
+  placeForRole(spawnIdx) {
+    const spawn = this.spawnForRole(this.role, spawnIdx);
+    this.px = spawn.x; this.py = spawn.y; this.angle = spawn.a;
+    if (this.role === 'tung') {
+      this.flashlight = false;
+    }
+  }
+
+  spawnForRole(role, spawnIdx) {
+    if (role === 'tung') {
+      const x = this.farCell[0] + 0.5, y = this.farCell[1] + 0.5;
+      return { x, y, a: Math.atan2(1.5 - y, 1.5 - x) };
+    }
+    const near = this.cells
+      .map(c => [c, (c[0] - 1) ** 2 + (c[1] - 1) ** 2])
+      .sort((a, b) => a[1] - b[1])
+      .map(p => p[0]);
+    const cell = near[Math.min(spawnIdx, near.length - 1)] || [1, 1];
+    const x = cell[0] + 0.5, y = cell[1] + 0.5;
+    return { x, y, a: Math.atan2(y - 1.5, x - 1.5) || 0 };
   }
 
   isWall(x, y) {
     const ix = Math.floor(x), iy = Math.floor(y);
-    if (ix < 0 || iy < 0 || ix >= MAP_N || iy >= MAP_N) return true;
+    if (ix < 0 || iy < 0 || ix >= this.mapN || iy >= this.mapN) return true;
     return this.grid[iy][ix] !== 0;
   }
   tryMove(nx, ny) {
@@ -656,33 +1145,100 @@ class Game {
     return true;
   }
   updateNearestHide() {
-    let best = null, bd = 1e9;
-    for (const h of this.hides) {
+    let best = null, bd = 1e9, bi = -1;
+    for (let i = 0; i < this.hides.length; i++) {
+      const h = this.hides[i];
       const d = (h[0] - this.px) ** 2 + (h[1] - this.py) ** 2;
-      if (d < bd) { bd = d; best = h; }
+      if (d < bd) { bd = d; best = h; bi = i; }
     }
     this.nearestHide = best || [this.px, this.py];
+    this.nearHideIdx = bi;
     this.nearHide = bd < HIDE_DIST ** 2;
   }
   toggleHide() {
+    if (this.role === 'tung') return;
     if (this.hidden) {
+      if (this.swapTransit > 0) return;   // you are mid-crawl; finish it
       this.hidden = false;
+      this.hideIdx = -1;
       audio.playSimple('hidefx', 0.5);
     } else if (this.nearHide) {
       this.hidden = true;
+      this.hideIdx = this.nearHideIdx;
       this.px = this.nearestHide[0]; this.py = this.nearestHide[1];
       this.hideT = 0.0;
       audio.playSimple('hidefx', 0.6);
     }
   }
 
+  // Slip through to the paired alcove. In multiplayer the relay decides where
+  // you come out -- it is the only party that knows which alcove you are in and
+  // it never tells anyone else -- so this only asks. Solo resolves it locally
+  // against the same pairing, because the AI is just as capable of parking
+  // itself outside the door it watched you take.
+  canSwap() {
+    return this.hidden && !this.swapPending && this.swapTransit <= 0 && this.swapCooldown <= 0 &&
+      pairOf(this.hidePairs, this.hideIdx) >= 0;
+  }
+  requestSwap() {
+    if (!this.canSwap()) return false;
+    this.swapTransit = SWAP_TRANSIT;
+    audio.playSimple('hidefx', 0.45);
+    if (this.mode === 'mp') {
+      // WebSocket ordering makes this atomic from the relay's perspective: it
+      // learns that we are hidden before it adjudicates the swap request.
+      this.swapPending = true;
+      if (this.net) { this.net.sendInput(); this.net.send({ t: 'swap' }); }
+    } else {
+      this.swapCooldown = SWAP_COOLDOWN;
+      const to = pairOf(this.hidePairs, this.hideIdx);
+      this.pendingSwap = { idx: to, x: this.hides[to][0], y: this.hides[to][1] };
+    }
+    return true;
+  }
+  // Called on arrival: locally in solo, from the relay's reply in multiplayer.
+  landSwap(dest) {
+    if (!dest) return;
+    let { idx, x, y } = dest;
+    if (idx >= 0 && this.hides[idx]) { x = this.hides[idx][0]; y = this.hides[idx][1]; }
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    this.px = x; this.py = y;
+    this.hideIdx = idx;
+    this.hideT = 0.0;
+    this.updateNearestHide();
+    audio.playSimple('hidefx', 0.55);
+  }
+  updateSwap(dt) {
+    if (this.swapCooldown > 0) this.swapCooldown = Math.max(0, this.swapCooldown - dt);
+    if (this.swapTransit > 0) {
+      this.swapTransit = Math.max(0, this.swapTransit - dt);
+      if (this.swapTransit === 0 && this.pendingSwap) {
+        this.landSwap(this.pendingSwap);
+        this.pendingSwap = null;
+      }
+      if (this.swapTransit === 0 && this.swapPending && !this.pendingSwap) {
+        // Network timeout fallback. Normal accept/reject replies clear this
+        // earlier; never let one lost reply disable the alcove for the night.
+        this.swapPending = false;
+        this.swapCooldown = Math.max(this.swapCooldown, 0.5);
+      }
+    }
+    if (this.swapTransit <= 0 && this.pendingSwap) {
+      this.landSwap(this.pendingSwap);
+      this.pendingSwap = null;
+    }
+  }
+
   update(dt, keys, mdx) {
+    if (this.mode === 'mp') { this.updateMp(dt, keys, mdx); return; }
+
     // Dawn does not wait while you cower. The clock runs before anything else
     // so hiding always costs you night.
     this.timeLeft -= dt;
     this.panicking = this.composure < PANIC_THRESHOLD;
 
     this.updateNearestHide();
+    this.updateSwap(dt);
     this.angle += mdx * MOUSE_SENS;
     if (keys.left) this.angle -= TURN_SPEED * dt;
     if (keys.right) this.angle += TURN_SPEED * dt;
@@ -697,6 +1253,33 @@ class Game {
       return;
     }
 
+    const speed = this.applyMovement(dt, keys, WALK_SPEED, SPRINT_SPEED);
+    if (this.flashlight) this.battery = Math.max(0.0, this.battery - this.batteryDrain * dt);
+
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const it = this.items[i];
+      if ((this.px - it[0]) ** 2 + (this.py - it[1]) ** 2 < 0.30) {
+        this.items.splice(i, 1);
+        this.collected++;
+        this.battery = Math.min(1.0, this.battery + BATTERY_PER_ITEM);
+        this.alert = 1.0;
+        this.lastKnown = [Math.floor(this.px), Math.floor(this.py)];
+        audio.playSimple('pickup', 0.7);
+        // The last one does not end the night -- it starts the run home.
+        if (this.collected >= this.nItems) audio.playSimple('boom', 0.8);
+        break;
+      }
+    }
+    void speed;
+
+    this.updateCreature(dt);
+    this.updateComposure(dt);
+    this.checkEnd();
+  }
+
+  // Shared by both modes so the Tung, the survivor and the solo player all
+  // collide with walls the same way.
+  applyMovement(dt, keys, walk, run) {
     const dirx = Math.cos(this.angle), diry = Math.sin(this.angle);
     const sx = -diry, sy = dirx;
     let mx = 0, my = 0;
@@ -711,10 +1294,10 @@ class Game {
 
     let speed;
     if (this.isSprinting) {
-      speed = SPRINT_SPEED;
+      speed = run;
       this.stamina = Math.max(0.0, this.stamina - STAMINA_DRAIN * dt);
     } else {
-      speed = WALK_SPEED;
+      speed = walk;
       const regen = STAMINA_REGEN * (this.panicking ? PANIC_STAMINA_REGEN : 1.0);
       this.stamina = Math.min(1.0, this.stamina + regen * dt);
     }
@@ -725,27 +1308,191 @@ class Game {
       const step = speed * dt;
       this.tryMove(this.px + mx * step, this.py + my * step);
     }
+    return speed;
+  }
 
-    if (this.flashlight) this.battery = Math.max(0.0, this.battery - BATTERY_DRAIN * dt);
+  // -------------------------------------------------------------------------
+  // multiplayer
+  //
+  // The relay owns the clock, the offerings, the catches and the ending. This
+  // only moves the local body, keeps nerve/torch/stamina honest and asks the
+  // relay for the things it is not allowed to decide.
+  // -------------------------------------------------------------------------
+  updateMp(dt, keys, mdx) {
+    this.clock += dt;
+    this.angle += mdx * MOUSE_SENS;
+    if (keys.left) this.angle -= TURN_SPEED * dt;
+    if (keys.right) this.angle += TURN_SPEED * dt;
 
-    for (let i = this.items.length - 1; i >= 0; i--) {
-      const it = this.items[i];
-      if ((this.px - it[0]) ** 2 + (this.py - it[1]) ** 2 < 0.30) {
-        this.items.splice(i, 1);
-        this.collected++;
-        this.battery = Math.min(1.0, this.battery + BATTERY_PER_ITEM);
-        this.alert = 1.0;
-        this.lastKnown = [Math.floor(this.px), Math.floor(this.py)];
-        audio.playSimple('pickup', 0.7);
-        // The sixth does not end the night -- it starts the run home.
-        if (this.collected >= N_ITEMS) audio.playSimple('boom', 0.8);
-        break;
-      }
+    if (!this.alive) { this.updateSpectate(dt, keys); return; }
+    if (this.role === 'tung') { this.updateTung(dt, keys); return; }
+
+    this.panicking = this.composure < PANIC_THRESHOLD;
+    this.updateNearestHide();
+    this.updateSwap(dt);
+
+    if (this.hidden) {
+      this.isMoving = false; this.isSprinting = false;
+      this.stamina = Math.min(1.0, this.stamina + STAMINA_REGEN * dt);
+      this.composure = Math.min(1.0, this.composure + 0.12 * dt);
+      this.hideT += dt;
+      this.mpThreat(dt);
+      return;
     }
 
-    this.updateCreature(dt);
-    this.updateComposure(dt);
-    this.checkEnd();
+    this.applyMovement(dt, keys, WALK_SPEED, SPRINT_SPEED);
+    if (this.flashlight) this.battery = Math.max(0.0, this.battery - this.batteryDrain * dt);
+    this.mpThreat(dt);
+  }
+
+  updateTung(dt, keys) {
+    if (this.surgeCd > 0) this.surgeCd = Math.max(0, this.surgeCd - dt);
+    if (this.surge > 0) this.surge = Math.max(0, this.surge - dt);
+    if (keys.shift && this.surge <= 0 && this.surgeCd <= 0) {
+      this.surge = TUNG_SURGE_TIME;
+      this.surgeCd = TUNG_SURGE_COOLDOWN;
+      audio.playSimple('boom', 0.55);
+    }
+    const speed = this.surge > 0 ? TUNG_SURGE_SPEED : TUNG_SPEED;
+    // The Tung has no stamina bar, so hand applyMovement the same number twice
+    // and let the surge be the only thing that changes its pace.
+    this.stamina = 1.0;
+    this.applyMovement(dt, { ...keys, shift: false }, speed, speed);
+    this.composure = 1.0;
+    this.panicking = false;
+    this.hidden = false;
+
+    // It hears badly and only close up. Everything else it must read off the
+    // ground.
+    this.stepT -= dt;
+    if (this.stepT <= 0) {
+      this.stepT = 0.34;
+      for (const r of this.remoteList()) {
+        if (r.role === 'tung' || !r.alive || r.hidden || !r.pos) continue;
+        const d = Math.hypot(r.pos[0] - this.px, r.pos[1] - this.py);
+        const range = (r.flags & 2) ? HEAR_MP_SPRINT : ((r.flags & 1) ? HEAR_MP_WALK : 0);
+        if (range > 0 && d < range) {
+          audio.playPositional('step', d, Math.atan2(r.pos[1] - this.py, r.pos[0] - this.px) - this.angle, 0.7);
+        }
+      }
+    }
+    this.shake = 0; this.redAlpha = 0;
+  }
+
+  // Nerve, the drum and the dread, driven by the real Tung instead of the AI.
+  mpThreat(dt) {
+    const t = this.tungRemote();
+    const dist = t && t.pos ? Math.hypot(t.pos[0] - this.px, t.pos[1] - this.py) : 99;
+    this.cdist = dist;
+    if (t && t.pos) {
+      this.cx = t.pos[0]; this.cy = t.pos[1]; this.cangle = t.a || 0;
+      this.crel = Math.atan2(t.pos[1] - this.py, t.pos[0] - this.px) - this.angle;
+    }
+    // Line of sight, not an alert level: there is no AI to be alerted. Seeing
+    // it is what costs you nerve.
+    const exposed = !this.hidden && dist < 9.0 && this.hasLos(this.px, this.py, this.cx, this.cy, 9.0);
+    this.cstate = dist < 4.5 && exposed ? 'hunt' : (exposed ? 'stalk' : 'wander');
+
+    const prox = Math.max(0.0, 1.0 - dist / 6.0);
+    if (this.hidden) this.composure = Math.min(1.0, this.composure + 0.12 * dt);
+    else {
+      this.composure -= (0.06 + 0.30 * (exposed ? 1 : 0.25)) * prox * dt;
+      if (dist > 8.0) this.composure += 0.07 * dt;
+    }
+    this.composure = Math.max(0.0, Math.min(1.0, this.composure));
+
+    this.shake = 0.0;
+    if (!this.hidden && dist < 5.0) this.shake += (5.0 - dist) / 5.0 * 3.0;
+    if (this.composure < 0.3) this.shake += (0.3 - this.composure) * 9.0;
+    let pulse = 0.0;
+    if (!this.hidden && dist < 6.0) pulse = (0.5 + 0.5 * Math.sin(this.clock * 12)) * prox * 60;
+    this.redAlpha = Math.min(110, (1.0 - this.composure) * 60 + pulse);
+
+    // The drum. Same rule as solo: distance only, never occluded -- it is the
+    // one thing that always tells you roughly where it is.
+    this.tungT -= dt;
+    if (this.tungT <= 0.0) {
+      this.tungT = dist < 7 ? Math.max(0.34, Math.min(0.8, dist / 7.0)) : 1.6;
+      if (t && t.pos) audio.playPositional('tung', dist, this.crel);
+    }
+    if (dist < 6.0 && !this.hidden) {
+      this.heartT -= dt;
+      if (this.heartT <= 0.0) {
+        this.heartT = Math.max(0.42, dist / 7.0);
+        audio.playSimple('heart', Math.max(0.0, 1.0 - dist / 6.0));
+      }
+    }
+    // Other survivors' footfalls, so a team can find each other in the dark.
+    this.stepT -= dt;
+    if (this.stepT <= 0) {
+      this.stepT = 0.36;
+      for (const r of this.remoteList()) {
+        if (r.role === 'tung' || !r.alive || r.hidden || !r.pos) continue;
+        const d = Math.hypot(r.pos[0] - this.px, r.pos[1] - this.py);
+        const range = (r.flags & 2) ? HEAR_MP_SPRINT : ((r.flags & 1) ? HEAR_MP_WALK : 0);
+        if (range > 0 && d < range) {
+          audio.playPositional('step', d, Math.atan2(r.pos[1] - this.py, r.pos[0] - this.px) - this.angle, 0.5);
+        }
+      }
+    }
+  }
+
+  // Being caught is not the end of the night, only of yours. You ride along
+  // with the result, but not with another player's camera: a live spectator
+  // feed would become a sanctioned wallhack over voice chat.
+  updateSpectate(dt, keys) {
+    this.shake = 0; this.redAlpha = 0; this.hidden = false;
+    void dt; void keys;
+  }
+  cycleSpectate(dir) {
+    void dir;
+  }
+
+  remoteList() { return this.net ? this.net.remoteList() : []; }
+  tungRemote() { return this.net ? this.net.tungRemote() : null; }
+
+  // -------------------------------------------------------------------------
+  // footprints (the Tung's only real sense)
+  //
+  // Fed from the position stream, not from the live positions: a print is
+  // stamped where a survivor was, and does not become visible until FOOT_DELAY
+  // later. Sprinting stamps more of them, brighter and for longer, so running
+  // is the loud option even with the sound off; standing still leaves nothing
+  // at all. Carrying an offering drags the fade out further again -- the thing
+  // you want is the thing that gives you away.
+  // -------------------------------------------------------------------------
+  stampFootprint(id, x, y, sprinting, carrying, color) {
+    if (!this.tracks.on) return;
+    let tr = this.trails.get(id);
+    if (!tr) { tr = { prints: [], lastX: x, lastY: y, acc: 0, left: false, color }; this.trails.set(id, tr); }
+    tr.color = color || tr.color;
+    const step = Math.hypot(x - tr.lastX, y - tr.lastY);
+    tr.lastX = x; tr.lastY = y;
+    // A teleport (an alcove swap, or a rejoin) must not draw a line of prints
+    // across the map.
+    if (step > 1.2) { tr.acc = 0; return; }
+    tr.acc += step;
+    const stride = sprinting ? FOOT_STRIDE_SPRINT : FOOT_STRIDE_WALK;
+    if (tr.acc < stride) return;
+    tr.acc = 0;
+    tr.left = !tr.left;
+    const life = (sprinting ? FOOT_LIFE_SPRINT : FOOT_LIFE_WALK) *
+      (carrying ? FOOT_LIFE_CARRY : 1) * this.tracks.life;
+    tr.prints.push({
+      x, y,
+      a: Math.atan2(y - (tr.prevY ?? y), x - (tr.prevX ?? x)),
+      t: this.clock, life, sprint: sprinting, side: tr.left,
+    });
+    tr.prevX = x; tr.prevY = y;
+    if (tr.prints.length > FOOT_PER_PLAYER) tr.prints.shift();
+  }
+  pruneFootprints() {
+    const now = this.clock;
+    for (const tr of this.trails.values()) {
+      while (tr.prints.length && now - tr.prints[0].t > tr.prints[0].life + this.tracks.delay) {
+        tr.prints.shift();
+      }
+    }
   }
 
   // Every way the night can end, in one place. Called from both paths through
@@ -966,18 +1713,29 @@ class Game {
     return 1.0;
   }
 
+  // The Tung sees further and in no colour worth the name; a survivor sees a
+  // warm cone of torchlight and very little else. Keeping this in one place
+  // means the two roles cannot drift into looking like the same game.
+  vision() {
+    if (this.mode === 'mp' && this.role === 'tung') {
+      return { dark: TUNG_DARK_DIST, light: 0.62, wall: [104, 104, 128] };
+    }
+    return { dark: DARK_DIST, light: null, wall: [150, 130, 110] };
+  }
+
   renderWorld(rctx) {
     rctx.fillStyle = 'rgb(6,6,9)'; rctx.fillRect(0, 0, RENDER_W, RENDER_H / 2);
     rctx.fillStyle = 'rgb(11,10,9)'; rctx.fillRect(0, RENDER_H / 2, RENDER_W, RENDER_H / 2);
 
+    const vis = this.vision();
     this.flicker = this.computeFlicker();
     const fov = FOV * (0.82 + 0.18 * this.composure);
     const dirx = Math.cos(this.angle), diry = Math.sin(this.angle);
     const planex = -diry * fov, planey = dirx * fov;
     const zbuf = new Float64Array(RENDER_W).fill(1e9);
-    const lightFinal = this.hidden
+    const lightFinal = vis.light !== null ? vis.light : (this.hidden
       ? 0.13
-      : (this.flashlight ? (0.25 + 0.75 * this.battery) : 0.10) * this.flicker;
+      : (this.flashlight ? (0.25 + 0.75 * this.battery) : 0.10) * this.flicker);
 
     for (let x = 0; x < RENDER_W; x++) {
       const camx = 2 * x / RENDER_W - 1;
@@ -994,7 +1752,7 @@ class Game {
       for (let i = 0; i < 64; i++) {
         if (sdx < sdy) { sdx += ddx; mapx += stepx; side = 0; }
         else { sdy += ddy; mapy += stepy; side = 1; }
-        if (mapx >= 0 && mapx < MAP_N && mapy >= 0 && mapy < MAP_N && this.grid[mapy][mapx] !== 0) break;
+        if (mapx >= 0 && mapx < this.mapN && mapy >= 0 && mapy < this.mapN && this.grid[mapy][mapx] !== 0) break;
       }
 
       let perp = side === 0 ? (sdx - ddx) : (sdy - ddy);
@@ -1005,10 +1763,11 @@ class Game {
       const y1 = Math.min(RENDER_H, Math.floor(lineH / 2 + RENDER_H / 2));
 
       const cone = 1.0 - Math.pow(Math.abs(x - RENDER_W / 2) / (RENDER_W / 2), 2) * 0.55;
-      let bright = Math.max(0, 1.0 - perp / DARK_DIST) * lightFinal * cone;
+      let bright = Math.max(0, 1.0 - perp / vis.dark) * lightFinal * cone;
       if (side === 1) bright *= 0.72;
       bright = Math.max(0.045, Math.min(1.0, bright));
-      const r = Math.floor(150 * bright), g = Math.floor(130 * bright), b = Math.floor(110 * bright);
+      const r = Math.floor(vis.wall[0] * bright), g = Math.floor(vis.wall[1] * bright),
+            b = Math.floor(vis.wall[2] * bright);
       rctx.strokeStyle = `rgb(${r},${g},${b})`;
       rctx.beginPath();
       rctx.moveTo(x + 0.5, y0);
@@ -1016,14 +1775,82 @@ class Game {
       rctx.stroke();
     }
 
+    // Prints go down before the sprites so a survivor standing on their own
+    // trail is drawn over it, and after the walls so the depth buffer is full.
+    if (this.mode === 'mp' && this.role === 'tung') {
+      this.renderFootprints(rctx, zbuf, dirx, diry, planex, planey);
+    }
     this.renderSprites(rctx, zbuf, dirx, diry, planex, planey, lightFinal);
   }
 
+  // Floor projection. A wall one unit tall spans RENDER_H/perp pixels centred
+  // on the horizon, so its base sits at H/2 + H/(2*perp) -- which is exactly
+  // where a mark on the floor at that distance belongs. Foreshortening is faked
+  // with a flat ellipse rather than a real texture: at 320x180 a footprint is
+  // between two and thirteen pixels wide and nothing subtler would survive.
+  renderFootprints(rctx, zbuf, dirx, diry, planex, planey) {
+    if (!this.tracks.on) return;
+    const inv = 1.0 / (planex * diry - dirx * planey);
+    const now = this.clock;
+    for (const tr of this.trails.values()) {
+      for (const p of tr.prints) {
+        const age = now - p.t - this.tracks.delay;
+        if (age < 0 || age > p.life) continue;
+        const rx = p.x - this.px, ry = p.y - this.py;
+        const tx = inv * (diry * rx - dirx * ry);
+        const ty = inv * (-planey * rx + planex * ry);
+        if (ty <= 0.12 || ty > FOOT_MAX_DIST) continue;
+        const sx = (RENDER_W / 2) * (1 + tx / ty);
+        if (sx < -8 || sx > RENDER_W + 8) continue;
+        const col = Math.max(0, Math.min(RENDER_W - 1, Math.round(sx)));
+        if (ty >= zbuf[col]) continue;          // behind a wall: not your problem
+        const sy = RENDER_H / 2 + RENDER_H / (2 * ty);
+        if (sy >= RENDER_H) continue;
+        const w = Math.max(1.2, 0.26 * RENDER_H / ty);
+        const fade = 1 - age / p.life;
+        const a = Math.min(0.85, fade * fade * (p.sprint ? 0.85 : 0.6) * this.tracks.alpha);
+        if (a <= 0.02) continue;
+        rctx.save();
+        rctx.globalAlpha = a;
+        rctx.fillStyle = tr.color || 'rgb(150,180,210)';
+        rctx.beginPath();
+        rctx.ellipse(sx + (p.side ? w * 0.18 : -w * 0.18), sy, w * 0.5, Math.max(0.7, w * 0.26),
+                     p.a, 0, Math.PI * 2);
+        rctx.fill();
+        rctx.restore();
+      }
+    }
+  }
+
+  // Everything in the world that is not a wall, gathered for one back-to-front
+  // pass. Solo has one creature; multiplayer has up to four other bodies, and
+  // whether you see one at all is decided by the depth buffer, not by a rule.
+  spriteList() {
+    if (this.mode !== 'mp') {
+      const out = this.items.map(it => ({ x: it[0], y: it[1], kind: 'item' }));
+      for (const h of this.hides) out.push({ x: h[0], y: h[1], kind: 'hide' });
+      out.push({ x: this.surau[0], y: this.surau[1], kind: 'surau' });
+      out.push({ x: this.cx, y: this.cy, kind: 'creature' });
+      return out;
+    }
+    const out = [];
+    for (let i = 0; i < this.itemState.length; i++) {
+      const s = this.itemState[i];
+      if (!s || s[0] !== 0) continue;              // carried or already home
+      out.push({ x: s[2], y: s[3], kind: 'item' });
+    }
+    for (const h of this.hides) out.push({ x: h[0], y: h[1], kind: 'hide' });
+    out.push({ x: this.surau[0], y: this.surau[1], kind: 'surau' });
+    for (const r of this.remoteList()) {
+      if (!r.pos || r.hidden || !r.alive) continue;
+      out.push({ x: r.pos[0], y: r.pos[1], kind: r.role === 'tung' ? 'creature' : 'player', r });
+    }
+    return out;
+  }
+
   renderSprites(rctx, zbuf, dirx, diry, planex, planey, light) {
-    let sprites = this.items.map(it => ({ x: it[0], y: it[1], kind: 'item' }));
-    sprites = sprites.concat(this.hides.map(h => ({ x: h[0], y: h[1], kind: 'hide' })));
-    sprites.push({ x: this.surau[0], y: this.surau[1], kind: 'surau' });
-    sprites.push({ x: this.cx, y: this.cy, kind: 'creature' });
+    const vis = this.vision();
+    let sprites = this.spriteList();
     sprites.sort((a, b) => {
       const da = (a.x - this.px) ** 2 + (a.y - this.py) ** 2;
       const db = (b.x - this.px) ** 2 + (b.y - this.py) ** 2;
@@ -1040,22 +1867,32 @@ class Game {
       let src;
       if (s.kind === 'creature') {
         // If you cannot see his eyes, you are outside his cone. The sprite is
-        // the only tell the player gets, so it has to be honest.
-        const away = Math.abs(angDiff(this.cangle,
-          Math.atan2(this.py - this.cy, this.px - this.cx))) > VIEW_CONE;
-        if (this.cstate === 'hunt') src = away ? SPR.creatureHuntBack : SPR.creatureHunt;
+        // the only tell the player gets, so it has to be honest. In multiplayer
+        // there is no cone -- but a player's back still tells you which way
+        // they are looking, which matters just as much.
+        const cang = s.r ? (s.r.a || 0) : this.cangle;
+        const hunting = s.r ? true : this.cstate === 'hunt';
+        const away = Math.abs(angDiff(cang, Math.atan2(this.py - s.y, this.px - s.x))) > VIEW_CONE;
+        if (hunting) src = away ? SPR.creatureHuntBack : SPR.creatureHunt;
         else src = away ? SPR.creatureBack : SPR.creature;
+      } else if (s.kind === 'player') {
+        const away = Math.abs(angDiff(s.r.a || 0, Math.atan2(this.py - s.y, this.px - s.x))) > VIEW_CONE;
+        src = getSurvivorSprite(s.r.color, s.r.carrying >= 0, away);
       } else if (s.kind === 'hide') src = SPR.hide;
       else if (s.kind === 'surau') src = SPR.surau;
       else src = SPR.item;
 
       let sh = Math.abs(Math.floor(RENDER_H / ty));
       if (s.kind === 'creature') sh = Math.floor(sh * 1.15);
+      if (s.kind === 'player') sh = Math.floor(sh * 0.94);
       if (sh < 2 || sh > RENDER_H * 6) continue;
 
       // alcoves and the surau stay faintly lit so they can be found in the dark
-      const emissive = s.kind === 'hide' ? 0.45 : (s.kind === 'surau' ? 0.7 : 0.0);
-      let b = Math.max(0, 1.0 - ty / DARK_DIST) * (0.3 + 0.7 * light);
+      let emissive = s.kind === 'hide' ? 0.45 : (s.kind === 'surau' ? 0.7 : 0.0);
+      // A carried offering is a lamp in someone's fist. It is the cost of
+      // being the one who fetches: the Tung can see you coming.
+      if (s.kind === 'player' && s.r.carrying >= 0) emissive = 0.75;
+      let b = Math.max(0, 1.0 - ty / vis.dark) * (0.3 + 0.7 * light);
       b = Math.max(emissive || 0.06, Math.min(1.0, b + emissive * 0.5));
 
       // the cache quantises size, so trust the buffer it hands back
@@ -1072,6 +1909,20 @@ class Game {
         }
       }
     }
+  }
+
+  // Same camera transform as the sprite pass, but in window pixels -- the HUD
+  // layer is full resolution, and a name at 320x180 would be four grey pixels.
+  projectToScreen(x, y) {
+    const fov = FOV * (0.82 + 0.18 * this.composure);
+    const dirx = Math.cos(this.angle), diry = Math.sin(this.angle);
+    const planex = -diry * fov, planey = dirx * fov;
+    const inv = 1.0 / (planex * diry - dirx * planey);
+    const rx = x - this.px, ry = y - this.py;
+    const tx = inv * (diry * rx - dirx * ry);
+    const ty = inv * (-planey * rx + planex * ry);
+    if (ty <= 0.15) return null;
+    return { sx: (WIN_W / 2) * (1 + tx / ty), ty, top: WIN_H / 2 - (WIN_H / ty) * 0.47 };
   }
 }
 
@@ -1093,7 +1944,7 @@ function bar(ctx, x, y, w, h, frac, color, label) {
   ctx.strokeStyle = INK_DIM; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 }
 // One arrow, two jobs kept apart: pointing at cover only matters while he is
-// interested in you, pointing home only matters once you are carrying all six.
+// interested in you, pointing home only matters once every offering is gathered.
 function drawCompass(ctx, game, wx, wy, label, color, y) {
   const rel = Math.atan2(wy - game.py, wx - game.px) - game.angle;
   const cx = WIN_W / 2, cy = y;
@@ -1109,10 +1960,11 @@ function drawCompass(ctx, game, wx, wy, label, color, y) {
   drawText(ctx, label, cx, cy + 26, color, { center: true, font: '14px monospace' });
 }
 function drawHud(ctx, game) {
+  if (game.mode === 'mp') { drawHudMp(ctx, game); return; }
   const extracting = game.items.length === 0;
 
   drawText(ctx, 'OFFERINGS', 24, 18, INK_DIM, { font: '14px monospace' });
-  drawText(ctx, `${game.collected} / ${N_ITEMS}`, 24, 34, AMBER, { font: 'bold 24px monospace' });
+  drawText(ctx, `${game.collected} / ${game.nItems}`, 24, 34, AMBER, { font: 'bold 24px monospace' });
 
   const bw = 150;
   bar(ctx, WIN_W - bw - 24, 30, bw, 12, game.battery, game.battery > 0.25 ? AMBER : 'rgb(180,60,50)',
@@ -1128,7 +1980,7 @@ function drawHud(ctx, game) {
            { center: true, font: urgent ? 'bold 16px monospace' : '14px monospace' });
 
   if (extracting) {
-    drawText(ctx, 'ALL SIX GATHERED — GET BACK TO THE SURAU', WIN_W / 2, 46, AMBER,
+    drawText(ctx, `ALL ${game.nItems} GATHERED — GET BACK TO THE SURAU`, WIN_W / 2, 46, AMBER,
              { center: true, font: 'bold 14px monospace' });
   }
 
@@ -1144,6 +1996,107 @@ function drawHud(ctx, game) {
   // the way home is shown whatever he is doing -- it is the goal, not a hint
   if (extracting && !game.hidden) {
     drawCompass(ctx, game, game.surau[0], game.surau[1], 'SURAU', AMBER, 96);
+  }
+}
+// ---------------------------------------------------------------------------
+// multiplayer HUD
+//
+// Two different HUDs, because the two roles are playing two different games.
+// The survivor gets the solo instruments plus the state of the street; the Tung
+// gets a kill count, a surge timer and nothing else -- no offering counter, no
+// map, no arrows. What it knows, it knows from the ground.
+// ---------------------------------------------------------------------------
+function drawHudMp(ctx, game) {
+  const net = game.net;
+  const urgent = game.timeLeft < DAWN_WARN;
+  drawText(ctx, `SUBUH IN ${fmtClock(game.timeLeft)}`, WIN_W / 2, 22,
+           urgent ? 'rgb(220,80,60)' : INK_DIM,
+           { center: true, font: urgent ? 'bold 16px monospace' : '14px monospace' });
+
+  const home = game.itemState.filter(s => s && s[0] === 2).length;
+  drawText(ctx, 'OFFERINGS HOME', 24, 18, INK_DIM, { font: '14px monospace' });
+  drawText(ctx, `${home} / ${game.itemState.length || game.nItems}`, 24, 34, AMBER,
+           { font: 'bold 24px monospace' });
+
+  // the street, top-left under the counter: who is still out there
+  let y = 74;
+  if (net) {
+    for (const r of net.allList()) {
+      if (r.role === 'tung') continue;
+      const dead = !r.alive;
+      ctx.fillStyle = dead ? 'rgb(70,70,76)' : r.color;
+      ctx.fillRect(24, y + 4, 7, 7);
+      const label = r.name + (r.id === net.you ? ' (you)' : '');
+      drawText(ctx, dead ? label + ' — caught' : label, 38, y, dead ? 'rgb(90,90,96)' : INK,
+               { font: '13px monospace' });
+      if (!dead && r.carrying >= 0) {
+        drawText(ctx, '\u25c6', 38 + label.length * 7.9 + 8, y, AMBER, { font: '13px monospace' });
+      }
+      y += 18;
+    }
+  }
+
+  if (game.role === 'tung') {
+    const bw = 150, x = WIN_W - bw - 24;
+    const cd = game.surge > 0 ? 1 : 1 - game.surgeCd / TUNG_SURGE_COOLDOWN;
+    bar(ctx, x, 30, bw, 12, cd, game.surge > 0 ? 'rgb(220,90,60)' : (cd >= 1 ? AMBER : 'rgb(90,90,100)'),
+        game.surge > 0 ? 'SURGE' : (cd >= 1 ? 'SURGE  [SHIFT]' : 'SURGE'));
+    const alive = net ? net.allList().filter(r => r.role !== 'tung' && r.alive).length : 0;
+    drawText(ctx, 'STILL BREATHING', x, 62, INK_DIM, { font: '14px monospace' });
+    drawText(ctx, String(alive), x, 78, 'rgb(220,90,60)', { font: 'bold 24px monospace' });
+    if (game.tracks.on) {
+      drawText(ctx, 'you can see where they have been', WIN_W / 2, WIN_H - 34, 'rgb(90,105,125)',
+               { center: true, font: '13px monospace' });
+    }
+    return;
+  }
+
+  if (!game.alive) {
+    drawText(ctx, 'CAUGHT', WIN_W / 2, WIN_H - 96, 'rgb(200,60,50)', { center: true, font: 'bold 26px monospace' });
+    drawText(ctx, 'the street moves on without you', WIN_W / 2, WIN_H - 62, INK_DIM,
+             { center: true, font: '14px monospace' });
+    return;
+  }
+
+  const bw = 150;
+  bar(ctx, WIN_W - bw - 24, 30, bw, 12, game.battery, game.battery > 0.25 ? AMBER : 'rgb(180,60,50)',
+      'TORCH' + (game.flashlight ? '' : '  [OFF]'));
+  bar(ctx, WIN_W - bw - 24, 64, bw, 12, game.stamina, 'rgb(90,170,200)', 'STAMINA');
+  const nerveCol = game.panicking ? 'rgb(220,60,50)' : (game.composure > 0.4 ? INK : 'rgb(200,70,60)');
+  bar(ctx, WIN_W - bw - 24, 98, bw, 12, game.composure, nerveCol, 'NERVE');
+
+  if (game.carrying >= 0) {
+    drawText(ctx, 'CARRYING AN OFFERING — IT CAN SEE THE LIGHT', WIN_W / 2, 46, AMBER,
+             { center: true, font: 'bold 14px monospace' });
+    if (!game.hidden) drawCompass(ctx, game, game.surau[0], game.surau[1], 'SURAU', AMBER, 96);
+  }
+
+  if (game.hidden) {
+    drawText(ctx, game.swapTransit > 0 ? 'SLIPPING THROUGH' : 'HIDDEN', WIN_W / 2, WIN_H - 96, COOL,
+             { center: true, font: 'bold 24px monospace' });
+    let hint;
+    if (game.swapTransit > 0) hint = 'the wall is thin here';
+    else if (game.swapCooldown > 0) hint = `[Q] blocked for ${Math.ceil(game.swapCooldown)}s   ·   [E] step out`;
+    else hint = '[Q] slip through to the other alcove   ·   [E] step out';
+    drawText(ctx, hint, WIN_W / 2, WIN_H - 62, INK_DIM, { center: true, font: '14px monospace' });
+  } else if (game.nearHide) {
+    drawText(ctx, '[E] HIDE', WIN_W / 2, WIN_H - 70, COOL, { center: true, font: 'bold 24px monospace' });
+  }
+
+  // teammate name tags, drawn last so they sit over the world
+  if (net) {
+    for (const r of net.remoteList()) {
+      if (r.role === 'tung' || !r.alive || r.hidden || !r.pos) continue;
+      const d = Math.hypot(r.pos[0] - game.px, r.pos[1] - game.py);
+      if (d > 11) continue;
+      if (!game.hasLos(game.px, game.py, r.pos[0], r.pos[1], 12)) continue;
+      const p = game.projectToScreen(r.pos[0], r.pos[1]);
+      if (!p) continue;
+      ctx.globalAlpha = Math.max(0.25, 1 - d / 11);
+      drawText(ctx, r.name, p.sx, Math.max(14, p.top - 16), r.color,
+               { center: true, font: 'bold 12px monospace' });
+      ctx.globalAlpha = 1;
+    }
   }
 }
 function drawHiddenSlats(ctx) {
@@ -1191,7 +2144,7 @@ function screenPaused(ctx, game, snapshot) {
   drawText(ctx, 'The street holds its breath.', cx, 172, INK_DIM, { center: true, font: '15px monospace' });
 
   drawText(ctx, `SUBUH IN ${fmtClock(game.timeLeft)}`, cx - 110, 236, INK, { center: true, font: '15px monospace' });
-  drawText(ctx, `OFFERINGS ${game.collected} / ${N_ITEMS}`, cx + 110, 236, INK, { center: true, font: '15px monospace' });
+  drawText(ctx, `OFFERINGS ${game.collected} / ${game.nItems}`, cx + 110, 236, INK, { center: true, font: '15px monospace' });
 
   const rows = [
     ['WASD', 'move'],
@@ -1215,12 +2168,13 @@ function screenDawn(ctx, game) {
   const cx = WIN_W / 2;
   drawText(ctx, 'DAWN', cx, 130, 'rgb(190,140,70)', { center: true, font: 'bold 40px monospace' });
   drawText(ctx, 'The call to Subuh went up over the rooftops without you.', cx, 210, INK, { center: true, font: '16px monospace' });
-  drawText(ctx, `You were still out there with ${game.collected} of ${N_ITEMS} offerings.`, cx, 244, INK, { center: true, font: '16px monospace' });
+  drawText(ctx, `You were still out there with ${game.collected} of ${game.nItems} offerings.`, cx, 244, INK, { center: true, font: '16px monospace' });
   drawText(ctx, 'The drumming has stopped. That is somehow worse.', cx, 286, INK_DIM, { center: true, font: '16px monospace' });
   drawText(ctx, 'press R to try again', cx, WIN_H - 70, INK_DIM, { center: true, font: 'bold 20px monospace' });
 }
 function screenCaught(ctx, t) {
-  const flash = (Math.floor(t * 14) % 2 === 0) && t < 1.4;
+  // Two flashes per second, under the WCAG seizure threshold of three.
+  const flash = (Math.floor(t * 4) % 2 === 0) && t < 1.4;
   ctx.fillStyle = flash ? 'rgb(34,0,0)' : 'black';
   ctx.fillRect(0, 0, WIN_W, WIN_H);
   const fw = 240, fh = 480;
@@ -1236,7 +2190,7 @@ function screenWin(ctx, game) {
   ctx.fillStyle = 'rgb(14,11,6)'; ctx.fillRect(0, 0, WIN_W, WIN_H);
   const cx = WIN_W / 2;
   drawText(ctx, 'SUBUH', cx, 140, AMBER, { center: true, font: 'bold 40px monospace' });
-  drawText(ctx, 'You set the sixth offering down inside the surau door.', cx, 220, INK, { center: true, font: '16px monospace' });
+  drawText(ctx, 'You set the last offering down inside the surau door.', cx, 220, INK, { center: true, font: '16px monospace' });
   drawText(ctx, 'Dawn breaks. The drumming fades down the empty street.', cx, 254, INK, { center: true, font: '16px monospace' });
   drawText(ctx, `home with ${fmtClock(game.timeLeft)} of dark to spare`, cx, 302, AMBER, { center: true, font: 'bold 18px monospace' });
   drawText(ctx, 'press R to play again', cx, WIN_H - 70, INK_DIM, { center: true, font: 'bold 20px monospace' });
@@ -1265,50 +2219,495 @@ const renderCanvas = document.createElement('canvas');
 renderCanvas.width = RENDER_W; renderCanvas.height = RENDER_H;
 const rctx = renderCanvas.getContext('2d');
 
+const $ = (id) => document.getElementById(id);
+const ui = $('ui');
+const NO_KEYS = Object.freeze({ w: false, a: false, s: false, d: false, shift: false, left: false, right: false });
+const keys = { ...NO_KEYS };
+
 let game = new Game();
-const keys = { w: false, a: false, s: false, d: false, shift: false, left: false, right: false };
+game.state = 'menu';
+let net = null;
+let paused = false;
 let mdxAccum = 0;
-let droneStarted = false, droneHandle = null, whisperHandle = null;
 let caughtTimer = 0;
 let lastTime = performance.now();
+let resumeGuardUntil = 0;
+let roleRevealUntil = 0;
+let droneStarted = false, droneHandle = null, whisperHandle = null;
 
-let paused = false;
-const pauseCanvas = document.createElement('canvas');
-pauseCanvas.width = WIN_W; pauseCanvas.height = WIN_H;
-const pauseCtx = pauseCanvas.getContext('2d');
-let pauseSnapshotTaken = false;
-
-function pauseGame() {
-  if (paused || game.state !== 'play') return;
-  paused = true;
-  // grab the live frame before anything is drawn over it
-  pauseCtx.clearRect(0, 0, WIN_W, WIN_H);
-  pauseCtx.drawImage(canvas, 0, 0);
-  pauseSnapshotTaken = true;
-  if (document.exitPointerLock) document.exitPointerLock();
-  if (whisperHandle) whisperHandle.gain.gain.value = 0;
-  if (droneHandle) droneHandle.gain.gain.value = 0.25;
+// ---------------------------------------------------------------------------
+// menus and settings
+// ---------------------------------------------------------------------------
+function readStored(key, fallback) {
+  try { return Object.assign({}, fallback, JSON.parse(localStorage.getItem(key) || '{}')); }
+  catch { return Object.assign({}, fallback); }
+}
+function store(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ }
 }
 
-let resumeGuardUntil = 0;
+let soloSettings = readStored('tung-solo-settings', DEFAULT_SETTINGS);
 
-function resumeGame() {
-  if (!paused) return;
+const SETTING_DEFS = [
+  ['mapN', 'MAP SIZE', [[15, 'small - 15 x 15'], [21, 'standard - 21 x 21'], [27, 'large - 27 x 27'], [33, 'huge - 33 x 33']]],
+  ['lanterns', 'LANTERNS', [[2, '2'], [4, '4'], [6, '6'], [8, '8'], [10, '10'], [12, '12']]],
+  ['night', 'NIGHT TIMER', [[120, '2 minutes'], [180, '3 minutes'], [240, '4 minutes'], [300, '5 minutes'], [420, '7 minutes'], [600, '10 minutes'], [900, '15 minutes']]],
+  ['torch', 'TORCH', [[60, '1 minute'], [90, '1.5 minutes'], [125, '2 minutes'], [180, '3 minutes'], [300, '5 minutes']]],
+  ['tracks', 'TUNG TRACKS', [['off', 'off'], ['faint', 'faint / delayed'], ['normal', 'balanced'], ['strong', 'strong / recent']]],
+];
+
+function renderSettings(el, settings, editable, changed) {
+  el.innerHTML = '';
+  for (const [key, label, choices] of SETTING_DEFS) {
+    const row = document.createElement('div'); row.className = 'setting';
+    const lab = document.createElement('label'); lab.textContent = label;
+    row.appendChild(lab);
+    if (editable) {
+      const select = document.createElement('select');
+      select.style.cssText = 'flex:1;font:13px monospace;color:#e8e8ee;background:#131318;border:1px solid #3a3a44;padding:6px';
+      for (const [value, text] of choices) {
+        const opt = document.createElement('option');
+        opt.value = String(value); opt.textContent = text;
+        if (String(settings[key]) === String(value)) opt.selected = true;
+        select.appendChild(opt);
+      }
+      select.addEventListener('change', () => {
+        const sample = choices[0][0];
+        settings[key] = typeof sample === 'number' ? Number(select.value) : select.value;
+        changed(settings);
+      });
+      row.appendChild(select);
+    } else {
+      const value = document.createElement('span'); value.className = 'val';
+      const found = choices.find(c => String(c[0]) === String(settings[key]));
+      value.textContent = found ? found[1] : String(settings[key]);
+      row.appendChild(value);
+    }
+    el.appendChild(row);
+  }
+}
+
+function showScreen(id, thin = false) {
+  let active = null;
+  for (const s of document.querySelectorAll('.scr')) {
+    const on = s.id === id;
+    s.classList.toggle('on', on);
+    s.setAttribute('aria-hidden', on ? 'false' : 'true');
+    if (on) active = s;
+  }
+  ui.classList.toggle('on', !!id);
+  ui.classList.toggle('thin', thin);
+  if (active) requestAnimationFrame(() => active.querySelector('input, button, select')?.focus());
+}
+
+function defaultRelayUrl() {
+  const configured = window.TUNG_RELAY_URL;
+  if (configured) return configured;
+  if (location.protocol === 'http:' || location.protocol === 'https:') {
+    return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+  }
+  return 'ws://127.0.0.1:8787/ws';
+}
+
+const storedIdentity = readStored('tung-identity', {
+  name: '', relay: defaultRelayUrl(),
+});
+$('i-name').value = storedIdentity.name || '';
+$('i-relay').value = storedIdentity.relay || defaultRelayUrl();
+$('relay-hint').textContent = location.protocol === 'file:'
+  ? 'Local game: start the relay with npm run serve.'
+  : 'The combined relay serves this page and WebSocket on the same address.';
+if (matchMedia('(pointer: coarse)').matches) {
+  $('relay-hint').textContent += ' A keyboard and mouse are required for the match.';
+}
+
+function goMain() {
+  if (net) { net.close(); net = null; }
   paused = false;
-  if (droneHandle) droneHandle.gain.gain.value = 1.0;
-  // Briefly ignore pointerlockchange: if the re-lock is refused we must not
-  // bounce straight back into the pause menu.
-  resumeGuardUntil = performance.now() + 700;
-  // Re-locking has to ride a user gesture, and browsers impose a short cooldown
-  // after an Escape-triggered exit. If it is refused the game still resumes --
-  // mouse look just stays off until the next click.
+  game.state = 'menu';
+  showScreen('scr-main');
+  ctx.fillStyle = 'black'; ctx.fillRect(0, 0, WIN_W, WIN_H);
+}
+
+$('b-solo').onclick = () => beginSolo();
+$('b-solo-settings').onclick = () => {
+  renderSettings($('solo-settings'), soloSettings, true, (s) => store('tung-solo-settings', s));
+  showScreen('scr-solo');
+};
+$('b-howto').onclick = () => {
+  const h = $('howto');
+  const open = h.style.display === 'none';
+  h.style.display = open ? 'block' : 'none';
+  $('b-howto').setAttribute('aria-expanded', String(open));
+};
+$('b-solo-start').onclick = () => beginSolo();
+$('b-solo-back').onclick = () => showScreen('scr-main');
+$('b-mp').onclick = () => { $('mp-err').textContent = ''; showScreen('scr-mp'); };
+$('b-mp-back').onclick = () => showScreen('scr-main');
+
+function beginSolo() {
+  game = new Game({ ...soloSettings, mode: 'solo' });
+  game.state = 'play';
+  caughtTimer = 0; paused = false;
+  showScreen(null);
   startGesture();
 }
+
+// ---------------------------------------------------------------------------
+// relay client
+//
+// Twenty position packets a second are enough for the relay's 20 Hz snapshots;
+// remote bodies are interpolated between snapshots so rendering stays tied to
+// the display refresh, not the network tick. The local body is never rolled
+// back to its echoed position -- movement has no round-trip delay.
+// ---------------------------------------------------------------------------
+class Net {
+  constructor(url) {
+    this.url = url;
+    this.ws = null;
+    this.you = null;
+    this.code = '';
+    this.host = null;
+    this.phase = 'connect';
+    this.settings = null;
+    this.players = new Map();
+    this.sendT = 0;
+    this.manifestBase = null;
+    this.intentional = false;
+    this.lastError = '';
+  }
+
+  connect(request) {
+    $('mp-err').textContent = 'connecting...';
+    let ws;
+    try { ws = new WebSocket(this.url); }
+    catch (e) { $('mp-err').textContent = `bad relay address: ${e.message}`; return; }
+    this.ws = ws;
+    const timeout = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        this.lastError = 'relay did not answer'; ws.close();
+      }
+    }, 7000);
+    ws.addEventListener('open', () => {
+      clearTimeout(timeout);
+      $('mp-err').textContent = '';
+      this.send(request);
+    });
+    ws.addEventListener('message', (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+      this.handle(msg);
+    });
+    ws.addEventListener('error', () => { this.lastError = 'could not reach the relay'; });
+    ws.addEventListener('close', () => {
+      clearTimeout(timeout);
+      if (this.intentional) return;
+      if (this.phase === 'play') showDisconnected(this.lastError || 'connection to the street was lost');
+      else {
+        $('mp-err').textContent = this.lastError || 'relay disconnected';
+        showScreen('scr-mp');
+      }
+    });
+  }
+
+  send(msg) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
+  }
+  close() {
+    this.intentional = true;
+    this.send({ t: 'leave' });
+    if (this.ws) this.ws.close();
+  }
+
+  handle(msg) {
+    if (msg.t === 'welcome') {
+      this.you = msg.you; this.code = msg.code;
+      return;
+    }
+    if (msg.t === 'lobby') { this.onLobby(msg); return; }
+    if (msg.t === 'begin') { this.onBegin(msg); return; }
+    if (msg.t === 'snap') { this.onSnapshot(msg); return; }
+    if (msg.t === 'ev') { this.onEvent(msg); return; }
+    if (msg.t === 'over') { this.onOver(msg); return; }
+    if (msg.t === 'roster') { this.onRoster(msg); return; }
+    if (msg.t === 'need-manifest') { if (this.you === this.host) this.sendManifest(); return; }
+    if (msg.t === 'err') {
+      this.lastError = msg.m || 'relay error';
+      const el = this.phase === 'lobby' ? $('lobby-err') : $('mp-err');
+      el.textContent = this.lastError;
+      if (msg.fatal && this.ws) this.ws.close();
+    }
+  }
+
+  onLobby(msg) {
+    this.phase = 'lobby'; this.host = msg.host; this.code = msg.code;
+    this.settings = clampGameSettings(msg.settings);
+    const old = this.players;
+    this.players = new Map(msg.players.map(p => [p.id, Object.assign(old.get(p.id) || {}, p)]));
+    renderLobby(this, msg.max, msg.min);
+    showScreen('scr-lobby');
+  }
+
+  onBegin(msg) {
+    this.phase = 'play'; this.settings = clampGameSettings(msg.settings);
+    const old = this.players;
+    this.players = new Map();
+    for (const p of msg.players) {
+      this.players.set(p.id, Object.assign(old.get(p.id) || {}, p, {
+        alive: true, carrying: -1, hidden: false, flags: 0, pos: null, target: null, a: 0, targetA: 0,
+      }));
+    }
+    const me = this.players.get(this.you);
+    if (!me) { this.lastError = 'the relay started without this player'; this.ws.close(); return; }
+
+    game = new Game({
+      ...msg.settings, mode: 'mp', role: me.role, seed: msg.seed, spawnIdx: me.spawnIdx,
+    });
+    game.net = this; game.state = 'play'; game.timeLeft = this.settings.night;
+
+    for (const p of this.players.values()) {
+      const s = game.spawnForRole(p.role, p.spawnIdx);
+      p.pos = [s.x, s.y]; p.target = [s.x, s.y]; p.a = s.a; p.targetA = s.a;
+    }
+    const ownSpawn = this.players.get(this.you).pos;
+    game.px = ownSpawn[0]; game.py = ownSpawn[1];
+
+    this.manifestBase = { items: game.items, hides: game.hides, pairs: game.hidePairs, surau: game.surau };
+    if (this.you === this.host) this.sendManifest();
+
+    game.itemState = game.items.map(it => [0, -1, it[0], it[1]]);
+    paused = false; caughtTimer = 0;
+    roleRevealUntil = performance.now() + 3200;
+    showScreen(null);
+    startGesture();
+  }
+
+  sendManifest() {
+    if (!this.manifestBase || this.phase !== 'play') return;
+    const spawns = [...this.players.values()].map(p => {
+      const s = game.spawnForRole(p.role, p.spawnIdx);
+      return { id: p.id, x: s.x, y: s.y, a: s.a };
+    });
+    this.send({ t: 'manifest', m: Object.assign({}, this.manifestBase, { spawns }) });
+  }
+
+  onSnapshot(msg) {
+    if (this.phase !== 'play' || game.mode !== 'mp') return;
+    game.timeLeft = msg.tl;
+    game.itemState = msg.it || game.itemState;
+    for (const row of msg.p || []) {
+      const id = row[0], flags = row[1], alive = !!row[2], carrying = row[3];
+      const p = this.players.get(id);
+      if (!p) continue;
+      const wasAlive = p.alive;
+      p.flags = flags; p.alive = alive; p.carrying = carrying; p.hidden = !!(flags & 4);
+      if (row.length >= 7) {
+        p.target = [row[4], row[5]]; p.targetA = row[6];
+        if (!p.pos) { p.pos = [...p.target]; p.a = p.targetA; }
+        if (game.role === 'tung' && id !== this.you && p.role !== 'tung' && (flags & 1)) {
+          game.stampFootprint(id, row[4], row[5], !!(flags & 2), carrying >= 0, p.color);
+        }
+      }
+      if (id === this.you) {
+        game.carrying = carrying; game.alive = alive;
+        if (wasAlive && !alive) {
+          caughtTimer = 0;
+          audio.playSimple('scare', 1.0);
+        }
+      }
+    }
+  }
+
+  onEvent(msg) {
+    if (this.phase !== 'play') return;
+    if (msg.e === 'pickup') {
+      audio.playSimple('pickup', msg.by === this.you ? 0.8 : 0.3);
+      if (msg.by === this.you) game.carrying = msg.i;
+    } else if (msg.e === 'deliver') {
+      audio.playSimple('dawn', msg.by === this.you ? 0.45 : 0.22);
+      if (msg.by === this.you) { game.carrying = -1; game.delivered++; }
+    } else if (msg.e === 'drop') {
+      audio.playSimple('boom', 0.3);
+    } else if (msg.e === 'caught') {
+      const p = this.players.get(msg.who); if (p) p.alive = false;
+      if (msg.who === this.you) { game.alive = false; audio.playSimple('scare', 1.0); }
+      else audio.playSimple('stinger', 0.45);
+    } else if (msg.e === 'swap') {
+      game.swapPending = false;
+      game.swapCooldown = SWAP_COOLDOWN;
+      game.pendingSwap = { idx: msg.to, x: msg.x, y: msg.y };
+    } else if (msg.e === 'swap-no') {
+      game.swapPending = false;
+      game.swapTransit = 0;
+      game.swapCooldown = msg.wait || 0.5;
+    }
+  }
+
+  onOver(msg) {
+    this.phase = 'over';
+    game.state = 'mpover';
+    if (document.exitPointerLock) document.exitPointerLock();
+    renderResult(this, msg);
+    showScreen('scr-over');
+  }
+
+  onRoster(msg) {
+    this.host = msg.host;
+    const ids = new Set(msg.players.map(p => p.id));
+    for (const id of [...this.players.keys()]) if (!ids.has(id)) this.players.delete(id);
+    if (this.phase === 'play' && this.you === this.host) this.sendManifest();
+    if (this.phase === 'over') $('b-again').style.display = this.you === this.host ? '' : 'none';
+  }
+
+  update(dt) {
+    if (this.phase !== 'play' || game.mode !== 'mp') return;
+    for (const p of this.players.values()) {
+      if (p.id === this.you || !p.pos || !p.target) continue;
+      const k = Math.min(1, dt * 12);
+      p.pos[0] += (p.target[0] - p.pos[0]) * k;
+      p.pos[1] += (p.target[1] - p.pos[1]) * k;
+      p.a += angDiff(p.a, p.targetA) * k;
+    }
+    this.sendT -= dt;
+    if (this.sendT <= 0 && game.alive) {
+      this.sendT = 0.05;
+      this.sendInput();
+    }
+  }
+
+  sendInput() {
+    if (this.phase !== 'play' || game.mode !== 'mp' || !game.alive) return;
+    let flags = (game.isMoving ? 1 : 0) | (game.isSprinting ? 2 : 0) | (game.hidden ? 4 : 0);
+    if (game.surge > 0) flags |= 32;
+    this.send({ t: 'in', x: game.px, y: game.py, a: game.angle, f: flags });
+  }
+
+  get(id) { return this.players.get(id) || null; }
+  remoteList() { return [...this.players.values()].filter(p => p.id !== this.you); }
+  tungRemote() { return [...this.players.values()].find(p => p.role === 'tung' && p.id !== this.you) || null; }
+  allList() {
+    const out = [];
+    for (const p of this.players.values()) {
+      if (p.id === this.you && game.mode === 'mp') {
+        out.push(Object.assign({}, p, {
+          alive: game.alive, carrying: game.carrying, hidden: game.hidden,
+          flags: (game.isMoving ? 1 : 0) | (game.isSprinting ? 2 : 0),
+          pos: [game.px, game.py], a: game.angle,
+        }));
+      } else out.push(p);
+    }
+    return out;
+  }
+}
+
+function connectMultiplayer(kind) {
+  const name = $('i-name').value.trim() || 'guest';
+  const relay = $('i-relay').value.trim() || defaultRelayUrl();
+  const code = $('i-code').value.trim().toUpperCase();
+  if (kind === 'join' && !code) { $('mp-err').textContent = 'enter a lobby code'; return; }
+  store('tung-identity', { name, relay });
+  if (net) net.close();
+  net = new Net(relay);
+  net.connect(kind === 'create'
+    ? { t: 'create', name, settings: DEFAULT_SETTINGS }
+    : { t: 'join', name, code });
+}
+$('b-create').onclick = () => connectMultiplayer('create');
+$('b-join').onclick = () => connectMultiplayer('join');
+$('i-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') connectMultiplayer('join'); });
+
+function renderLobby(n, max = 5, min = 2) {
+  $('lobby-code').textContent = n.code;
+  $('lobby-count').textContent = String(n.players.size);
+  $('lobby-err').textContent = '';
+  const me = n.players.get(n.you);
+  const list = $('lobby-players'); list.innerHTML = '';
+  const votes = new Map();
+  for (const p of n.players.values()) if (typeof p.vote === 'number') votes.set(p.vote, (votes.get(p.vote) || 0) + 1);
+  for (const p of n.players.values()) {
+    const li = document.createElement('li');
+    const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = p.color;
+    const name = document.createElement('span'); name.className = 'pname'; name.textContent = p.name;
+    const tags = [];
+    if (p.id === n.host) tags.push('HOST');
+    if (p.id === n.you) tags.push('YOU');
+    const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = tags.join(' / ');
+    const tally = document.createElement('span'); tally.className = 'tally';
+    tally.textContent = votes.get(p.id) ? `${votes.get(p.id)} vote${votes.get(p.id) === 1 ? '' : 's'}` : '';
+    const vote = document.createElement('button'); vote.className = 'ghost small';
+    vote.textContent = me && me.vote === p.id ? 'VOTED' : 'VOTE';
+    if (me && me.vote === p.id) vote.classList.add('sel');
+    vote.onclick = () => n.send({ t: 'vote', v: p.id });
+    li.append(dot, name, tag, tally, vote); list.appendChild(li);
+  }
+  const random = $('b-vote-random');
+  random.classList.toggle('sel', !!me && me.vote === 'random');
+  random.textContent = me && me.vote === 'random' ? 'VOTED: LET IT BE RANDOM' : 'VOTE: LET IT BE RANDOM';
+  random.onclick = () => n.send({ t: 'vote', v: 'random' });
+
+  const isHost = n.you === n.host;
+  $('lobby-hosttag').textContent = isHost ? '- YOU CONTROL THESE' : '- HOST CONTROLS THESE';
+  renderSettings($('lobby-settings'), n.settings, isHost, (settings) => n.send({ t: 'settings', settings }));
+  $('b-start').style.display = isHost ? '' : 'none';
+  $('b-start').disabled = n.players.size < min;
+  $('b-start').textContent = n.players.size < min ? `NEED ${min - n.players.size} MORE` : 'START THE NIGHT';
+  $('b-start').onclick = () => n.send({ t: 'start' });
+  void max;
+}
+
+$('b-leave').onclick = () => goMain();
+
+function renderResult(n, msg) {
+  const me = n.players.get(n.you);
+  const survivorWin = msg.result === 'escaped';
+  const tungWin = msg.result === 'hunted' || msg.result === 'dawn';
+  const won = me && (me.role === 'tung' ? tungWin : survivorWin);
+  const titles = { escaped: 'THEY MADE IT HOME', hunted: 'THE STREET IS EMPTY', dawn: 'DAWN', abandoned: 'NIGHT ABANDONED' };
+  $('over-title').textContent = won ? 'YOU WIN' : (msg.result === 'abandoned' ? titles.abandoned : 'YOU LOSE');
+  $('over-sub').textContent = `${titles[msg.result] || msg.result} - ${msg.blurb || ''}`;
+  const table = $('over-scores'); table.innerHTML = '';
+  for (const s of msg.scores || []) {
+    const tr = document.createElement('tr');
+    const dotCell = document.createElement('td');
+    const dot = document.createElement('span'); dot.className = 'dot';
+    dot.style.display = 'inline-block'; dot.style.background = String(s.color || '#85858d');
+    dotCell.appendChild(dot);
+    const name = document.createElement('td'); name.textContent = String(s.name || 'guest');
+    const status = document.createElement('td');
+    status.textContent = s.role === 'tung' ? 'THE TUNG' : (s.alive ? 'SURVIVED' : 'CAUGHT');
+    const delivered = document.createElement('td');
+    delivered.textContent = s.role === 'tung' ? '' : `${Number(s.delivered) || 0} delivered`;
+    tr.append(dotCell, name, status, delivered);
+    table.appendChild(tr);
+  }
+  const again = $('b-again');
+  again.style.display = n.you === n.host ? '' : 'none';
+  again.onclick = () => n.send({ t: 'again' });
+}
+
+$('b-over-leave').onclick = () => goMain();
+
+function showDisconnected(message) {
+  game.state = 'mpover';
+  $('over-title').textContent = 'CONNECTION LOST';
+  $('over-sub').textContent = message;
+  $('over-scores').innerHTML = '';
+  $('b-again').style.display = 'none';
+  showScreen('scr-over');
+}
+
+// ---------------------------------------------------------------------------
+// input, audio and pause
+// ---------------------------------------------------------------------------
+function clearKeys() { for (const k of Object.keys(keys)) keys[k] = false; }
 
 function startGesture() {
   audio.init();
   if (audio.ctx.state === 'suspended') audio.ctx.resume();
-  canvas.requestPointerLock();
+  if (canvas.requestPointerLock) {
+    const p = canvas.requestPointerLock();
+    if (p && p.catch) p.catch(() => {});
+  }
   if (!droneStarted) {
     droneHandle = audio.playLoop('drone', 1.0);
     whisperHandle = audio.playLoop('whisper', 0.0);
@@ -1316,8 +2715,53 @@ function startGesture() {
   }
 }
 
+function pauseGame() {
+  if (paused || game.state !== 'play') return;
+  paused = true; clearKeys();
+  if (document.exitPointerLock) document.exitPointerLock();
+  $('pause-title').textContent = game.mode === 'mp' ? 'THE NIGHT CONTINUES' : 'PAUSED';
+  $('pause-sub').textContent = game.mode === 'mp' ? 'the other players are still moving' : 'the street holds its breath';
+  $('k-shift').textContent = game.role === 'tung' ? 'surge' : 'sprint';
+  showScreen('scr-pause', true);
+  if (whisperHandle) whisperHandle.gain.gain.value = 0;
+  if (droneHandle) droneHandle.gain.gain.value = 0.25;
+}
+
+function resumeGame() {
+  if (!paused) return;
+  paused = false; showScreen(null);
+  if (droneHandle) droneHandle.gain.gain.value = 1;
+  resumeGuardUntil = performance.now() + 700;
+  startGesture();
+}
+
+$('b-resume').onclick = () => resumeGame();
+$('b-quit').onclick = () => {
+  paused = false;
+  if (game.mode === 'mp') goMain();
+  else { game.state = 'menu'; showScreen('scr-main'); }
+};
+
+function restartSolo() {
+  game = new Game({ ...soloSettings, mode: 'solo' }); game.state = 'play';
+  caughtTimer = 0; paused = false; showScreen(null); startGesture();
+}
+
 window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
   const code = e.code;
+  if (paused) {
+    if (code === 'Escape' || code === 'Enter') resumeGame();
+    e.preventDefault(); return;
+  }
+  if (game.state !== 'play') {
+    if (code === 'KeyR' && game.mode === 'solo' && ['caught', 'win', 'dawn'].includes(game.state)) restartSolo();
+    return;
+  }
+  if (code === 'Escape') { pauseGame(); e.preventDefault(); return; }
+  if (!game.alive && game.mode === 'mp') {
+    e.preventDefault(); return;
+  }
   if (code === 'ArrowLeft') keys.left = true;
   if (code === 'ArrowRight') keys.right = true;
   if (code === 'KeyW') keys.w = true;
@@ -1325,47 +2769,11 @@ window.addEventListener('keydown', (e) => {
   if (code === 'KeyS') keys.s = true;
   if (code === 'KeyD') keys.d = true;
   if (code === 'ShiftLeft' || code === 'ShiftRight') keys.shift = true;
-
-  if (paused) {
-    // While paused the only keys that mean anything are resume and restart.
-    if (code === 'Escape' || code === 'Enter') resumeGame();
-    else if (code === 'KeyR') { restart(); }
-    e.preventDefault();
-    return;
-  }
-
-  if (game.state === 'intro') {
-    startGesture();
-    game.state = 'play';
-  } else if (game.state === 'play') {
-    if (code === 'Escape') { pauseGame(); e.preventDefault(); return; }
-    if (code === 'KeyE') game.toggleHide();
-    else if (code === 'KeyF' && !game.hidden) game.flashlight = !game.flashlight;
-    else if ((code === 'KeyW' || code === 'KeyA' || code === 'KeyS' || code === 'KeyD') && game.hidden) game.hidden = false;
-  } else if (code === 'KeyR' && (game.state === 'caught' || game.state === 'win' || game.state === 'dawn')) {
-    restart();
-  }
+  if (!e.repeat && code === 'KeyE') game.toggleHide();
+  else if (!e.repeat && code === 'KeyQ') game.requestSwap();
+  else if (!e.repeat && code === 'KeyF' && !game.hidden && game.role !== 'tung') game.flashlight = !game.flashlight;
 });
 
-function restart() {
-  game = new Game();
-  game.state = 'play';
-  caughtTimer = 0;
-  paused = false;
-  pauseSnapshotTaken = false;
-  if (droneHandle) droneHandle.gain.gain.value = 1.0;
-  startGesture();
-}
-
-// Anything that takes the player's attention away pauses: Escape drops pointer
-// lock, so does alt-tabbing, and coming back to a creature that kept hunting
-// while you were reading email is not a fair death.
-document.addEventListener('pointerlockchange', () => {
-  if (document.pointerLockElement !== canvas && game.state === 'play'
-      && performance.now() > resumeGuardUntil) pauseGame();
-});
-document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
-window.addEventListener('blur', () => pauseGame());
 window.addEventListener('keyup', (e) => {
   const code = e.code;
   if (code === 'ArrowLeft') keys.left = false;
@@ -1376,59 +2784,86 @@ window.addEventListener('keyup', (e) => {
   if (code === 'KeyD') keys.d = false;
   if (code === 'ShiftLeft' || code === 'ShiftRight') keys.shift = false;
 });
+
 document.addEventListener('mousemove', (e) => {
   if (document.pointerLockElement === canvas) mdxAccum += e.movementX;
 });
-canvas.addEventListener('click', () => {
-  if (paused) { resumeGame(); return; }
-  if (game.state === 'intro') { startGesture(); game.state = 'play'; }
-  else if (game.state === 'play' && document.pointerLockElement !== canvas) startGesture();
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement !== canvas && game.state === 'play' && !paused &&
+      performance.now() > resumeGuardUntil) pauseGame();
 });
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+window.addEventListener('blur', () => pauseGame());
+canvas.addEventListener('click', () => {
+  if (game.state === 'play' && !paused && document.pointerLockElement !== canvas) startGesture();
+});
+
+// ---------------------------------------------------------------------------
+// frame
+// ---------------------------------------------------------------------------
+function drawRoleReveal(now) {
+  if (now >= roleRevealUntil || game.mode !== 'mp') return;
+  const left = Math.min(1, (roleRevealUntil - now) / 500);
+  ctx.fillStyle = `rgba(0,0,0,${0.68 * left})`; ctx.fillRect(0, 180, WIN_W, 180);
+  const tung = game.role === 'tung';
+  drawText(ctx, tung ? 'YOU ARE THE TUNG' : 'YOU ARE NOT THE TUNG', WIN_W / 2, 238,
+           tung ? 'rgb(220,80,60)' : AMBER, { center: true, font: 'bold 34px monospace' });
+  drawText(ctx, tung ? 'read their old footsteps - SHIFT to surge' : 'bring the offerings home - do not leave a trail',
+           WIN_W / 2, 296, INK, { center: true, font: '15px monospace' });
+}
+
+function renderPlay(now) {
+  game.renderWorld(rctx);
+  let sx = 0, sy = 0;
+  if (game.shake > 0.2) {
+    sx = Math.round((Math.random() * 2 - 1) * game.shake);
+    sy = Math.round((Math.random() * 2 - 1) * game.shake);
+  }
+  ctx.fillStyle = 'black'; ctx.fillRect(0, 0, WIN_W, WIN_H);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(renderCanvas, 0, 0, RENDER_W, RENDER_H, sx, sy, WIN_W, WIN_H);
+  ctx.drawImage(vignetteCanvas, 0, 0);
+  if (game.hidden) drawHiddenSlats(ctx);
+  if (game.redAlpha > 0) {
+    ctx.fillStyle = `rgba(130,0,0,${game.redAlpha / 255})`;
+    ctx.fillRect(0, 0, WIN_W, WIN_H);
+  }
+  drawHud(ctx, game);
+  drawRoleReveal(now);
+}
 
 function frame(now) {
   requestAnimationFrame(frame);
-  let dt = (now - lastTime) / 1000; lastTime = now;
-  dt = Math.min(dt, 0.05);
+  let dt = Math.min(0.05, (now - lastTime) / 1000); lastTime = now;
   const mdx = mdxAccum; mdxAccum = 0;
 
-  if (paused && game.state === 'play') {
-    // No update, no clock, no creature. Just the frozen frame and the menu.
-    screenPaused(ctx, game, pauseSnapshotTaken ? pauseCanvas : null);
-    return;
-  }
-
   if (game.state === 'play') {
+    if (net && game.mode === 'mp') net.update(dt);
+    if (paused) {
+      // Solo genuinely pauses; multiplayer cannot. A player in the menu stands
+      // still and keeps sending that fact while the relay clock continues.
+      if (game.mode === 'mp') game.update(dt, NO_KEYS, 0);
+      return;
+    }
+
     game.update(dt, keys, mdx);
-    if (game.state !== 'play') {
+    if (game.mode === 'mp' && game.role === 'tung') game.pruneFootprints();
+    if (game.mode === 'solo' && game.state !== 'play') {
       if (game.state === 'caught') audio.playSimple('scare', 1.0);
       if (document.exitPointerLock) document.exitPointerLock();
     }
-
-    game.renderWorld(rctx);
-    let sx = 0, sy = 0;
-    if (game.shake > 0.2) {
-      sx = Math.round((Math.random() * 2 - 1) * game.shake);
-      sy = Math.round((Math.random() * 2 - 1) * game.shake);
-    }
-    ctx.fillStyle = 'black'; ctx.fillRect(0, 0, WIN_W, WIN_H);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(renderCanvas, 0, 0, RENDER_W, RENDER_H, sx, sy, WIN_W, WIN_H);
-    ctx.drawImage(vignetteCanvas, 0, 0);
-    if (game.hidden) drawHiddenSlats(ctx);
-    if (game.redAlpha > 0) {
-      ctx.fillStyle = `rgba(130,0,0,${game.redAlpha / 255})`;
-      ctx.fillRect(0, 0, WIN_W, WIN_H);
-    }
-    drawHud(ctx, game);
-    if (whisperHandle) whisperHandle.gain.gain.value = (1 - game.composure) * 0.8;
-  } else {
+    renderPlay(now);
+    if (whisperHandle) whisperHandle.gain.gain.value = game.role === 'tung' ? 0 : (1 - game.composure) * 0.8;
+  } else if (game.mode === 'solo') {
     if (whisperHandle) whisperHandle.gain.gain.value = 0;
-    if (game.state === 'intro') screenIntro(ctx);
-    else if (game.state === 'caught') { caughtTimer += dt; screenCaught(ctx, caughtTimer); }
+    if (game.state === 'caught') { caughtTimer += dt; screenCaught(ctx, caughtTimer); }
     else if (game.state === 'dawn') screenDawn(ctx, game);
     else if (game.state === 'win') screenWin(ctx, game);
   }
 }
+
+renderSettings($('solo-settings'), soloSettings, true, (s) => store('tung-solo-settings', s));
+showScreen('scr-main');
 requestAnimationFrame(frame);
 </script>
 </body>

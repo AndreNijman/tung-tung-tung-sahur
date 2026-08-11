@@ -1,0 +1,7 @@
+# Point the DNS record for tung.example.com at this server, replace the name
+# below, then run Caddy beside the compose service. Caddy obtains TLS and
+# proxies WebSocket upgrades automatically.
+tung.example.com {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8787
+}

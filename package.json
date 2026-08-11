@@ -5,7 +5,10 @@
   "description": "A first-person raycaster horror game in a single HTML file",
   "scripts": {
     "sim": "node tools/sim.js --knowledge blind --threat flee",
-    "smoke": "node tools/smoke.js"
+    "smoke": "node tools/smoke.js",
+    "smoke:mp": "node tools/mp-smoke.js",
+    "relay": "node server/relay.js",
+    "serve": "node server/relay.js --serve ."
   },
   "devDependencies": {
     "playwright": "^1.62.1"

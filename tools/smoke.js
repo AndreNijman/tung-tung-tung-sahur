@@ -2,7 +2,7 @@
 //
 // Browser smoke test. tools/sim.js exercises the simulation half of index.html;
 // this covers the half it cannot reach -- sprite cache, HUD, compass arrows and
-// all four end screens -- by driving the real page in Chromium and failing on
+// menus, paired alcoves and all four end screens -- by driving the real page in Chromium and failing on
 // any console error, page error or failed request.
 //
 // Usage: node tools/smoke.js [--headed] [url]
@@ -53,11 +53,15 @@ async function play(page, seconds, keys = ['KeyW']) {
   console.log('loading', URL);
   await page.goto(URL);
   await page.waitForTimeout(500);
-  await shot(page, '1-intro');
+  await shot(page, '1-menu');
+  if (!(await page.locator('#scr-main.on').count())) problems.push('main menu did not open');
 
-  // start and play a while: exercises raycaster, sprite cache, HUD, creature AI
-  await page.keyboard.press('Space');
+  // Start through the real menu. This also covers audio/pointer-lock setup.
+  await page.click('#b-solo');
   await page.waitForTimeout(300);
+  if ((await page.evaluate(() => game.state)) !== 'play') problems.push('Play Alone did not start');
+
+  // play a while: exercises raycaster, sprite cache, HUD and creature AI
   await play(page, 4, ['KeyW']);
   await shot(page, '2-play');
 
@@ -84,7 +88,7 @@ async function play(page, seconds, keys = ['KeyW']) {
   const c2 = await page.evaluate(() => [game.cx, game.cy]);
   if (c1[0] !== c2[0] || c1[1] !== c2[1]) problems.push('creature moved while paused');
 
-  await page.mouse.click(500, 300);
+  await page.click('#b-resume');
   await page.waitForTimeout(400);
   if (await page.evaluate(() => paused)) problems.push('click did not resume');
   const p3 = await page.evaluate(() => game.timeLeft);
@@ -99,8 +103,28 @@ async function play(page, seconds, keys = ['KeyW']) {
   await page.waitForTimeout(200);
   await page.keyboard.press('KeyF');
 
+  // Every alcove is paired, and Q moves a hidden player to its partner after
+  // the transit delay. Do this by the real E/Q input path rather than mutating
+  // `hidden` directly.
+  const swap = await page.evaluate(() => {
+    game.cx = game.mapN - 1.5; game.cy = game.mapN - 1.5;
+    game.px = game.hides[0][0]; game.py = game.hides[0][1];
+    game.updateNearestHide();
+    const to = pairOf(game.hidePairs, 0);
+    return { from: [...game.hides[0]], to, dest: [...game.hides[to]] };
+  });
+  await page.keyboard.press('KeyE');
+  await page.keyboard.press('KeyQ');
+  await page.waitForTimeout(1500);
+  const swapped = await page.evaluate(() => ({ hidden: game.hidden, x: game.px, y: game.py, idx: game.hideIdx }));
+  if (!swapped.hidden || swapped.idx !== swap.to || Math.hypot(swapped.x - swap.dest[0], swapped.y - swap.dest[1]) > 0.05) {
+    problems.push(`paired alcove swap failed: ${JSON.stringify({ swap, swapped })}`);
+  }
+  console.log(`  alcove: ${swap.from.join(',')} -> ${swap.dest.join(',')}`);
+  await page.keyboard.press('KeyE');
+
   // extraction HUD: strip the offerings and confirm the surau compass renders
-  await page.evaluate(() => { game.items.length = 0; game.collected = N_ITEMS; });
+  await page.evaluate(() => { game.items.length = 0; game.collected = game.nItems; });
   await page.waitForTimeout(400);
   await shot(page, '4-extraction');
 
