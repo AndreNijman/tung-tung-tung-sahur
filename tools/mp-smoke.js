@@ -14,6 +14,8 @@ const { chromium } = require('playwright');
 const ROOT = path.join(__dirname, '..');
 const PORT = 18000 + Math.floor(Math.random() * 1000);
 const urlArg = process.argv.slice(2).find(arg => /^https?:\/\//.test(arg));
+const relayArgIndex = process.argv.indexOf('--relay');
+const relayOverride = relayArgIndex >= 0 ? process.argv[relayArgIndex + 1] : null;
 const LIVE = !!urlArg;
 const URL = urlArg || `http://127.0.0.1:${PORT}/`;
 
@@ -76,6 +78,7 @@ async function moveTo(page, x, y, movingFlags = 1) {
       await page.goto(URL);
       await page.click('#b-mp');
       await page.fill('#i-name', name);
+      if (relayOverride) await page.fill('#i-relay', relayOverride);
       return page;
     }
 

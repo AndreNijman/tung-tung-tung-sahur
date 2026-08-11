@@ -148,9 +148,12 @@ For a public relay, set a comma-separated origin allowlist, for example
 `file://` development and smoke tests.
 
 The live GitHub Pages build uses the Cloudflare Durable Object relay at
-`relay.tung.andrenijman.com`. Its implementation is `worker/relay.js`; it speaks
-the same client protocol and keeps each room inside one Durable Object. Deploy
-it with the account-scoped token in `CLOUDFLARE_API_TOKEN`:
+`tung-relay.tung-tung-tung-sahur.workers.dev`. The custom
+`relay.tung.andrenijman.com` alias is also configured, but the client stays on
+the Workers hostname so initial custom-domain certificate issuance cannot break
+multiplayer. Its implementation is `worker/relay.js`; it speaks the same client
+protocol and keeps each room inside one Durable Object. Deploy it with the
+account-scoped token in `CLOUDFLARE_API_TOKEN`:
 
 ```bash
 npx wrangler deploy

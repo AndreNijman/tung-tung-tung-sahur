@@ -2304,7 +2304,7 @@ function defaultRelayUrl() {
   const configured = window.TUNG_RELAY_URL;
   if (configured) return configured;
   if (location.hostname === 'tung.andrenijman.com') {
-    return 'wss://relay.tung.andrenijman.com/ws';
+    return 'wss://tung-relay.tung-tung-tung-sahur.workers.dev/ws';
   }
   if (location.protocol === 'http:' || location.protocol === 'https:') {
     return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
