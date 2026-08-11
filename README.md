@@ -143,14 +143,26 @@ serves the page and WebSocket from the same origin, so the browser automatically
 uses `wss://` on HTTPS with no separate relay configuration. Only `index.html`,
 `CNAME`, and `/health` are exposed by the static server.
 
-GitHub Pages can still host the solo client, but Pages cannot run WebSockets.
-For multiplayer there, enter a separately hosted `wss://` relay in the menu;
-the address is remembered locally. Serving both from the container is the
-simpler production layout.
-
 For a public relay, set a comma-separated origin allowlist, for example
 `ALLOWED_ORIGINS=https://tung.andrenijman.com`. Leave it unset for local
 `file://` development and smoke tests.
+
+The live GitHub Pages build uses the Cloudflare Durable Object relay at
+`relay.tung.andrenijman.com`. Its implementation is `worker/relay.js`; it speaks
+the same client protocol and keeps each room inside one Durable Object. Deploy
+it with the account-scoped token in `CLOUDFLARE_API_TOKEN`:
+
+```bash
+npx wrangler deploy
+npm run smoke:mp:live
+```
+
+The Worker only accepts production-origin WebSockets (plus local development),
+and `wrangler.jsonc` owns the custom relay domain and Durable Object migration.
+GitHub Pages cannot run WebSockets itself, so the production client selects the
+Cloudflare relay automatically. A custom relay address can still be entered in
+the menu and is remembered locally. Serving both from the container remains the
+simplest self-hosted layout.
 
 ### `tools/sim.js` — balance harness
 

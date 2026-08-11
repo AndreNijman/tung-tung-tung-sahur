@@ -2303,6 +2303,9 @@ function showScreen(id, thin = false) {
 function defaultRelayUrl() {
   const configured = window.TUNG_RELAY_URL;
   if (configured) return configured;
+  if (location.hostname === 'tung.andrenijman.com') {
+    return 'wss://relay.tung.andrenijman.com/ws';
+  }
   if (location.protocol === 'http:' || location.protocol === 'https:') {
     return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
   }
@@ -2380,7 +2383,12 @@ class Net {
   connect(request) {
     $('mp-err').textContent = 'connecting...';
     let ws;
-    try { ws = new WebSocket(this.url); }
+    try {
+      const socketUrl = new URL(this.url, location.href);
+      if (request.t === 'create') socketUrl.searchParams.set('create', '1');
+      else socketUrl.searchParams.set('code', request.code);
+      ws = new WebSocket(socketUrl);
+    }
     catch (e) { $('mp-err').textContent = `bad relay address: ${e.message}`; return; }
     this.ws = ws;
     const timeout = setTimeout(() => {

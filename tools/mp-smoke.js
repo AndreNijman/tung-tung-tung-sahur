@@ -13,7 +13,9 @@ const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = 18000 + Math.floor(Math.random() * 1000);
-const URL = `http://127.0.0.1:${PORT}/`;
+const urlArg = process.argv.slice(2).find(arg => /^https?:\/\//.test(arg));
+const LIVE = !!urlArg;
+const URL = urlArg || `http://127.0.0.1:${PORT}/`;
 
 async function waitForRelay() {
   for (let i = 0; i < 80; i++) {
@@ -50,17 +52,20 @@ async function moveTo(page, x, y, movingFlags = 1) {
 }
 
 (async () => {
-  const relay = spawn(process.execPath, ['server/relay.js', '--serve', '.', '--port', String(PORT)], {
-    cwd: ROOT,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const relay = LIVE ? null : spawn(process.execPath, ['server/relay.js', '--serve', '.', '--port', String(PORT)], {
+      cwd: ROOT,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
   let relayErr = '';
-  relay.stderr.on('data', d => { relayErr += d.toString(); });
+  if (relay) relay.stderr.on('data', d => { relayErr += d.toString(); });
 
   let browser;
   const problems = [];
   try {
-    await waitForRelay();
+    if (LIVE) {
+      const response = await fetch(URL);
+      if (!response.ok) throw new Error(`live page returned ${response.status}`);
+    } else await waitForRelay();
     browser = await chromium.launch({ headless: !process.argv.includes('--headed') });
 
     async function openPlayer(name) {
@@ -236,7 +241,7 @@ async function moveTo(page, x, y, movingFlags = 1) {
     }
   } finally {
     if (browser) await browser.close();
-    relay.kill('SIGTERM');
+    if (relay) relay.kill('SIGTERM');
     if (relayErr) console.error(relayErr.trim());
   }
 })().catch(e => { console.error(e); process.exit(1); });
