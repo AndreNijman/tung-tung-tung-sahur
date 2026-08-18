@@ -76,6 +76,28 @@
   .lobby-detail { color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .lock { color:var(--muted); font-size:11px; letter-spacing:1px; }
   .browser-state { color:var(--muted); padding:18px 4px; text-align:center; font-size:12px; }
+  #team-chat { display:none; position:absolute; left:20px; bottom:18px; width:min(520px, calc(100% - 40px));
+    color:var(--text); font:13px monospace; z-index:3; }
+  #team-chat.on { display:block; }
+  #chat-log { min-height:24px; max-height:132px; overflow:hidden; padding:8px 10px;
+    background:rgba(3,3,5,.82); border-left:2px solid var(--accent); }
+  .chat-line { margin:3px 0; overflow-wrap:anywhere; }
+  .chat-name { color:var(--accent); }
+  #chat-input { display:none; width:100%; min-height:40px; margin-top:4px; }
+  #team-chat.typing #chat-input { display:block; }
+  .profile-strip { display:flex; justify-content:center; gap:20px; color:var(--muted); margin-top:18px; }
+  .profile-strip strong { color:var(--accent); }
+  .menu-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; max-width:680px; margin:18px auto 0; }
+  .catalog { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; max-width:820px; margin:0 auto; }
+  .catalog-item { min-height:92px; background:var(--surface); border-left:3px solid var(--divider); padding:12px; box-sizing:border-box; }
+  .catalog-item.legendary { border-color:var(--accent); background:#191207; }
+  .catalog-item h3 { margin:0 0 6px; color:var(--text); font-size:14px; }
+  .catalog-item p { margin:0 0 8px; color:var(--muted); font-size:11px; line-height:1.4; }
+  .sigil { display:inline-grid; place-items:center; width:24px; height:24px; margin-right:8px; border:1px solid currentColor; transform:rotate(45deg); }
+  .sigil span { transform:rotate(-45deg); font-size:9px; }
+  .rarity-easy { color:#d8d8dc; } .rarity-medium { color:#72bc68; }
+  .rarity-difficult { color:#6898d8; } .rarity-impossible { color:#e0a040; }
+  .screen-scroll { max-height:390px; overflow:auto; padding-right:4px; }
 
   @media (max-width:700px) {
     .scr { padding:20px; }
@@ -87,6 +109,7 @@
     #scr-main .credit { position:absolute; }
     .mp-connect { grid-template-columns:1fr; }
     .lobby-browser { max-height:none; }
+    .menu-grid, .catalog { grid-template-columns:repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width:430px) {
     .scr { padding:16px 12px; }
@@ -117,10 +140,17 @@
         <button class="ghost small" id="b-solo-settings">NIGHT SETTINGS</button>
         <button class="ghost small" id="b-howto" aria-expanded="false" aria-controls="howto">HOW TO PLAY</button>
       </div>
+      <div class="profile-strip"><span>LEVEL <strong id="profile-level">1</strong></span><span>T-BUCKS <strong id="profile-coins">0</strong></span><span id="profile-user">GUEST</span></div>
+      <div class="menu-grid">
+        <button class="ghost small" data-profile-screen="scr-pass">SAHUR PASS</button>
+        <button class="ghost small" data-profile-screen="scr-shop">ITEM SHOP</button>
+        <button class="ghost small" data-profile-screen="scr-wardrobe">WARDROBE</button>
+        <button class="ghost small" data-profile-screen="scr-achievements">ACHIEVEMENTS</button>
+      </div>
       <div id="howto" class="card hint" style="display:none;max-width:640px;margin:18px auto 0">
         <b style="color:#c8c8cd">Alone.</b> Gather every offering and carry them back to the surau
         before the call to Subuh. The thing only sees what it is facing. It always hears panic.<br><br>
-        <b style="color:#c8c8cd">Together.</b> Five to a lobby, one of you is the Tung. The rest
+        <b style="color:#c8c8cd">Together.</b> Up to ten to a lobby, one of you is the Tung. The rest
         carry offerings home one at a time. The Tung cannot see in colour and cannot hear well —
         it reads the <span style="color:#8ab0d8">footprints you left a moment ago</span>.
         Sprinting leaves a brighter, longer-lasting trail. Standing still leaves none.<br><br>
@@ -128,6 +158,27 @@
         its partner, so camping a door is a waste of the Tung's night.
       </div>
       <div class="credit">originally by tim</div>
+    </div>
+
+    <div class="scr" id="scr-pass">
+      <div class="title">SAHUR PASS</div><div class="sub" id="pass-summary"></div>
+      <div class="screen-scroll"><div class="catalog" id="pass-catalog"></div></div>
+      <div class="row center"><button id="b-buy-pass">BUY PASS - 1,000 T-BUCKS</button><button class="ghost profile-back">BACK</button></div>
+    </div>
+    <div class="scr" id="scr-shop">
+      <div class="title">ITEM SHOP</div><div class="sub">legendary pieces and discounted sets</div>
+      <div class="screen-scroll"><div class="catalog" id="shop-catalog"></div></div>
+      <div class="row center"><button class="ghost profile-back">BACK</button></div>
+    </div>
+    <div class="scr" id="scr-wardrobe">
+      <div class="title">WARDROBE</div><div class="sub">cosmetic only - never changes speed, visibility, or reach</div>
+      <div class="screen-scroll"><div class="catalog" id="wardrobe-catalog"></div></div>
+      <div class="row center"><button class="ghost profile-back">BACK</button></div>
+    </div>
+    <div class="scr" id="scr-achievements">
+      <div class="title">ACHIEVEMENTS</div><div class="sub">equip one earned sigil beside your name</div>
+      <div class="screen-scroll"><div class="catalog" id="achievement-catalog"></div></div>
+      <div class="row center"><button class="ghost profile-back">BACK</button></div>
     </div>
 
     <!-- solo settings -->
@@ -145,7 +196,7 @@
     <!-- multiplayer connect -->
     <div class="scr" id="scr-mp">
       <div class="title">PLAY TOGETHER</div>
-      <div class="sub">lobbies of five — one of you is the Tung</div>
+      <div class="sub">lobbies of up to ten - one of you is the Tung</div>
       <div class="mp-connect">
         <div class="card">
           <div class="col">
@@ -199,7 +250,7 @@
       </div>
       <div class="panels" style="margin-top:14px">
         <div class="card">
-          <label>THE STREET (<span id="lobby-count">0</span>/5)</label>
+          <label>THE STREET (<span id="lobby-count">0</span>/<span id="lobby-max">10</span>)</label>
           <ul class="plist" id="lobby-players"></ul>
           <div class="row" style="margin-top:10px">
             <button class="ghost small" id="b-vote-random">VOTE: LET IT BE RANDOM</button>
@@ -227,6 +278,7 @@
         <div class="row" style="justify-content:space-between"><span>F</span><span>torch</span></div>
         <div class="row" style="justify-content:space-between"><span>E</span><span>hide in an alcove</span></div>
         <div class="row" style="justify-content:space-between"><span>Q</span><span>slip through to the paired alcove</span></div>
+        <div class="row" style="justify-content:space-between"><span>T</span><span>runner team chat (hidden from Tungs)</span></div>
       </div>
       <div class="row center" style="margin-top:18px">
         <button id="b-resume">RESUME</button>
@@ -249,6 +301,10 @@
       <div class="credit">originally by tim</div>
     </div>
 
+  </div>
+  <div id="team-chat" aria-live="polite">
+    <div id="chat-log"></div>
+    <input id="chat-input" maxlength="160" autocomplete="off" aria-label="Team message" placeholder="team message - Enter to send, Escape to close">
   </div>
 </div>
 <script>
@@ -390,7 +446,18 @@ const DEFAULT_SETTINGS = {
   lanterns: N_ITEMS,
   night: NIGHT_SECONDS,
   torch: TORCH_SECONDS,
+  stamina: 'medium',
+  tungIntel: false,
+  tungs: 1,
   tracks: 'normal',
+};
+const STAMINA_PRESETS = {
+  veryLow: 2.0,
+  low: 1.5,
+  medium: 1.0,
+  high: 0.75,
+  veryHigh: 0.5,
+  infinite: 0,
 };
 function clampGameSettings(raw) {
   const s = Object.assign({}, DEFAULT_SETTINGS);
@@ -402,7 +469,10 @@ function clampGameSettings(raw) {
   }
   if (Number.isFinite(raw.lanterns)) s.lanterns = Math.max(2, Math.min(12, Math.round(raw.lanterns)));
   if (Number.isFinite(raw.night)) s.night = Math.max(60, Math.min(900, Math.round(raw.night)));
-  if (Number.isFinite(raw.torch)) s.torch = Math.max(20, Math.min(900, Math.round(raw.torch)));
+  if (Number.isFinite(raw.torch)) s.torch = raw.torch === 0 ? 0 : Math.max(20, Math.min(1800, Math.round(raw.torch)));
+  if (STAMINA_PRESETS[raw.stamina] !== undefined) s.stamina = raw.stamina;
+  if (typeof raw.tungIntel === 'boolean') s.tungIntel = raw.tungIntel;
+  if (Number.isFinite(raw.tungs)) s.tungs = Math.max(1, Math.min(3, Math.round(raw.tungs)));
   if (TRACK_PRESETS[raw.tracks]) s.tracks = raw.tracks;
   return s;
 }
@@ -1038,7 +1108,11 @@ class Game {
     this.mapN = o.mapN | 0;
     this.nItems = o.lanterns | 0;
     this.nightSeconds = o.night;
-    this.batteryDrain = 1 / Math.max(1, o.torch);
+    this.infiniteTorch = o.torch === 0;
+    this.batteryDrain = this.infiniteTorch ? 0 : 1 / Math.max(1, o.torch);
+    this.staminaDrain = STAMINA_DRAIN * STAMINA_PRESETS[o.stamina];
+    this.infiniteStamina = o.stamina === 'infinite';
+    this.tungIntel = o.tungIntel;
     this.mode = o.mode || 'solo';
     this.role = o.role || 'survivor';
     this.tracks = TRACK_PRESETS[o.tracks] || TRACK_PRESETS.normal;
@@ -1076,6 +1150,18 @@ class Game {
     for (const c of pool) {
       if (chosen.every(o2 => ((c[0] - o2[0]) ** 2 + (c[1] - o2[1]) ** 2) > spread)) chosen.push(c);
       if (chosen.length === this.nItems) break;
+    }
+    // Dense small maps can exhaust the preferred spacing. Fill from remaining
+    // open cells so a night can never ask players to collect offerings that do
+    // not exist.
+    if (chosen.length < this.nItems) {
+      const used = new Set(chosen.map(c => `${c[0]},${c[1]}`));
+      for (const c of pool) {
+        const key = `${c[0]},${c[1]}`;
+        if (used.has(key)) continue;
+        chosen.push(c); used.add(key);
+        if (chosen.length === this.nItems) break;
+      }
     }
     this.items = chosen.map(c => [c[0] + 0.5, c[1] + 0.5]);
     this.collected = 0;
@@ -1124,6 +1210,8 @@ class Game {
     this.spectating = null;
     this.stepT = 0;
     this.clock = 0;             // seconds since the match began, for footprints
+    this.runStats = { distance: 0, sprinted: false, hides: 0 };
+    this.rewarded = false;
 
     if (this.mode === 'mp') this.placeForRole(o.spawnIdx | 0);
   }
@@ -1141,7 +1229,10 @@ class Game {
 
   spawnForRole(role, spawnIdx) {
     if (role === 'tung') {
-      const x = this.farCell[0] + 0.5, y = this.farCell[1] + 0.5;
+      const far = this.cells.slice().sort((a, b) =>
+        ((b[0] - 1) ** 2 + (b[1] - 1) ** 2) - ((a[0] - 1) ** 2 + (a[1] - 1) ** 2));
+      const cell = far[spawnIdx % Math.min(12, far.length)] || this.farCell;
+      const x = cell[0] + 0.5, y = cell[1] + 0.5;
       return { x, y, a: Math.atan2(1.5 - y, 1.5 - x) };
     }
     const near = this.cells
@@ -1194,6 +1285,7 @@ class Game {
       audio.playSimple('hidefx', 0.5);
     } else if (this.nearHide) {
       this.hidden = true;
+      this.runStats.hides++;
       this.hideIdx = this.nearHideIdx;
       this.px = this.nearestHide[0]; this.py = this.nearestHide[1];
       this.hideT = 0.0;
@@ -1284,7 +1376,7 @@ class Game {
     }
 
     const speed = this.applyMovement(dt, keys, WALK_SPEED, SPRINT_SPEED);
-    if (this.flashlight) this.battery = Math.max(0.0, this.battery - this.batteryDrain * dt);
+    if (this.torchOn() && !this.infiniteTorch) this.battery = Math.max(0.0, this.battery - this.batteryDrain * dt);
 
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
@@ -1319,13 +1411,14 @@ class Game {
     if (keys.d) { mx += sx; my += sy; }
 
     this.isMoving = !!(mx || my);
-    const wantSprint = keys.shift && this.stamina > 0.02;
+    const wantSprint = keys.shift && (this.infiniteStamina || this.stamina > 0.02);
     this.isSprinting = this.isMoving && wantSprint;
+    if (this.isSprinting) this.runStats.sprinted = true;
 
     let speed;
     if (this.isSprinting) {
       speed = run;
-      this.stamina = Math.max(0.0, this.stamina - STAMINA_DRAIN * dt);
+      this.stamina = this.infiniteStamina ? 1 : Math.max(0.0, this.stamina - this.staminaDrain * dt);
     } else {
       speed = walk;
       const regen = STAMINA_REGEN * (this.panicking ? PANIC_STAMINA_REGEN : 1.0);
@@ -1337,6 +1430,7 @@ class Game {
       mx /= mag; my /= mag;
       const step = speed * dt;
       this.tryMove(this.px + mx * step, this.py + my * step);
+      this.runStats.distance += step;
     }
     return speed;
   }
@@ -1371,7 +1465,7 @@ class Game {
     }
 
     this.applyMovement(dt, keys, WALK_SPEED, SPRINT_SPEED);
-    if (this.flashlight) this.battery = Math.max(0.0, this.battery - this.batteryDrain * dt);
+    if (this.torchOn() && !this.infiniteTorch) this.battery = Math.max(0.0, this.battery - this.batteryDrain * dt);
     this.mpThreat(dt);
   }
 
@@ -1479,7 +1573,8 @@ class Game {
   }
 
   remoteList() { return this.net ? this.net.remoteList() : []; }
-  tungRemote() { return this.net ? this.net.tungRemote() : null; }
+  tungRemote() { return this.net ? this.net.tungRemote(this.px, this.py) : null; }
+  torchOn() { return this.flashlight && (this.infiniteTorch || this.battery > 0); }
 
   // -------------------------------------------------------------------------
   // footprints (the Tung's only real sense)
@@ -1565,7 +1660,7 @@ class Game {
       // Sight needs range, an unbroken line, AND you inside the cone he is
       // facing. Getting behind him is now a real move; his head turns at a
       // finite rate, so the moment after he rounds a corner is your window.
-      const detect = DETECT_RANGE * (this.flashlight ? 1.0 : 0.5);
+      const detect = DETECT_RANGE * (this.torchOn() ? 1.0 : 0.5);
       const toPlayer = Math.atan2(this.py - this.cy, this.px - this.cx);
       const offAxis = Math.abs(angDiff(this.cangle, toPlayer));
       seen = offAxis < VIEW_CONE && this.hasLos(this.cx, this.cy, this.px, this.py, detect);
@@ -1576,7 +1671,7 @@ class Game {
       if (this.isSprinting) hear = HEAR_SPRINT;
       else if (this.isMoving) hear = HEAR_WALK;
       else hear = 0.0;
-      if (this.flashlight) hear = Math.max(hear, TORCH_BEACON);
+      if (this.torchOn()) hear = Math.max(hear, TORCH_BEACON);
       // Hearing is not directional. Panicked breathing carries even if you
       // stand perfectly still, which is what makes low nerve dangerous rather
       // than merely ugly.
@@ -1633,7 +1728,7 @@ class Game {
     let speed;
     if (this.cstate === 'hunt') {
       speed = Math.min(CREATURE_HUNT_MAX, CREATURE_HUNT_BASE + CREATURE_HUNT_PER_ITEM * this.collected);
-      if (!this.flashlight) speed = Math.min(CREATURE_HUNT_MAX, speed + 0.12);
+      if (!this.torchOn()) speed = Math.min(CREATURE_HUNT_MAX, speed + 0.12);
     } else if (this.cstate === 'stalk') speed = CREATURE_STALK_SPEED;
     else speed = CREATURE_WANDER_SPEED;
 
@@ -1739,7 +1834,7 @@ class Game {
   computeFlicker() {
     const prox = Math.max(0.0, 1.0 - this.cdist / 6.0);
     const intensity = prox * 0.5 + (1.0 - this.composure) * 0.5;
-    if (this.flashlight && Math.random() < intensity * 0.35) return 0.45 + Math.random() * (0.82 - 0.45);
+    if (this.torchOn() && Math.random() < intensity * 0.35) return 0.45 + Math.random() * (0.82 - 0.45);
     return 1.0;
   }
 
@@ -1765,7 +1860,7 @@ class Game {
     const zbuf = new Float64Array(RENDER_W).fill(1e9);
     const lightFinal = vis.light !== null ? vis.light : (this.hidden
       ? 0.13
-      : (this.flashlight ? (0.25 + 0.75 * this.battery) : 0.10) * this.flicker);
+      : (this.torchOn() ? (this.infiniteTorch ? 1 : 0.25 + 0.75 * this.battery) : 0.10) * this.flicker);
 
     for (let x = 0; x < RENDER_W; x++) {
       const camx = 2 * x / RENDER_W - 1;
@@ -1864,13 +1959,15 @@ class Game {
       return out;
     }
     const out = [];
-    for (let i = 0; i < this.itemState.length; i++) {
-      const s = this.itemState[i];
-      if (!s || s[0] !== 0) continue;              // carried or already home
-      out.push({ x: s[2], y: s[3], kind: 'item' });
+    if (this.role !== 'tung' || this.tungIntel) {
+      for (let i = 0; i < this.itemState.length; i++) {
+        const s = this.itemState[i];
+        if (!s || s[0] !== 0) continue;              // carried or already home
+        out.push({ x: s[2], y: s[3], kind: 'item' });
+      }
+      out.push({ x: this.surau[0], y: this.surau[1], kind: 'surau' });
     }
     for (const h of this.hides) out.push({ x: h[0], y: h[1], kind: 'hide' });
-    out.push({ x: this.surau[0], y: this.surau[1], kind: 'surau' });
     for (const r of this.remoteList()) {
       if (!r.pos || r.hidden || !r.alive) continue;
       out.push({ x: r.pos[0], y: r.pos[1], kind: r.role === 'tung' ? 'creature' : 'player', r });
@@ -1907,7 +2004,7 @@ class Game {
         else src = away ? SPR.creatureBack : SPR.creature;
       } else if (s.kind === 'player') {
         const away = Math.abs(angDiff(s.r.a || 0, Math.atan2(this.py - s.y, this.px - s.x))) > VIEW_CONE;
-        src = getSurvivorSprite(s.r.color, s.r.carrying >= 0, away);
+        src = getSurvivorSprite(outfitColor(s.r), s.r.carrying >= 0, away);
       } else if (s.kind === 'hide') src = SPR.hide;
       else if (s.kind === 'surau') src = SPR.surau;
       else src = SPR.item;
@@ -1997,9 +2094,11 @@ function drawHud(ctx, game) {
   drawText(ctx, `${game.collected} / ${game.nItems}`, 24, 34, AMBER, { font: 'bold 24px monospace' });
 
   const bw = 150;
-  bar(ctx, WIN_W - bw - 24, 30, bw, 12, game.battery, game.battery > 0.25 ? AMBER : 'rgb(180,60,50)',
-      'TORCH' + (game.flashlight ? '' : '  [OFF]'));
-  bar(ctx, WIN_W - bw - 24, 64, bw, 12, game.stamina, 'rgb(90,170,200)', 'STAMINA');
+  if (!game.infiniteTorch) {
+    bar(ctx, WIN_W - bw - 24, 30, bw, 12, game.battery, game.battery > 0.25 ? AMBER : 'rgb(180,60,50)',
+        'TORCH' + (game.torchOn() ? '' : '  [OFF]'));
+  }
+  if (!game.infiniteStamina) bar(ctx, WIN_W - bw - 24, 64, bw, 12, game.stamina, 'rgb(90,170,200)', 'STAMINA');
   const nerveCol = game.panicking ? 'rgb(220,60,50)' : (game.composure > 0.4 ? INK : 'rgb(200,70,60)');
   bar(ctx, WIN_W - bw - 24, 98, bw, 12, game.composure, nerveCol,
       game.panicking ? 'NERVE  [HE CAN HEAR YOU]' : 'NERVE');
@@ -2056,7 +2155,7 @@ function drawHudMp(ctx, game) {
       const dead = !r.alive;
       ctx.fillStyle = dead ? 'rgb(70,70,76)' : r.color;
       ctx.fillRect(24, y + 4, 7, 7);
-      const label = r.name + (r.id === net.you ? ' (you)' : '');
+      const label = playerName(r) + (r.id === net.you ? ' (you)' : '');
       drawText(ctx, dead ? label + ' — caught' : label, 38, y, dead ? 'rgb(90,90,96)' : INK,
                { font: '13px monospace' });
       if (!dead && r.carrying >= 0) {
@@ -2089,9 +2188,11 @@ function drawHudMp(ctx, game) {
   }
 
   const bw = 150;
-  bar(ctx, WIN_W - bw - 24, 30, bw, 12, game.battery, game.battery > 0.25 ? AMBER : 'rgb(180,60,50)',
-      'TORCH' + (game.flashlight ? '' : '  [OFF]'));
-  bar(ctx, WIN_W - bw - 24, 64, bw, 12, game.stamina, 'rgb(90,170,200)', 'STAMINA');
+  if (!game.infiniteTorch) {
+    bar(ctx, WIN_W - bw - 24, 30, bw, 12, game.battery, game.battery > 0.25 ? AMBER : 'rgb(180,60,50)',
+        'TORCH' + (game.torchOn() ? '' : '  [OFF]'));
+  }
+  if (!game.infiniteStamina) bar(ctx, WIN_W - bw - 24, 64, bw, 12, game.stamina, 'rgb(90,170,200)', 'STAMINA');
   const nerveCol = game.panicking ? 'rgb(220,60,50)' : (game.composure > 0.4 ? INK : 'rgb(200,70,60)');
   bar(ctx, WIN_W - bw - 24, 98, bw, 12, game.composure, nerveCol, 'NERVE');
 
@@ -2123,7 +2224,7 @@ function drawHudMp(ctx, game) {
       const p = game.projectToScreen(r.pos[0], r.pos[1]);
       if (!p) continue;
       ctx.globalAlpha = Math.max(0.25, 1 - d / 11);
-      drawText(ctx, r.name, p.sx, Math.max(14, p.top - 16), r.color,
+      drawText(ctx, playerName(r), p.sx, Math.max(14, p.top - 16), r.color,
                { center: true, font: 'bold 12px monospace' });
       ctx.globalAlpha = 1;
     }
@@ -2276,13 +2377,260 @@ function store(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ }
 }
 
+const SHOP_ITEMS = [
+  ['shirt-eclipse', 'shirt', 'Eclipse Shirt', 900], ['shirt-sunrise', 'shirt', 'Sunrise Shirt', 850],
+  ['pattern-static', 'shirtPattern', 'Midnight Static', 1100], ['pattern-batik', 'shirtPattern', 'Golden Batik', 1200],
+  ['pants-ember', 'pants', 'Ember Trousers', 800], ['pants-check', 'pantsPattern', 'Night Check', 1000],
+  ['skin-moon', 'skin', 'Moonlit Skin', 1400], ['skin-carved', 'skin', 'Carved Timber', 1500],
+  ['back-drum', 'back', 'Ceremonial Drum', 1600], ['back-moon', 'back', 'Caged Moon', 1700],
+  ['shoes-spark', 'shoes', 'Sparking Steps', 950], ['hat-crown', 'hat', 'Dawn Crown', 1500],
+  ['hat-lantern', 'hat', 'Lantern Helm', 1450], ['emote-drumline', 'emote', 'Victory Drumline', 1200],
+  ['spray-eye', 'spray', 'Watching Eye Spray', 800], ['spray-surau', 'spray', 'Surau Seal Spray', 850],
+  ['aura-dawn', 'aura', 'Dawn Aura', 1800], ['trail-ash', 'trail', 'Ash Footfall', 1350],
+  ['tung-tralalero', 'tung', 'Tralalero Tung', 2200], ['tung-bombardiro', 'tung', 'Bombardiro Tung', 2400],
+].map(([id, slot, name, price]) => ({ id, slot, name, price }));
+const SHOP_BUNDLES = [
+  { id: 'bundle-eclipse', name: 'Total Eclipse Set', price: 3600, includes: ['shirt-eclipse', 'pattern-static', 'pants-ember', 'back-moon', 'aura-dawn'] },
+  { id: 'bundle-drum', name: 'Last Drum Set', price: 4100, includes: ['skin-carved', 'back-drum', 'hat-crown', 'emote-drumline', 'tung-bombardiro'] },
+];
+const PASS_REWARDS = Array.from({ length: 100 }, (_, index) => {
+  const level = index + 1;
+  if (level === 100) return { level, id: 'pass-100-sahur-sovereign', slot: 'tung', name: 'Sahur Sovereign', legendary: true };
+  if (level % 5 === 0) {
+    const slots = ['shirt', 'hat', 'spray', 'back', 'emote'];
+    const slot = slots[(level / 5 - 1) % slots.length];
+    return { level, id: `pass-${level}-${slot}`, slot, name: `${['Quiet', 'Carved', 'Dusk', 'Drum'][level % 4]} ${slot}` };
+  }
+  return level % 3 === 0
+    ? { level, id: `pass-bg-${level}`, slot: 'background', name: `Street ${level} background` }
+    : { level, coins: 20 + (level % 4) * 5, name: `${20 + (level % 4) * 5} T-bucks` };
+});
+const ACHIEVEMENTS = [
+  ['first-three', 'III', 'Three for the street', 'easy', 'Collect or deliver 3 offerings', (p, c) => p.stats.offerings >= 3],
+  ['first-win', 'W', 'First light', 'easy', 'Win a game', (p) => p.stats.wins >= 1],
+  ['closet', 'C', 'Close the door', 'easy', 'Hide in a closet', (p) => p.stats.hides >= 1],
+  ['walker', 'KM', 'Street walker', 'easy', 'Travel 1,000 units', (p) => p.stats.distance >= 1000],
+  ['runner-wins', 'R2', 'Reliable runner', 'medium', 'Win 2 games as a runner', (p) => p.stats.runnerWins >= 2],
+  ['tung-wins', 'T2', 'The drum answers', 'medium', 'Win 2 games as Tung', (p) => p.stats.tungWins >= 2],
+  ['ten-games', 'X', 'Regular at Subuh', 'medium', 'Finish 10 games', (p) => p.stats.games >= 10],
+  ['collector', 'O', 'Offering keeper', 'medium', 'Collect or deliver 25 offerings', (p) => p.stats.offerings >= 25],
+  ['no-closet', 'NC', 'Nowhere to hide', 'difficult', 'Win without entering a closet', (p, c) => c?.won && c.hides === 0],
+  ['no-sprint', 'NS', 'Measured steps', 'difficult', 'Win without sprinting', (p, c) => c?.won && !c.sprinted],
+  ['five-delivery', 'V', 'One-person procession', 'difficult', 'Deliver 5 offerings in one game', (p, c) => c?.offerings >= 5],
+  ['tung-five', 'T5', 'Five beats', 'difficult', 'Catch 5 runners in one game', (p, c) => c?.caught >= 5],
+  ['century', 'HX', 'Hundred nights', 'difficult', 'Finish 100 games', (p) => p.stats.games >= 100],
+  ['rich', 'TB', 'Vault of dawn', 'difficult', 'Hold 10,000 T-bucks', (p) => p.coins >= 10000],
+  ['perfect-tung', '0', 'Silence before dawn', 'impossible', 'Win as Tung before any offering reaches home', (p, c) => c?.role === 'tung' && c.won && c.teamOfferings === 0],
+  ['full-run', '6', 'The whole procession', 'impossible', 'Personally deliver 6 offerings and win', (p, c) => c?.won && c.offerings >= 6],
+  ['level-100', '100', 'Sahur legend', 'impossible', 'Reach level 100', (p) => profileLevel(p.xp) >= 100],
+  ['hidden-one', '?', 'Breathless', 'difficult', '???', (p, c) => c?.won && c.hides >= 4 && !c.sprinted],
+  ['hidden-two', '...', 'The street forgot', 'impossible', '???', (p, c) => c?.role === 'tung' && c.won && c.caught >= 8],
+].map(([id, symbol, name, rarity, description, test]) => ({ id, symbol, name, rarity, description, test }));
+
+const DEFAULT_PROFILE = {
+  version: 1, coins: 0, xp: 0, pass: false, passClaimed: 0,
+  owned: ['default-shirt'], equipped: {}, achievements: [], sigil: '',
+  stats: { games: 0, wins: 0, runnerWins: 0, tungWins: 0, offerings: 0, caught: 0, hides: 0, distance: 0 },
+};
+function normalizeProfile(raw) {
+  const p = Object.assign({}, DEFAULT_PROFILE, raw || {});
+  p.coins = Math.max(0, Math.floor(Number(p.coins) || 0));
+  p.xp = Math.max(0, Math.floor(Number(p.xp) || 0));
+  p.owned = [...new Set(Array.isArray(p.owned) ? p.owned.map(String).slice(0, 500) : DEFAULT_PROFILE.owned)];
+  p.achievements = [...new Set(Array.isArray(p.achievements) ? p.achievements.map(String) : [])];
+  p.equipped = p.equipped && typeof p.equipped === 'object' ? p.equipped : {};
+  p.stats = Object.assign({}, DEFAULT_PROFILE.stats, p.stats || {});
+  for (const key of Object.keys(DEFAULT_PROFILE.stats)) p.stats[key] = Math.max(0, Number(p.stats[key]) || 0);
+  p.pass = p.pass === true;
+  p.passClaimed = Math.max(0, Math.min(100, Math.floor(Number(p.passClaimed) || 0)));
+  p.sigil = typeof p.sigil === 'string' ? p.sigil.slice(0, 40) : '';
+  return p;
+}
+function xpForLevel(level) { return level <= 1 ? 0 : 50 * (level - 1) * (level + 6); }
+function profileLevel(xp) {
+  let level = 1;
+  while (level < 100 && xp >= xpForLevel(level + 1)) level++;
+  return level;
+}
+let profile = normalizeProfile(readStored('tung-profile-guest', readStored('tung-profile', DEFAULT_PROFILE)));
+let profileAccount = false;
+let profileCloudReady = false;
+let profileUsername = 'GUEST';
+let profileSaveTimer = null;
+
+function saveProfile() {
+  if (!profileAccount) store('tung-profile-guest', profile);
+  renderProfileStrip();
+  if (!profileAccount || !profileCloudReady) return;
+  clearTimeout(profileSaveTimer);
+  profileSaveTimer = setTimeout(() => fetch('/_guard/profile', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(profile),
+  }).catch(() => {}), 150);
+}
+async function loadAccountProfile() {
+  if (location.hostname !== 'tung.andrenijman.com') { renderProfileStrip(); return; }
+  try {
+    const status = await fetch('/_guard/status', { cache: 'no-store' });
+    const identity = await status.json();
+    profileAccount = !!identity.signedIn; profileUsername = identity.username || 'GUEST';
+    if (profileAccount) {
+      const response = await fetch('/_guard/profile', { cache: 'no-store' });
+      if (response.ok) {
+        const data = await response.json();
+        profile = normalizeProfile(data.profile || DEFAULT_PROFILE);
+        profileCloudReady = true;
+        if (!data.profile) saveProfile();
+      }
+    }
+  } catch { /* local relay without the access worker */ }
+  renderProfileStrip();
+}
+function renderProfileStrip() {
+  $('profile-level').textContent = String(profileLevel(profile.xp));
+  $('profile-coins').textContent = profile.coins.toLocaleString();
+  $('profile-user').textContent = profileAccount ? profileUsername : 'GUEST - LOCAL SAVE';
+}
+function sigilSymbol(id) { return ACHIEVEMENTS.find(item => item.id === id)?.symbol || ''; }
+function playerName(player) {
+  const symbol = sigilSymbol(player?.sigil);
+  return `${symbol ? `[${symbol}] ` : ''}${player?.name || 'guest'}`;
+}
+function outfitColor(player) {
+  return ({ 'shirt-eclipse': '#5d6688', 'shirt-sunrise': '#d07848', 'pass-5-shirt': '#7e8b70',
+    'pass-30-shirt': '#866b58', 'pass-55-shirt': '#7b657f', 'pass-80-shirt': '#9b864f' })[player?.look?.shirt] || player.color;
+}
+function grantPassRewards() {
+  if (!profile.pass) return;
+  const level = profileLevel(profile.xp);
+  for (const reward of PASS_REWARDS) {
+    if (reward.level <= profile.passClaimed || reward.level > level) continue;
+    if (reward.coins) profile.coins += reward.coins;
+    if (reward.id) profile.owned.push(reward.id);
+  }
+  profile.owned = [...new Set(profile.owned)];
+  profile.passClaimed = Math.max(profile.passClaimed, level);
+}
+function unlockAchievements(context) {
+  for (const achievement of ACHIEVEMENTS) {
+    if (!profile.achievements.includes(achievement.id) && achievement.test(profile, context)) {
+      profile.achievements.push(achievement.id);
+    }
+  }
+}
+function grantMatchRewards(context) {
+  const timeScore = Math.min(30, Math.floor((context.seconds || 0) / 30) * 3);
+  const contribution = (context.offerings || 0) * 35 + (context.caught || 0) * 40;
+  const coins = 20 + contribution + (context.won ? 25 : 0) + (context.alive ? 15 : 0) + timeScore;
+  const xp = 60 + contribution * 2 + (context.won ? 70 : 20) + timeScore * 2 + Math.min(80, Math.floor((context.distance || 0) / 8));
+  profile.coins += coins; profile.xp += xp; profile.stats.games++;
+  if (context.won) profile.stats.wins++;
+  if (context.role === 'tung') { profile.stats.caught += context.caught || 0; if (context.won) profile.stats.tungWins++; }
+  else { profile.stats.offerings += context.offerings || 0; if (context.won) profile.stats.runnerWins++; }
+  profile.stats.hides += context.hides || 0; profile.stats.distance += Math.floor(context.distance || 0);
+  unlockAchievements(context); grantPassRewards(); saveProfile();
+  return { coins, xp };
+}
+
+function catalogCard(title, description, action, legendary = false) {
+  const card = document.createElement('div'); card.className = `catalog-item${legendary ? ' legendary' : ''}`;
+  const heading = document.createElement('h3'); heading.textContent = title;
+  const detail = document.createElement('p'); detail.textContent = description;
+  card.append(heading, detail);
+  if (action) card.appendChild(action);
+  return card;
+}
+function actionButton(label, handler, disabled = false) {
+  const button = document.createElement('button'); button.className = 'ghost small';
+  button.textContent = label; button.disabled = disabled; button.onclick = handler;
+  return button;
+}
+function renderPass() {
+  const level = profileLevel(profile.xp), list = $('pass-catalog'); list.replaceChildren();
+  $('pass-summary').textContent = `level ${level} - every level rewards you; every fifth level is a cosmetic`;
+  $('b-buy-pass').style.display = profile.pass ? 'none' : '';
+  for (const reward of PASS_REWARDS) {
+    const unlocked = profile.pass && reward.level <= level;
+    list.appendChild(catalogCard(`LEVEL ${reward.level} - ${reward.name}`,
+      unlocked ? 'UNLOCKED' : reward.level <= level ? 'BUY THE PASS TO CLAIM' : 'LOCKED', null, reward.legendary));
+  }
+}
+function buyItem(item) {
+  if (profile.owned.includes(item.id) || profile.coins < item.price) return;
+  profile.coins -= item.price; profile.owned.push(item.id); saveProfile(); renderShop();
+}
+function renderShop() {
+  const list = $('shop-catalog'); list.replaceChildren();
+  for (const item of SHOP_ITEMS) {
+    const owned = profile.owned.includes(item.id);
+    list.appendChild(catalogCard(item.name, `${item.slot.toUpperCase()} - ${item.price.toLocaleString()} T-bucks`,
+      actionButton(owned ? 'OWNED' : 'BUY', () => buyItem(item), owned || profile.coins < item.price), true));
+  }
+  for (const bundle of SHOP_BUNDLES) {
+    const owned = bundle.includes.every(id => profile.owned.includes(id));
+    list.appendChild(catalogCard(bundle.name, `${bundle.includes.length} items - ${bundle.price.toLocaleString()} T-bucks (bundle discount)`,
+      actionButton(owned ? 'OWNED' : 'BUY BUNDLE', () => {
+        if (owned || profile.coins < bundle.price) return;
+        profile.coins -= bundle.price; profile.owned.push(...bundle.includes); profile.owned = [...new Set(profile.owned)];
+        saveProfile(); renderShop();
+      }, owned || profile.coins < bundle.price), true));
+  }
+}
+function allCosmetics() {
+  return [...SHOP_ITEMS, ...PASS_REWARDS.filter(reward => reward.id)];
+}
+function renderWardrobe() {
+  const list = $('wardrobe-catalog'); list.replaceChildren();
+  const owned = allCosmetics().filter(item => profile.owned.includes(item.id));
+  if (!owned.length) list.appendChild(catalogCard('EMPTY RAIL', 'Earn Sahur Pass rewards or visit the item shop.'));
+  for (const item of owned) {
+    const equipped = profile.equipped[item.slot] === item.id;
+    list.appendChild(catalogCard(item.name, item.slot.toUpperCase(), actionButton(equipped ? 'EQUIPPED' : 'EQUIP', () => {
+      profile.equipped[item.slot] = item.id; saveProfile(); renderWardrobe();
+    }, equipped), !!item.legendary));
+  }
+}
+function renderAchievements() {
+  const list = $('achievement-catalog'); list.replaceChildren();
+  for (const achievement of ACHIEVEMENTS) {
+    const earned = profile.achievements.includes(achievement.id);
+    const icon = `<span class="sigil"><span>${achievement.symbol}</span></span>`;
+    const card = catalogCard(achievement.name, earned ? achievement.description : (achievement.description === '???' ? '???' : `LOCKED - ${achievement.description}`),
+      earned ? actionButton(profile.sigil === achievement.id ? 'EQUIPPED' : 'EQUIP SIGIL', () => {
+        profile.sigil = achievement.id; saveProfile(); renderAchievements();
+      }, profile.sigil === achievement.id) : null);
+    card.classList.add(`rarity-${achievement.rarity}`);
+    card.querySelector('h3').insertAdjacentHTML('afterbegin', icon);
+    list.appendChild(card);
+  }
+}
+
+for (const button of document.querySelectorAll('[data-profile-screen]')) {
+  button.onclick = () => {
+    const screen = button.dataset.profileScreen;
+    if (screen === 'scr-pass') renderPass();
+    if (screen === 'scr-shop') renderShop();
+    if (screen === 'scr-wardrobe') renderWardrobe();
+    if (screen === 'scr-achievements') renderAchievements();
+    showScreen(screen);
+  };
+}
+for (const button of document.querySelectorAll('.profile-back')) button.onclick = () => showScreen('scr-main');
+$('b-buy-pass').onclick = () => {
+  if (profile.pass || profile.coins < 1000) return;
+  profile.coins -= 1000; profile.pass = true; grantPassRewards(); saveProfile(); renderPass();
+};
+loadAccountProfile();
+
 let soloSettings = readStored('tung-solo-settings', DEFAULT_SETTINGS);
 
 const SETTING_DEFS = [
   ['mapN', 'MAP SIZE', [[15, 'small - 15 x 15'], [21, 'standard - 21 x 21'], [27, 'large - 27 x 27'], [33, 'huge - 33 x 33']]],
   ['lanterns', 'LANTERNS', [[2, '2'], [4, '4'], [6, '6'], [8, '8'], [10, '10'], [12, '12']]],
   ['night', 'NIGHT TIMER', [[120, '2 minutes'], [180, '3 minutes'], [240, '4 minutes'], [300, '5 minutes'], [420, '7 minutes'], [600, '10 minutes'], [900, '15 minutes']]],
-  ['torch', 'TORCH', [[60, '1 minute'], [90, '1.5 minutes'], [125, '2 minutes'], [180, '3 minutes'], [300, '5 minutes']]],
+  ['torch', 'TORCH', [[30, '30 seconds'], [60, '1 minute'], [90, '1.5 minutes'], [125, '2 minutes'], [180, '3 minutes'], [300, '5 minutes'], [600, '10 minutes'], [900, '15 minutes'], [1800, '30 minutes'], [0, 'infinite - no battery bar']]],
+  ['stamina', 'STAMINA', [['veryLow', 'very low'], ['low', 'low'], ['medium', 'medium'], ['high', 'high'], ['veryHigh', 'very high'], ['infinite', 'infinite - no stamina bar']]],
+  ['tungIntel', 'TUNG OBJECTIVES', [[false, 'hidden (balanced)'], [true, 'visible']]],
+  ['tungs', 'PLAYER TUNGS', [[1, '1'], [2, 'up to 2'], [3, 'up to 3']]],
   ['tracks', 'TUNG TRACKS', [['off', 'off'], ['faint', 'faint / delayed'], ['normal', 'balanced'], ['strong', 'strong / recent']]],
 ];
 
@@ -2303,7 +2651,8 @@ function renderSettings(el, settings, editable, changed) {
       }
       select.addEventListener('change', () => {
         const sample = choices[0][0];
-        settings[key] = typeof sample === 'number' ? Number(select.value) : select.value;
+        settings[key] = typeof sample === 'number' ? Number(select.value)
+          : typeof sample === 'boolean' ? select.value === 'true' : select.value;
         changed(settings);
       });
       row.appendChild(select);
@@ -2318,6 +2667,10 @@ function renderSettings(el, settings, editable, changed) {
 }
 
 function showScreen(id, thin = false) {
+  if (id) {
+    chatOpen = false;
+    $('team-chat').classList.remove('on', 'typing');
+  }
   let active = null;
   for (const s of document.querySelectorAll('.scr')) {
     const on = s.id === id;
@@ -2381,7 +2734,7 @@ function renderAvailableLobbies(lobbies) {
     code.textContent = String(lobby.code || '').slice(0, 5);
     const meta = document.createElement('div'); meta.className = 'lobby-meta';
     const primary = document.createElement('div');
-    primary.textContent = `${String(lobby.host || 'guest').slice(0, 14)}  ·  ${Number(lobby.players) || 0}/${Number(lobby.max) || 5}`;
+    primary.textContent = `${String(lobby.host || 'guest').slice(0, 14)}  ·  ${Number(lobby.players) || 0}/${Number(lobby.max) || 10}`;
     const detail = document.createElement('div'); detail.className = 'lobby-detail';
     const settings = clampGameSettings(lobby.settings);
     detail.textContent = `${settings.mapN}x${settings.mapN}  ·  ${settings.lanterns} lanterns  ·  ${fmtClock(settings.night)}`;
@@ -2440,6 +2793,8 @@ function goMain() {
   stopLobbyBrowser();
   if (net) { net.close(); net = null; }
   paused = false;
+  chatOpen = false;
+  $('team-chat').classList.remove('on', 'typing');
   game.state = 'menu';
   showScreen('scr-main');
   ctx.fillStyle = 'black'; ctx.fillRect(0, 0, WIN_W, WIN_H);
@@ -2551,6 +2906,7 @@ class Net {
     if (msg.t === 'begin') { this.onBegin(msg); return; }
     if (msg.t === 'snap') { this.onSnapshot(msg); return; }
     if (msg.t === 'ev') { this.onEvent(msg); return; }
+    if (msg.t === 'chat') { this.onChat(msg); return; }
     if (msg.t === 'over') { this.onOver(msg); return; }
     if (msg.t === 'roster') { this.onRoster(msg); return; }
     if (msg.t === 'need-manifest') { if (this.you === this.host) this.sendManifest(); return; }
@@ -2574,6 +2930,7 @@ class Net {
 
   onBegin(msg) {
     this.phase = 'play'; this.settings = clampGameSettings(msg.settings);
+    $('chat-log').replaceChildren();
     const old = this.players;
     this.players = new Map();
     for (const p of msg.players) {
@@ -2667,9 +3024,32 @@ class Net {
     }
   }
 
+  onChat(msg) {
+    const log = $('chat-log');
+    const line = document.createElement('div'); line.className = 'chat-line';
+    const name = document.createElement('span'); name.className = 'chat-name';
+    const symbol = sigilSymbol(msg.sigil);
+    name.textContent = `${symbol ? `[${symbol}] ` : ''}${String(msg.name || 'runner').slice(0, 14)}: `;
+    line.append(name, document.createTextNode(String(msg.m || '').slice(0, 160)));
+    log.appendChild(line);
+    while (log.children.length > 6) log.firstElementChild.remove();
+    $('team-chat').classList.add('on');
+  }
+
   onOver(msg) {
+    if (this.phase !== 'play') return;
     this.phase = 'over';
     game.state = 'mpover';
+    const me = this.players.get(this.you);
+    const score = (msg.scores || []).find(row => row.id === this.you) || {};
+    const tungWin = msg.result === 'hunted' || msg.result === 'dawn';
+    const won = me && (me.role === 'tung' ? tungWin : msg.result === 'escaped');
+    msg.reward = msg.result === 'abandoned' ? null : grantMatchRewards({
+      role: me?.role || 'survivor', won: !!won, alive: !!score.alive,
+      offerings: Number(score.delivered) || 0, caught: Number(score.caught) || 0,
+      teamOfferings: Number(msg.delivered) || 0, seconds: this.settings.night - (Number(msg.timeLeft) || 0),
+      distance: game.runStats.distance, hides: game.runStats.hides, sprinted: game.runStats.sprinted,
+    });
     if (document.exitPointerLock) document.exitPointerLock();
     renderResult(this, msg);
     showScreen('scr-over');
@@ -2708,7 +3088,10 @@ class Net {
 
   get(id) { return this.players.get(id) || null; }
   remoteList() { return [...this.players.values()].filter(p => p.id !== this.you); }
-  tungRemote() { return [...this.players.values()].find(p => p.role === 'tung' && p.id !== this.you) || null; }
+  tungRemote(x = 0, y = 0) {
+    return [...this.players.values()].filter(p => p.role === 'tung' && p.id !== this.you && p.pos)
+      .sort((a, b) => Math.hypot(a.pos[0] - x, a.pos[1] - y) - Math.hypot(b.pos[0] - x, b.pos[1] - y))[0] || null;
+  }
   allList() {
     const out = [];
     for (const p of this.players.values()) {
@@ -2734,17 +3117,19 @@ function connectMultiplayer(kind, codeOverride) {
   store('tung-identity', { name, relay });
   if (net) net.close();
   net = new Net(relay);
+  const identity = { name, sigil: profile.sigil, look: profile.equipped };
   net.connect(kind === 'create'
-    ? { t: 'create', name, password, settings: DEFAULT_SETTINGS }
-    : { t: 'join', name, code, password });
+    ? { t: 'create', ...identity, password, settings: DEFAULT_SETTINGS }
+    : { t: 'join', ...identity, code, password });
 }
 $('b-create').onclick = () => connectMultiplayer('create');
 $('b-join').onclick = () => connectMultiplayer('join');
 $('i-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') connectMultiplayer('join'); });
 
-function renderLobby(n, max = 5, min = 2) {
+function renderLobby(n, max = 10, min = 2) {
   $('lobby-code').textContent = n.code;
   $('lobby-count').textContent = String(n.players.size);
+  $('lobby-max').textContent = String(max);
   $('lobby-err').textContent = '';
   const me = n.players.get(n.you);
   const list = $('lobby-players'); list.innerHTML = '';
@@ -2753,7 +3138,7 @@ function renderLobby(n, max = 5, min = 2) {
   for (const p of n.players.values()) {
     const li = document.createElement('li');
     const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = p.color;
-    const name = document.createElement('span'); name.className = 'pname'; name.textContent = p.name;
+    const name = document.createElement('span'); name.className = 'pname'; name.textContent = playerName(p);
     const tags = [];
     if (p.id === n.host) tags.push('HOST');
     if (p.id === n.you) tags.push('YOU');
@@ -2778,7 +3163,6 @@ function renderLobby(n, max = 5, min = 2) {
   $('b-start').disabled = n.players.size < min;
   $('b-start').textContent = n.players.size < min ? `NEED ${min - n.players.size} MORE` : 'START THE NIGHT';
   $('b-start').onclick = () => n.send({ t: 'start' });
-  void max;
 }
 
 $('b-leave').onclick = () => goMain();
@@ -2790,7 +3174,8 @@ function renderResult(n, msg) {
   const won = me && (me.role === 'tung' ? tungWin : survivorWin);
   const titles = { escaped: 'THEY MADE IT HOME', hunted: 'THE STREET IS EMPTY', dawn: 'DAWN', abandoned: 'NIGHT ABANDONED' };
   $('over-title').textContent = won ? 'YOU WIN' : (msg.result === 'abandoned' ? titles.abandoned : 'YOU LOSE');
-  $('over-sub').textContent = `${titles[msg.result] || msg.result} - ${msg.blurb || ''}`;
+  const earned = msg.reward ? ` +${msg.reward.coins} T-bucks  +${msg.reward.xp} XP` : '';
+  $('over-sub').textContent = `${titles[msg.result] || msg.result} - ${msg.blurb || ''}${earned}`;
   const table = $('over-scores'); table.innerHTML = '';
   for (const s of msg.scores || []) {
     const tr = document.createElement('tr');
@@ -2798,7 +3183,7 @@ function renderResult(n, msg) {
     const dot = document.createElement('span'); dot.className = 'dot';
     dot.style.display = 'inline-block'; dot.style.background = String(s.color || '#85858d');
     dotCell.appendChild(dot);
-    const name = document.createElement('td'); name.textContent = String(s.name || 'guest');
+    const name = document.createElement('td'); name.textContent = playerName(s);
     const status = document.createElement('td');
     status.textContent = s.role === 'tung' ? 'THE TUNG' : (s.alive ? 'SURVIVED' : 'CAUGHT');
     const delivered = document.createElement('td');
@@ -2826,6 +3211,25 @@ function showDisconnected(message) {
 // input, audio and pause
 // ---------------------------------------------------------------------------
 function clearKeys() { for (const k of Object.keys(keys)) keys[k] = false; }
+let chatOpen = false;
+
+function openChat() {
+  if (game.mode !== 'mp' || game.role === 'tung' || !game.alive || paused) return;
+  chatOpen = true; clearKeys();
+  $('team-chat').classList.add('on', 'typing');
+  $('chat-input').value = '';
+  if (document.exitPointerLock) document.exitPointerLock();
+  $('chat-input').focus();
+}
+function closeChat(send = false) {
+  if (!chatOpen) return;
+  const message = $('chat-input').value.trim();
+  if (send && message && net) net.send({ t: 'chat', m: message });
+  chatOpen = false;
+  $('team-chat').classList.remove('typing');
+  resumeGuardUntil = performance.now() + 700;
+  startGesture();
+}
 
 function startGesture() {
   audio.init();
@@ -2874,6 +3278,12 @@ function restartSolo() {
 }
 
 window.addEventListener('keydown', (e) => {
+  if (chatOpen) {
+    if (e.code === 'Enter') closeChat(true);
+    else if (e.code === 'Escape') closeChat(false);
+    if (e.code === 'Enter' || e.code === 'Escape') e.preventDefault();
+    return;
+  }
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
   const code = e.code;
   if (paused) {
@@ -2885,6 +3295,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (code === 'Escape') { pauseGame(); e.preventDefault(); return; }
+  if (!e.repeat && code === 'KeyT') { openChat(); e.preventDefault(); return; }
   if (!game.alive && game.mode === 'mp') {
     e.preventDefault(); return;
   }
@@ -2915,7 +3326,7 @@ document.addEventListener('mousemove', (e) => {
   if (document.pointerLockElement === canvas) mdxAccum += e.movementX;
 });
 document.addEventListener('pointerlockchange', () => {
-  if (document.pointerLockElement !== canvas && game.state === 'play' && !paused &&
+  if (document.pointerLockElement !== canvas && game.state === 'play' && !paused && !chatOpen &&
       performance.now() > resumeGuardUntil) pauseGame();
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
@@ -2981,10 +3392,21 @@ function frame(now) {
     renderPlay(now);
     if (whisperHandle) whisperHandle.gain.gain.value = game.role === 'tung' ? 0 : (1 - game.composure) * 0.8;
   } else if (game.mode === 'solo') {
+    if (!game.rewarded && ['caught', 'dawn', 'win'].includes(game.state)) {
+      game.rewarded = true;
+      game.reward = grantMatchRewards({
+        role: 'survivor', won: game.state === 'win', alive: game.state === 'win',
+        offerings: game.collected, teamOfferings: game.collected,
+        seconds: game.nightSeconds - game.timeLeft, distance: game.runStats.distance,
+        hides: game.runStats.hides, sprinted: game.runStats.sprinted,
+      });
+    }
     if (whisperHandle) whisperHandle.gain.gain.value = 0;
     if (game.state === 'caught') { caughtTimer += dt; screenCaught(ctx, caughtTimer); }
     else if (game.state === 'dawn') screenDawn(ctx, game);
     else if (game.state === 'win') screenWin(ctx, game);
+    if (['caught', 'dawn', 'win'].includes(game.state) && game.reward) drawText(ctx, `+${game.reward.coins} T-BUCKS   +${game.reward.xp} XP`, WIN_W / 2, WIN_H - 104, AMBER,
+      { center: true, font: 'bold 16px monospace' });
   }
 }
 

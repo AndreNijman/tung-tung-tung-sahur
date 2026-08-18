@@ -38,7 +38,7 @@
 //
 // Consequence, documented rather than hidden: every client is sent every live
 // position, so a modified client can see through walls. This is a game for a
-// lobby of five friends, not a ranked ladder. The one thing that IS withheld
+// lobby of friends, not a ranked ladder. The one thing that IS withheld
 // is which alcove a hidden player is inside -- see `snapshot()`.
 'use strict';
 
@@ -64,7 +64,7 @@ const MOVE_BURST = 1.0;       // one small latency/reconciliation burst
 const SWAP_COOLDOWN_MS = 12000;
 
 const TICK_HZ = 20;
-const MAX_PLAYERS = 5;
+const MAX_PLAYERS = 10;
 const MIN_PLAYERS = 2;
 const ROOM_IDLE_MS = 45 * 60 * 1000;
 const PING_MS = 25000;
@@ -75,14 +75,17 @@ const PASSWORD_ATTEMPT_WINDOW_MS = 60000;
 // A room code you can read out loud over a call: no O/0, no I/1, no vowels
 // that could accidentally spell something.
 const CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXYZ23456789';
-const PLAYER_COLORS = ['#e0a040', '#68c0d8', '#8ad06a', '#d878b8', '#c8c0a8'];
+const PLAYER_COLORS = ['#e0a040', '#68c0d8', '#8ad06a', '#d878b8', '#c8c0a8', '#e07058', '#7890d8', '#b098e0', '#58b890', '#d0cc58'];
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 
 const DEFAULT_SETTINGS = {
   mapN: 21,        // odd, 15..33
   lanterns: 6,     // offerings to gather
   night: 300,      // seconds on the clock
-  torch: 125,      // seconds of torch battery
+  torch: 125,      // seconds of torch battery; 0 is infinite
+  stamina: 'medium',
+  tungIntel: false,
+  tungs: 1,
   tracks: 'normal',// footprint visibility for the tung: off|faint|normal|strong
 };
 
@@ -96,7 +99,10 @@ function clampSettings(raw) {
   }
   if (Number.isFinite(raw.lanterns)) s.lanterns = Math.max(2, Math.min(12, Math.round(raw.lanterns)));
   if (Number.isFinite(raw.night)) s.night = Math.max(60, Math.min(900, Math.round(raw.night)));
-  if (Number.isFinite(raw.torch)) s.torch = Math.max(20, Math.min(900, Math.round(raw.torch)));
+  if (Number.isFinite(raw.torch)) s.torch = raw.torch === 0 ? 0 : Math.max(20, Math.min(1800, Math.round(raw.torch)));
+  if (['veryLow', 'low', 'medium', 'high', 'veryHigh', 'infinite'].includes(raw.stamina)) s.stamina = raw.stamina;
+  if (typeof raw.tungIntel === 'boolean') s.tungIntel = raw.tungIntel;
+  if (Number.isFinite(raw.tungs)) s.tungs = Math.max(1, Math.min(3, Math.round(raw.tungs)));
   if (['off', 'faint', 'normal', 'strong'].includes(raw.tracks)) s.tracks = raw.tracks;
   return s;
 }
@@ -301,12 +307,25 @@ function sanitizeName(n) {
   const s = String(n || '').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 14);
   return s || 'guest';
 }
+function sanitizeChat(value) {
+  return String(value || '').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 160);
+}
+function sanitizeCosmetics(message) {
+  const clean = value => String(value || '').replace(/[^a-z0-9-]/gi, '').slice(0, 40);
+  const look = {};
+  if (message.look && typeof message.look === 'object') {
+    for (const [slot, value] of Object.entries(message.look).slice(0, 16)) look[clean(slot)] = clean(value);
+  }
+  return { sigil: clean(message.sigil), look };
+}
 
 class Player {
-  constructor(conn, name) {
+  constructor(conn, name, cosmetics = {}) {
     this.id = nextPlayerId++;
     this.conn = conn;
     this.name = sanitizeName(name);
+    this.sigil = cosmetics.sigil || '';
+    this.look = cosmetics.look || {};
     this.vote = null;          // player id, 'random', or null
     this.role = 'survivor';
     this.x = 1.5; this.y = 1.5; this.a = 0;
@@ -315,6 +334,7 @@ class Player {
     this.alive = true;
     this.carrying = -1;        // item index, -1 for empty handed
     this.delivered = 0;
+    this.caught = 0;
     this.caughtAt = null;
     this.lastInput = 0;
     this.lastMoveAt = 0;
@@ -323,9 +343,10 @@ class Player {
     this.swapCooldownUntil = 0;
     this.colorIdx = 0;
     this.spawnIdx = 0;
+    this.chatTimes = [];
   }
   publicLobby() {
-    return { id: this.id, name: this.name, vote: this.vote, color: PLAYER_COLORS[this.colorIdx] };
+    return { id: this.id, name: this.name, sigil: this.sigil, look: this.look, vote: this.vote, color: PLAYER_COLORS[this.colorIdx] };
   }
 }
 
@@ -360,6 +381,10 @@ class Room {
     }
   }
 
+  broadcastSurvivors(msg) {
+    for (const p of this.players.values()) if (p.role === 'survivor') p.conn.send(msg);
+  }
+
   add(player) {
     if (this.players.size >= MAX_PLAYERS) return false;
     const used = new Set([...this.players.values()].map(p => p.colorIdx));
@@ -384,7 +409,7 @@ class Room {
       this.hostId = next.done ? null : next.value;
     }
     if (this.phase === 'play') {
-      if (p.role === 'tung') {
+      if (p.role === 'tung' && !this.tungs().length) {
         this.finish('abandoned', 'the tung left the street');
       } else {
         // A survivor rage-quitting must not strand the Tung in an empty room.
@@ -466,7 +491,13 @@ class Room {
       this.toHost({ t: 'err', m: `need at least ${MIN_PLAYERS} players` });
       return;
     }
-    const { id: tungId, how } = this.pickTung();
+    const { id: firstTungId, how } = this.pickTung();
+    const tungIds = [firstTungId];
+    const candidates = [...this.players.keys()].filter(id => id !== firstTungId);
+    const wanted = Math.min(this.settings.tungs, this.players.size - 1);
+    while (tungIds.length < wanted && candidates.length) {
+      tungIds.push(candidates.splice(crypto.randomInt(candidates.length), 1)[0]);
+    }
     this.seed = crypto.randomInt(0x7fffffff);
     this.phase = 'play';
     this.manifest = null;
@@ -479,11 +510,12 @@ class Room {
 
     const order = [...this.players.values()];
     order.forEach((p, i) => {
-      p.role = p.id === tungId ? 'tung' : 'survivor';
+      p.role = tungIds.includes(p.id) ? 'tung' : 'survivor';
       p.alive = true;
       p.hidden = false;
       p.carrying = -1;
       p.delivered = 0;
+      p.caught = 0;
       p.caughtAt = null;
       p.flags = 0;
       p.spawnIdx = i;
@@ -498,10 +530,11 @@ class Room {
       t: 'begin',
       seed: this.seed,
       settings: this.settings,
-      tung: tungId,
+      tung: firstTungId,
+      tungs: tungIds,
       how,
       players: order.map(p => ({
-        id: p.id, name: p.name, role: p.role,
+        id: p.id, name: p.name, sigil: p.sigil, look: p.look, role: p.role,
         color: PLAYER_COLORS[p.colorIdx], spawnIdx: p.spawnIdx,
       })),
     });
@@ -603,8 +636,8 @@ class Room {
   survivors() {
     return [...this.players.values()].filter(p => p.role === 'survivor');
   }
-  tung() {
-    return [...this.players.values()].find(p => p.role === 'tung') || null;
+  tungs() {
+    return [...this.players.values()].filter(p => p.role === 'tung');
   }
 
   resolvePickups() {
@@ -639,15 +672,18 @@ class Room {
   // Catches are resolved here rather than claimed by the tung's client, so the
   // catch cannot be faked and does not need a round trip to be believed.
   resolveCatches() {
-    const t = this.tung();
-    if (!t || !t.alive || !this.manifest) return;
-    for (const p of this.survivors()) {
-      if (!p.alive || p.hidden) continue;
-      if ((p.x - t.x) ** 2 + (p.y - t.y) ** 2 > CATCH_DIST ** 2) continue;
-      p.alive = false;
-      p.caughtAt = [p.x, p.y];
-      if (p.carrying >= 0) this.dropItem(p);
-      this.broadcast({ t: 'ev', e: 'caught', who: p.id, x: p.x, y: p.y });
+    if (!this.manifest) return;
+    for (const t of this.tungs()) {
+      if (!t.alive) continue;
+      for (const p of this.survivors()) {
+        if (!p.alive || p.hidden) continue;
+        if ((p.x - t.x) ** 2 + (p.y - t.y) ** 2 > CATCH_DIST ** 2) continue;
+        p.alive = false;
+        t.caught++;
+        p.caughtAt = [p.x, p.y];
+        if (p.carrying >= 0) this.dropItem(p);
+        this.broadcast({ t: 'ev', e: 'caught', who: p.id, by: t.id, x: p.x, y: p.y });
+      }
     }
   }
 
@@ -678,7 +714,8 @@ class Room {
       k: this.tick,
       tl: Math.max(0, round2(this.timeLeft)),
       p: ps,
-      it: this.items.map(it => [it.state, it.carrier, round2(it.x), round2(it.y)]),
+      it: this.items.map(it => viewer?.role === 'tung' && !this.settings.tungIntel
+        ? [it.state, -1, 0, 0] : [it.state, it.carrier, round2(it.x), round2(it.y)]),
     };
   }
 
@@ -712,8 +749,8 @@ class Room {
       total: this.items.length,
       timeLeft: Math.max(0, round2(this.timeLeft)),
       scores: [...this.players.values()].map(p => ({
-        id: p.id, name: p.name, role: p.role, alive: p.alive,
-        delivered: p.delivered, color: PLAYER_COLORS[p.colorIdx],
+        id: p.id, name: p.name, sigil: p.sigil, look: p.look, role: p.role, alive: p.alive,
+        delivered: p.delivered, caught: p.caught, color: PLAYER_COLORS[p.colorIdx],
       })),
     });
   }
@@ -752,7 +789,7 @@ function handle(session, msg) {
       session.joinAttempts.push(now);
     }
     if (session.room) leaveRoom(session);
-    const player = new Player(session.conn, msg.name);
+    const player = new Player(session.conn, msg.name, sanitizeCosmetics(msg));
     let room;
     if (t === 'create') {
       room = new Room(makeCode());
@@ -764,7 +801,7 @@ function handle(session, msg) {
       room = rooms.get(code);
       if (!room) { session.conn.send({ t: 'err', m: 'no lobby with that code', fatal: true }); return; }
       if (room.phase !== 'lobby') { session.conn.send({ t: 'err', m: 'that night has already started', fatal: true }); return; }
-      if (room.players.size >= MAX_PLAYERS) { session.conn.send({ t: 'err', m: 'lobby is full (5)', fatal: true }); return; }
+      if (room.players.size >= MAX_PLAYERS) { session.conn.send({ t: 'err', m: `lobby is full (${MAX_PLAYERS})`, fatal: true }); return; }
       if (room.passwordHash) {
         const attemptKey = passwordAttemptKey(session, code);
         const attempts = recentPasswordAttempts(attemptKey);
@@ -896,6 +933,17 @@ function handle(session, msg) {
       // Only the mover is told. Broadcasting a swap would hand the tung the
       // very information the paired alcoves exist to deny it.
       me.conn.send({ t: 'ev', e: 'swap', from, to, x: me.x, y: me.y });
+      break;
+    }
+
+    case 'chat': {
+      if (room.phase !== 'play' || me.role !== 'survivor' || !me.alive) break;
+      const now = Date.now();
+      me.chatTimes = me.chatTimes.filter(at => now - at < 5000);
+      if (me.chatTimes.length >= 5) break;
+      me.chatTimes.push(now);
+      const message = sanitizeChat(msg.m);
+      if (message) room.broadcastSurvivors({ t: 'chat', from: me.id, name: me.name, sigil: me.sigil, m: message });
       break;
     }
 

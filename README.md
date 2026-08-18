@@ -28,6 +28,7 @@ fight it. You can only be somewhere it is not looking.
 | `F` | torch — you see further, so does it |
 | `E` | duck into a shelter alcove |
 | `Q` | slip through to the paired alcove while hidden |
+| `T` | runner team chat; player Tungs cannot receive it |
 | `Esc` | pause — also fires on alt-tab or losing pointer lock |
 | `R` | restart from a solo end screen |
 
@@ -56,14 +57,30 @@ the rooftops while you are still out there.
 ## Multiplayer
 
 Create a lobby and share its five-character code, or join directly from the live
-available-lobbies list. A lobby holds at most five players and starts with two
+available-lobbies list. A lobby holds at most ten players and starts with two
 or more. An optional password can protect the room; relays store only its
 SHA-256 digest and the public list exposes only a `LOCKED` marker. Everyone
-votes for a player to become the Tung, or votes to leave it random. A strict
-plurality wins; ties and a winning random vote are resolved randomly.
+votes for a player to become the first Tung, or votes to leave it random. A strict
+plurality wins; ties and a winning random vote are resolved randomly. Hosts can
+select up to three player Tungs, capped so at least one runner remains.
 
-The host controls the map size, number of lanterns, night timer, torch duration,
-and how clearly the Tung can read tracks.
+The host controls the map size, number of lanterns, night timer, torch duration
+(including infinite), runner stamina, whether Tungs can see objectives, the
+number of player Tungs, and how clearly Tungs can read tracks.
+
+## Progression and cosmetics
+
+Finished games award XP and T-bucks from individual contribution, survival,
+time played, and the result. Five offerings in a loss are worth more than doing
+nothing in a win. Currency and XP appear only in menus and result screens.
+
+The 100-level Sahur Pass rewards every level and grants a cosmetic every fifth
+level, ending with the legendary Sahur Sovereign. The item shop sells individual
+legendary cosmetics and discounted bundles. Owned items, achievement sigils,
+and outfits are managed in the wardrobe and never alter gameplay values.
+
+On `tung.andrenijman.com`, signed-in profiles sync through the existing Games
+Guard account session. Guests and local/self-hosted games use browser storage.
 
 ### Survivors
 

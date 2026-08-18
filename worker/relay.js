@@ -8,7 +8,7 @@ const MOVE_BURST = 1.0;
 const SWAP_COOLDOWN_MS = 12000;
 
 const TICK_HZ = 20;
-const MAX_PLAYERS = 5;
+const MAX_PLAYERS = 10;
 const MIN_PLAYERS = 2;
 const ROOM_IDLE_MS = 45 * 60 * 1000;
 const MAINTENANCE_MS = 25000;
@@ -20,7 +20,7 @@ const RESERVATION_MS = 15000;
 const REGISTRY_STALE_MS = 60 * 60 * 1000;
 
 const CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXYZ23456789';
-const PLAYER_COLORS = ['#e0a040', '#68c0d8', '#8ad06a', '#d878b8', '#c8c0a8'];
+const PLAYER_COLORS = ['#e0a040', '#68c0d8', '#8ad06a', '#d878b8', '#c8c0a8', '#e07058', '#7890d8', '#b098e0', '#58b890', '#d0cc58'];
 const PRODUCTION_ORIGIN = 'https://tung.andrenijman.com';
 
 const DEFAULT_SETTINGS = {
@@ -28,6 +28,9 @@ const DEFAULT_SETTINGS = {
   lanterns: 6,
   night: 300,
   torch: 125,
+  stamina: 'medium',
+  tungIntel: false,
+  tungs: 1,
   tracks: 'normal',
 };
 
@@ -51,8 +54,13 @@ function clampSettings(raw) {
     settings.night = Math.max(60, Math.min(900, Math.round(raw.night)));
   }
   if (Number.isFinite(raw.torch)) {
-    settings.torch = Math.max(20, Math.min(900, Math.round(raw.torch)));
+    settings.torch = raw.torch === 0 ? 0 : Math.max(20, Math.min(1800, Math.round(raw.torch)));
   }
+  if (['veryLow', 'low', 'medium', 'high', 'veryHigh', 'infinite'].includes(raw.stamina)) {
+    settings.stamina = raw.stamina;
+  }
+  if (typeof raw.tungIntel === 'boolean') settings.tungIntel = raw.tungIntel;
+  if (Number.isFinite(raw.tungs)) settings.tungs = Math.max(1, Math.min(3, Math.round(raw.tungs)));
   if (['off', 'faint', 'normal', 'strong'].includes(raw.tracks)) {
     settings.tracks = raw.tracks;
   }
@@ -89,6 +97,17 @@ async function passwordMatches(expected, value) {
 function sanitizeName(name) {
   const clean = String(name || '').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 14);
   return clean || 'guest';
+}
+function sanitizeChat(value) {
+  return String(value || '').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 160);
+}
+function sanitizeCosmetics(message) {
+  const clean = value => String(value || '').replace(/[^a-z0-9-]/gi, '').slice(0, 40);
+  const look = {};
+  if (message.look && typeof message.look === 'object') {
+    for (const [slot, value] of Object.entries(message.look).slice(0, 16)) look[clean(slot)] = clean(value);
+  }
+  return { sigil: clean(message.sigil), look };
 }
 
 function normalizeCode(code) {
@@ -273,10 +292,12 @@ export class Registry {
 }
 
 class Player {
-  constructor(id, socket, name) {
+  constructor(id, socket, name, cosmetics = {}) {
     this.id = id;
     this.socket = socket;
     this.name = sanitizeName(name);
+    this.sigil = cosmetics.sigil || '';
+    this.look = cosmetics.look || {};
     this.vote = null;
     this.role = 'survivor';
     this.x = 1.5;
@@ -287,6 +308,7 @@ class Player {
     this.alive = true;
     this.carrying = -1;
     this.delivered = 0;
+    this.caught = 0;
     this.caughtAt = null;
     this.lastInput = 0;
     this.lastMoveAt = 0;
@@ -295,12 +317,15 @@ class Player {
     this.swapCooldownUntil = 0;
     this.colorIdx = 0;
     this.spawnIdx = 0;
+    this.chatTimes = [];
   }
 
   publicLobby() {
     return {
       id: this.id,
       name: this.name,
+      sigil: this.sigil,
+      look: this.look,
       vote: this.vote,
       color: PLAYER_COLORS[this.colorIdx],
     };
@@ -472,7 +497,7 @@ export class Room {
         return;
       }
       if (this.players.size >= MAX_PLAYERS) {
-        this.fatal(session, 'lobby is full (5)');
+        this.fatal(session, `lobby is full (${MAX_PLAYERS})`);
         return;
       }
       const now = Date.now();
@@ -494,7 +519,7 @@ export class Room {
         return;
       }
       if (this.players.size >= MAX_PLAYERS) {
-        this.fatal(session, 'lobby is full (5)');
+        this.fatal(session, `lobby is full (${MAX_PLAYERS})`);
         return;
       }
       if (!matches) {
@@ -505,7 +530,7 @@ export class Room {
       this.passwordAttempts.delete(session.ip);
     }
 
-    const player = new Player(this.nextPlayerId++, session.socket, message.name);
+    const player = new Player(this.nextPlayerId++, session.socket, message.name, sanitizeCosmetics(message));
     this.addPlayer(player);
     session.player = player;
     if (session.action === 'create') {
@@ -573,6 +598,17 @@ export class Room {
         this.handleSwap(me);
         break;
 
+      case 'chat': {
+        if (this.phase !== 'play' || me.role !== 'survivor' || !me.alive) break;
+        const now = Date.now();
+        me.chatTimes = me.chatTimes.filter(at => now - at < 5000);
+        if (me.chatTimes.length >= 5) break;
+        me.chatTimes.push(now);
+        const chat = sanitizeChat(message.m);
+        if (chat) this.broadcastSurvivors({ t: 'chat', from: me.id, name: me.name, sigil: me.sigil, m: chat });
+        break;
+      }
+
       case 'again':
         if (me.id === this.hostId && this.phase === 'over') this.backToLobby();
         break;
@@ -602,6 +638,13 @@ export class Room {
     const encoded = JSON.stringify(message);
     for (const player of this.players.values()) {
       if (player.id !== exceptId) this.send(player.socket, encoded);
+    }
+  }
+
+  broadcastSurvivors(message) {
+    const encoded = JSON.stringify(message);
+    for (const player of this.players.values()) {
+      if (player.role === 'survivor') this.send(player.socket, encoded);
     }
   }
 
@@ -653,7 +696,7 @@ export class Room {
     }
 
     if (this.phase === 'play') {
-      if (player.role === 'tung') {
+      if (player.role === 'tung' && !this.tungs().length) {
         this.finish('abandoned', 'the tung left the street');
       } else {
         if (player.carrying >= 0) this.dropItem(player);
@@ -771,7 +814,13 @@ export class Room {
       return;
     }
 
-    const { id: tungId, how } = this.pickTung();
+    const { id: firstTungId, how } = this.pickTung();
+    const tungIds = [firstTungId];
+    const candidates = [...this.players.keys()].filter(id => id !== firstTungId);
+    const wanted = Math.min(this.settings.tungs, this.players.size - 1);
+    while (tungIds.length < wanted && candidates.length) {
+      tungIds.push(candidates.splice(randomInt(candidates.length), 1)[0]);
+    }
     this.seed = randomInt(0x7fffffff);
     this.phase = 'play';
     this.syncRegistry();
@@ -785,11 +834,12 @@ export class Room {
 
     const order = [...this.players.values()];
     order.forEach((player, index) => {
-      player.role = player.id === tungId ? 'tung' : 'survivor';
+      player.role = tungIds.includes(player.id) ? 'tung' : 'survivor';
       player.alive = true;
       player.hidden = false;
       player.carrying = -1;
       player.delivered = 0;
+      player.caught = 0;
       player.caughtAt = null;
       player.flags = 0;
       player.spawnIdx = index;
@@ -804,11 +854,14 @@ export class Room {
       t: 'begin',
       seed: this.seed,
       settings: this.settings,
-      tung: tungId,
+      tung: firstTungId,
+      tungs: tungIds,
       how,
       players: order.map(player => ({
         id: player.id,
         name: player.name,
+        sigil: player.sigil,
+        look: player.look,
         role: player.role,
         color: PLAYER_COLORS[player.colorIdx],
         spawnIdx: player.spawnIdx,
@@ -945,8 +998,8 @@ export class Room {
     return [...this.players.values()].filter(player => player.role === 'survivor');
   }
 
-  tung() {
-    return [...this.players.values()].find(player => player.role === 'tung') || null;
+  tungs() {
+    return [...this.players.values()].filter(player => player.role === 'tung');
   }
 
   resolvePickups() {
@@ -982,15 +1035,18 @@ export class Room {
   }
 
   resolveCatches() {
-    const tung = this.tung();
-    if (!tung || !tung.alive || !this.manifest) return;
-    for (const player of this.survivors()) {
-      if (!player.alive || player.hidden) continue;
-      if ((player.x - tung.x) ** 2 + (player.y - tung.y) ** 2 > CATCH_DIST ** 2) continue;
-      player.alive = false;
-      player.caughtAt = [player.x, player.y];
-      if (player.carrying >= 0) this.dropItem(player);
-      this.broadcast({ t: 'ev', e: 'caught', who: player.id, x: player.x, y: player.y });
+    if (!this.manifest) return;
+    for (const tung of this.tungs()) {
+      if (!tung.alive) continue;
+      for (const player of this.survivors()) {
+        if (!player.alive || player.hidden) continue;
+        if ((player.x - tung.x) ** 2 + (player.y - tung.y) ** 2 > CATCH_DIST ** 2) continue;
+        player.alive = false;
+        tung.caught++;
+        player.caughtAt = [player.x, player.y];
+        if (player.carrying >= 0) this.dropItem(player);
+        this.broadcast({ t: 'ev', e: 'caught', who: player.id, by: tung.id, x: player.x, y: player.y });
+      }
     }
   }
 
@@ -1024,7 +1080,8 @@ export class Room {
       k: this.tick,
       tl: Math.max(0, round2(this.timeLeft)),
       p: players,
-      it: this.items.map(item => [item.state, item.carrier, round2(item.x), round2(item.y)]),
+      it: this.items.map(item => viewer?.role === 'tung' && !this.settings.tungIntel
+        ? [item.state, -1, 0, 0] : [item.state, item.carrier, round2(item.x), round2(item.y)]),
     };
   }
 
@@ -1061,9 +1118,12 @@ export class Room {
       scores: [...this.players.values()].map(player => ({
         id: player.id,
         name: player.name,
+        sigil: player.sigil,
+        look: player.look,
         role: player.role,
         alive: player.alive,
         delivered: player.delivered,
+        caught: player.caught,
         color: PLAYER_COLORS[player.colorIdx],
       })),
     });

@@ -55,6 +55,9 @@ async function play(page, seconds, keys = ['KeyW']) {
   await page.waitForTimeout(500);
   await shot(page, '1-menu');
   if (!(await page.locator('#scr-main.on').count())) problems.push('main menu did not open');
+  await page.click('[data-profile-screen="scr-pass"]');
+  if ((await page.locator('#pass-catalog .catalog-item').count()) !== 100) problems.push('Sahur Pass did not render 100 levels');
+  await page.click('#scr-pass .profile-back');
 
   // Start through the real menu. This also covers audio/pointer-lock setup.
   await page.click('#b-solo');
@@ -64,6 +67,11 @@ async function play(page, seconds, keys = ['KeyW']) {
   // play a while: exercises raycaster, sprite cache, HUD and creature AI
   await play(page, 4, ['KeyW']);
   await shot(page, '2-play');
+  const deadTorch = await page.evaluate(() => {
+    game.flashlight = true; game.infiniteTorch = false; game.battery = 0;
+    return game.torchOn();
+  });
+  if (deadTorch) problems.push('empty torch battery still produced torch light');
 
   // the clock must actually be counting down
   const t1 = await page.evaluate(() => game.timeLeft);

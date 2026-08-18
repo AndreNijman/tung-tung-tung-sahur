@@ -122,7 +122,7 @@ async function moveTo(page, x, y, movingFlags = 1) {
     await first.waitForSelector('#scr-lobby.on');
     guests.push(first);
 
-    for (let i = 2; i <= 4; i++) {
+    for (let i = 2; i <= 9; i++) {
       const page = await openPlayer(`Guest${i}`);
       await page.fill('#i-code', code);
       await fillPassword(page, password);
@@ -140,34 +140,39 @@ async function moveTo(page, x, y, movingFlags = 1) {
       }
       guests.push(page);
     }
-    await host.waitForFunction(() => net && net.players.size === 5);
+    await host.waitForFunction(() => net && net.players.size === 10);
 
     // A half-closed tab used to ghost in a lobby until two ping cycles elapsed,
-    // holding both its slot and (if host) the start button. Refill the fifth
+    // holding both its slot and (if host) the start button. Refill the tenth
     // slot immediately to pin socket `end` handling.
     await guests.pop().close();
-    await host.waitForFunction(() => net.players.size === 4);
-    const replacement = await openPlayer('Guest4');
+    await host.waitForFunction(() => net.players.size === 9);
+    const replacement = await openPlayer('Guest9');
     await replacement.fill('#i-code', code);
     await fillPassword(replacement, password);
     if ((await replacement.inputValue('#i-code')).trim() !== code) await replacement.fill('#i-code', code);
     await replacement.click('#b-join');
     await replacement.waitForSelector('#scr-lobby.on');
     guests.push(replacement);
-    await host.waitForFunction(() => net.players.size === 5);
+    await host.waitForFunction(() => net.players.size === 10);
     const pages = [host, ...guests];
-    if ((await host.locator('#lobby-players li').count()) !== 5) problems.push('lobby did not reach 5/5');
+    if ((await host.locator('#lobby-players li').count()) !== 10) problems.push('lobby did not reach 10/10');
 
     // Host-controlled settings, including the three requested lobby dials.
     for (const [index, value, key] of [
       [0, '15', 'mapN'], [1, '2', 'lanterns'], [2, '120', 'night'],
-      [3, '60', 'torch'], [4, 'normal', 'tracks'],
+      [3, '0', 'torch'], [4, 'high', 'stamina'], [5, 'false', 'tungIntel'], [6, '1', 'tungs'], [7, 'normal', 'tracks'],
     ]) {
       await host.locator('#lobby-settings select').nth(index).selectOption(value);
       await host.waitForFunction(([key, value]) => String(net.settings[key]) === value, [key, value]);
     }
-    await guests[0].waitForFunction(() => net.settings.mapN === 15 && net.settings.lanterns === 2 && net.settings.night === 120);
-    console.log('  settings: 15x15, 2 lanterns, 2:00, normal tracks');
+    await guests[0].waitForFunction(() => net.settings.mapN === 15 && net.settings.lanterns === 2 &&
+      net.settings.night === 120 && net.settings.torch === 0 && net.settings.stamina === 'high' && !net.settings.tungIntel);
+    await host.locator('#lobby-settings select').nth(6).selectOption('3');
+    await guests[0].waitForFunction(() => net.settings.tungs === 3);
+    await host.locator('#lobby-settings select').nth(6).selectOption('1');
+    await guests[0].waitForFunction(() => net.settings.tungs === 1);
+    console.log('  settings: 15x15, 2 lanterns, 2:00, infinite torch, high stamina, hidden objectives');
 
     // Everyone votes for the host, making role selection deterministic while
     // exercising the normal vote buttons in all five pages.
@@ -221,6 +226,11 @@ async function moveTo(page, x, y, movingFlags = 1) {
     }, survivorId);
     const prints = await host.evaluate((id) => game.trails.get(id).prints.length, survivorId);
     console.log(`  relay: pickup + delivery; Tung received ${prints} delayed prints`);
+
+    await survivor.evaluate(() => net.send({ t: 'chat', m: 'runner-only check' }));
+    await guests[1].waitForFunction(() => document.getElementById('chat-log').textContent.includes('runner-only check'));
+    await host.waitForTimeout(250);
+    if ((await host.textContent('#chat-log')).includes('runner-only check')) problems.push('Tung received runner team chat');
 
     // Paired alcove: enter one, ask the relay to swap, and verify the mover is
     // the only client that learns the destination.
@@ -295,7 +305,7 @@ async function moveTo(page, x, y, movingFlags = 1) {
       for (const p of problems) console.error('  - ' + p);
       process.exitCode = 1;
     } else {
-      console.log('\nPASS - listing/password, five clients, settings/vote, trail, alcove, catch and failover');
+      console.log('\nPASS - listing/password, ten clients, settings/vote, trail, alcove, catch and failover');
     }
   } finally {
     if (browser) await browser.close();
