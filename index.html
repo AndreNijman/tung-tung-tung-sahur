@@ -2428,7 +2428,7 @@ const ACHIEVEMENTS = [
 ].map(([id, symbol, name, rarity, description, test]) => ({ id, symbol, name, rarity, description, test }));
 
 const DEFAULT_PROFILE = {
-  version: 1, coins: 0, xp: 0, pass: false, passClaimed: 0,
+  version: 1, coins: 0, xp: 0, unlimited: false, pass: false, passClaimed: 0,
   owned: ['default-shirt'], equipped: {}, achievements: [], sigil: '',
   stats: { games: 0, wins: 0, runnerWins: 0, tungWins: 0, offerings: 0, caught: 0, hides: 0, distance: 0 },
 };
@@ -2442,10 +2442,14 @@ function normalizeProfile(raw) {
   p.stats = Object.assign({}, DEFAULT_PROFILE.stats, p.stats || {});
   for (const key of Object.keys(DEFAULT_PROFILE.stats)) p.stats[key] = Math.max(0, Number(p.stats[key]) || 0);
   p.pass = p.pass === true;
+  p.unlimited = p.unlimited === true;
   p.passClaimed = Math.max(0, Math.min(100, Math.floor(Number(p.passClaimed) || 0)));
   p.sigil = typeof p.sigil === 'string' ? p.sigil.slice(0, 40) : '';
   return p;
 }
+// Accounts flagged `unlimited` never spend T-bucks; the balance is cosmetic for them.
+function canAfford(price) { return profile.unlimited || profile.coins >= price; }
+function spendCoins(price) { if (!profile.unlimited) profile.coins -= price; }
 function xpForLevel(level) { return level <= 1 ? 0 : 50 * (level - 1) * (level + 6); }
 function profileLevel(xp) {
   let level = 1;
@@ -2487,7 +2491,7 @@ async function loadAccountProfile() {
 }
 function renderProfileStrip() {
   $('profile-level').textContent = String(profileLevel(profile.xp));
-  $('profile-coins').textContent = profile.coins.toLocaleString();
+  $('profile-coins').textContent = profile.unlimited ? '\u221E' : profile.coins.toLocaleString();
   $('profile-user').textContent = profileAccount ? profileUsername : 'GUEST - LOCAL SAVE';
 }
 function sigilSymbol(id) { return ACHIEVEMENTS.find(item => item.id === id)?.symbol || ''; }
@@ -2555,24 +2559,24 @@ function renderPass() {
   }
 }
 function buyItem(item) {
-  if (profile.owned.includes(item.id) || profile.coins < item.price) return;
-  profile.coins -= item.price; profile.owned.push(item.id); saveProfile(); renderShop();
+  if (profile.owned.includes(item.id) || !canAfford(item.price)) return;
+  spendCoins(item.price); profile.owned.push(item.id); saveProfile(); renderShop();
 }
 function renderShop() {
   const list = $('shop-catalog'); list.replaceChildren();
   for (const item of SHOP_ITEMS) {
     const owned = profile.owned.includes(item.id);
     list.appendChild(catalogCard(item.name, `${item.slot.toUpperCase()} - ${item.price.toLocaleString()} T-bucks`,
-      actionButton(owned ? 'OWNED' : 'BUY', () => buyItem(item), owned || profile.coins < item.price), true));
+      actionButton(owned ? 'OWNED' : 'BUY', () => buyItem(item), owned || !canAfford(item.price)), true));
   }
   for (const bundle of SHOP_BUNDLES) {
     const owned = bundle.includes.every(id => profile.owned.includes(id));
     list.appendChild(catalogCard(bundle.name, `${bundle.includes.length} items - ${bundle.price.toLocaleString()} T-bucks (bundle discount)`,
       actionButton(owned ? 'OWNED' : 'BUY BUNDLE', () => {
-        if (owned || profile.coins < bundle.price) return;
-        profile.coins -= bundle.price; profile.owned.push(...bundle.includes); profile.owned = [...new Set(profile.owned)];
+        if (owned || !canAfford(bundle.price)) return;
+        spendCoins(bundle.price); profile.owned.push(...bundle.includes); profile.owned = [...new Set(profile.owned)];
         saveProfile(); renderShop();
-      }, owned || profile.coins < bundle.price), true));
+      }, owned || !canAfford(bundle.price)), true));
   }
 }
 function allCosmetics() {
@@ -2616,8 +2620,8 @@ for (const button of document.querySelectorAll('[data-profile-screen]')) {
 }
 for (const button of document.querySelectorAll('.profile-back')) button.onclick = () => showScreen('scr-main');
 $('b-buy-pass').onclick = () => {
-  if (profile.pass || profile.coins < 1000) return;
-  profile.coins -= 1000; profile.pass = true; grantPassRewards(); saveProfile(); renderPass();
+  if (profile.pass || !canAfford(1000)) return;
+  spendCoins(1000); profile.pass = true; grantPassRewards(); saveProfile(); renderPass();
 };
 loadAccountProfile();
 
