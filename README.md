@@ -151,7 +151,8 @@ rooms are not listed. The Cloudflare deployment keeps this directory in a
 persistent Registry Durable Object; individual room/password state stays
 isolated inside its Room Durable Object.
 
-The signed-in `andrenijman` account has a separate authenticated registry view.
+The signed-in admin accounts (`andrenijman`, `mechtical`, `pojodragon365`) have a
+separate authenticated registry view.
 It can see private, full, and running rooms, bypass their password/capacity when
 joining, enter a running match as a survivor, start or end a night, and remove a
 player. The relay verifies the shared `.andrenijman.com` account session against

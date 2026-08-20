@@ -22,7 +22,8 @@ const REGISTRY_STALE_MS = 60 * 60 * 1000;
 const CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXYZ23456789';
 const PLAYER_COLORS = ['#e0a040', '#68c0d8', '#8ad06a', '#d878b8', '#c8c0a8', '#e07058', '#7890d8', '#b098e0', '#58b890', '#d0cc58'];
 const PRODUCTION_ORIGIN = 'https://tung.andrenijman.com';
-const ADMIN_USERS = new Set(['andrenijman', 'mechtical']);
+const ADMIN_NAMES = { andrenijman: 'Dev Andre', mechtical: 'Dev Mechtical', pojodragon365: 'Dev Ethan' };
+const ADMIN_USERS = new Set(Object.keys(ADMIN_NAMES));
 
 const DEFAULT_SETTINGS = {
   mapN: 21,
@@ -162,7 +163,7 @@ async function adminIdentity(request, env) {
 }
 
 function adminDisplayName(username) {
-  return username === 'andrenijman' ? 'Dev Andre' : username === 'mechtical' ? 'Dev Mechtical' : '';
+  return ADMIN_NAMES[username] || '';
 }
 
 function envSecretMatches(authorization, expected) {

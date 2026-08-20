@@ -2580,7 +2580,8 @@ let profileAccount = false;
 let profileCloudReady = false;
 let profileUsername = 'GUEST';
 let profileAdmin = false;
-const ADMIN_USERS = new Set(['andrenijman', 'mechtical']);
+const ADMIN_NAMES = { andrenijman: 'Dev Andre', mechtical: 'Dev Mechtical', pojodragon365: 'Dev Ethan' };
+const ADMIN_USERS = new Set(Object.keys(ADMIN_NAMES));
 let profileSaveTimer = null;
 
 function saveProfile() {
@@ -3320,8 +3321,7 @@ class Net {
 }
 
 function connectMultiplayer(kind, codeOverride) {
-  const adminNames = { andrenijman: 'Dev Andre', mechtical: 'Dev Mechtical' };
-  const name = profileAdmin ? adminNames[profileUsername.toLowerCase()] : ($('i-name').value.trim() || 'guest');
+  const name = profileAdmin ? ADMIN_NAMES[profileUsername.toLowerCase()] : ($('i-name').value.trim() || 'guest');
   const relay = $('i-relay').value.trim() || defaultRelayUrl();
   const code = String(codeOverride || $('i-code').value).trim().toUpperCase();
   const password = $('i-password').value.slice(0, 64);
