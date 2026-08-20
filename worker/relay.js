@@ -22,6 +22,7 @@ const REGISTRY_STALE_MS = 60 * 60 * 1000;
 const CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXYZ23456789';
 const PLAYER_COLORS = ['#e0a040', '#68c0d8', '#8ad06a', '#d878b8', '#c8c0a8', '#e07058', '#7890d8', '#b098e0', '#58b890', '#d0cc58'];
 const PRODUCTION_ORIGIN = 'https://tung.andrenijman.com';
+const ADMIN_USERS = new Set(['andrenijman', 'mechtical']);
 
 const DEFAULT_SETTINGS = {
   mapN: 21,
@@ -140,23 +141,28 @@ function originAllowed(origin) {
   }
 }
 
-async function isAndreAdmin(request, env) {
+async function adminIdentity(request, env) {
   const proxyAuthorization = request.headers.get('X-Tung-Proxy-Authorization');
-  if (proxyAuthorization && envSecretMatches(proxyAuthorization, env.TUNG_PROXY_SECRET)) return true;
+  if (proxyAuthorization && envSecretMatches(proxyAuthorization, env?.TUNG_PROXY_SECRET)) return 'proxy';
   const cookie = request.headers.get('Cookie');
-  if (!cookie) return false;
+  if (!cookie) return '';
   try {
     const response = await fetch('https://tung.andrenijman.com/_guard/status', {
       headers: { Cookie: cookie, Accept: 'application/json' },
       redirect: 'manual',
     });
-    if (!response.ok) return false;
+    if (!response.ok) return '';
     const identity = await response.json();
-    return identity.signedIn === true && String(identity.username).toLowerCase() === 'andrenijman';
+    const username = String(identity.username || '').toLowerCase();
+    return identity.signedIn === true && ADMIN_USERS.has(username) ? username : '';
   } catch (error) {
     console.error('admin identity check failed', error);
-    return false;
+    return '';
   }
+}
+
+function adminDisplayName(username) {
+  return username === 'andrenijman' ? 'Dev Andre' : username === 'mechtical' ? 'Dev Mechtical' : '';
 }
 
 function envSecretMatches(authorization, expected) {
@@ -321,11 +327,12 @@ export class Registry {
 }
 
 class Player {
-  constructor(id, socket, name, cosmetics = {}, admin = false) {
+  constructor(id, socket, name, cosmetics = {}, adminName = '') {
     this.id = id;
     this.socket = socket;
-    this.name = admin ? 'Dev Andre' : sanitizeName(name);
-    this.admin = admin;
+    this.name = adminDisplayName(adminName) || sanitizeName(name);
+    this.admin = Boolean(adminName);
+    this.adminName = adminName;
     this.sigil = cosmetics.sigil || '';
     this.look = cosmetics.look || {};
     this.vote = null;
@@ -425,6 +432,7 @@ export class Room {
       messageQueue: Promise.resolve(),
       ip: request.headers.get('CF-Connecting-IP') || 'unknown',
       admin: request.headers.get('X-Tung-Admin') === '1',
+      adminName: request.headers.get('X-Tung-Admin-Name') || '',
     };
 
     server.accept();
@@ -563,7 +571,7 @@ export class Room {
       this.passwordAttempts.delete(session.ip);
     }
 
-    const player = new Player(this.nextPlayerId++, session.socket, message.name, sanitizeCosmetics(message), session.admin);
+    const player = new Player(this.nextPlayerId++, session.socket, message.name, sanitizeCosmetics(message), session.adminName);
     this.addPlayer(player);
     session.player = player;
     if (session.action === 'create') {
@@ -595,7 +603,7 @@ export class Room {
     switch (message.t) {
       case 'name':
         if (this.phase !== 'lobby') break;
-        me.name = me.admin ? 'Dev Andre' : sanitizeName(message.name);
+        me.name = adminDisplayName(me.adminName) || sanitizeName(message.name);
         this.sendLobby();
         this.syncRegistry();
         break;
@@ -656,14 +664,14 @@ export class Room {
         break;
 
       case 'admin-end':
-        if (me.admin && this.phase === 'play') this.finish('abandoned', 'Dev Andre ended the night');
+        if (me.admin && this.phase === 'play') this.finish('abandoned', `${me.name} ended the night`);
         break;
 
       case 'admin-kick': {
         if (!me.admin) break;
         const target = [...this.sessions].find(candidate => candidate.player?.id === Number(message.id));
         if (target && !target.player.admin) {
-          this.send(target.socket, { t: 'ev', e: 'kicked', m: 'removed by Dev Andre' });
+          this.send(target.socket, { t: 'ev', e: 'kicked', m: `removed by ${me.name}` });
           this.closeSession(target, 1008, 'removed by admin');
         }
         break;
@@ -1347,7 +1355,7 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'GET' && (url.pathname === '/lobbies' || url.pathname === '/admin/lobbies')) {
       const adminRequest = url.pathname === '/admin/lobbies';
-      if (adminRequest && !(await isAndreAdmin(request, env))) {
+      if (adminRequest && !(await adminIdentity(request, env))) {
         return Response.json({ error: 'admin account required' }, { status: 403 });
       }
       const registry = env.REGISTRY.getByName('global');
@@ -1404,7 +1412,7 @@ export default {
     }
 
     const action = creating ? 'create' : 'join';
-    const admin = await isAndreAdmin(request);
+    const adminName = await adminIdentity(request, env);
     let code = suppliedCode;
     if (creating) {
       try {
@@ -1426,7 +1434,8 @@ export default {
     const headers = new Headers(request.headers);
     headers.set('X-Tung-Room-Action', action);
     headers.set('X-Tung-Room-Code', code);
-    headers.set('X-Tung-Admin', admin ? '1' : '0');
+    headers.set('X-Tung-Admin', adminName ? '1' : '0');
+    headers.set('X-Tung-Admin-Name', adminName);
     const roomRequest = new Request(request, { headers });
     return env.ROOMS.getByName(code).fetch(roomRequest);
   },

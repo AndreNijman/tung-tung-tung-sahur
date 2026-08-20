@@ -298,7 +298,7 @@
         </div>
       </div>
       <div class="card admin-card" id="lobby-admin">
-        <label>DEV ANDRE ADMIN PANEL</label>
+        <label>DEV ADMIN PANEL</label>
         <div class="hint">Start this lobby, remove players, or end a running night.</div>
         <div class="row" id="lobby-admin-actions"></div>
       </div>
@@ -322,7 +322,7 @@
         <div class="row" style="justify-content:space-between"><span>T</span><span>global lobby chat</span></div>
       </div>
       <div class="card admin-card" id="pause-admin" style="max-width:520px;margin:10px auto 0">
-        <label>DEV ANDRE ADMIN PANEL</label>
+        <label>DEV ADMIN PANEL</label>
         <div class="row" id="pause-admin-actions"></div>
       </div>
       <div class="row center" style="margin-top:18px">
@@ -2580,6 +2580,7 @@ let profileAccount = false;
 let profileCloudReady = false;
 let profileUsername = 'GUEST';
 let profileAdmin = false;
+const ADMIN_USERS = new Set(['andrenijman', 'mechtical']);
 let profileSaveTimer = null;
 
 function saveProfile() {
@@ -2597,7 +2598,7 @@ async function loadAccountProfile() {
     const status = await fetch('/_guard/status', { cache: 'no-store' });
     const identity = await status.json();
     profileAccount = !!identity.signedIn; profileUsername = identity.username || 'GUEST';
-    profileAdmin = profileAccount && profileUsername.toLowerCase() === 'andrenijman';
+    profileAdmin = profileAccount && ADMIN_USERS.has(profileUsername.toLowerCase());
     if (profileAccount) {
       const response = await fetch('/_guard/profile', { cache: 'no-store' });
       if (response.ok) {
@@ -3214,7 +3215,7 @@ class Net {
       if (msg.who === this.you) { game.alive = false; audio.playSimple('scare', 1.0); }
       else audio.playSimple('stinger', 0.45);
     } else if (msg.e === 'dev-joined') {
-      showEventBanner('Dev Andre has joined', 4000);
+      showEventBanner(`${this.players.get(msg.who)?.name || 'A developer'} has joined`, 4000);
     } else if (msg.e === 'kicked') {
       this.lastError = msg.m || 'removed by Dev Andre';
     } else if (msg.e === 'swap') {
@@ -3319,7 +3320,8 @@ class Net {
 }
 
 function connectMultiplayer(kind, codeOverride) {
-  const name = profileAdmin ? 'Dev Andre' : ($('i-name').value.trim() || 'guest');
+  const adminNames = { andrenijman: 'Dev Andre', mechtical: 'Dev Mechtical' };
+  const name = profileAdmin ? adminNames[profileUsername.toLowerCase()] : ($('i-name').value.trim() || 'guest');
   const relay = $('i-relay').value.trim() || defaultRelayUrl();
   const code = String(codeOverride || $('i-code').value).trim().toUpperCase();
   const password = $('i-password').value.slice(0, 64);
