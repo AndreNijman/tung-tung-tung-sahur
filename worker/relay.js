@@ -140,7 +140,9 @@ function originAllowed(origin) {
   }
 }
 
-async function isAndreAdmin(request) {
+async function isAndreAdmin(request, env) {
+  const proxyAuthorization = request.headers.get('X-Tung-Proxy-Authorization');
+  if (proxyAuthorization && envSecretMatches(proxyAuthorization, env.TUNG_PROXY_SECRET)) return true;
   const cookie = request.headers.get('Cookie');
   if (!cookie) return false;
   try {
@@ -155,6 +157,15 @@ async function isAndreAdmin(request) {
     console.error('admin identity check failed', error);
     return false;
   }
+}
+
+function envSecretMatches(authorization, expected) {
+  if (!expected) return false;
+  const supplied = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+  if (supplied.length !== expected.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < expected.length; i++) mismatch |= supplied.charCodeAt(i) ^ expected.charCodeAt(i);
+  return mismatch === 0;
 }
 
 function round2(value) {
@@ -1336,7 +1347,7 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'GET' && (url.pathname === '/lobbies' || url.pathname === '/admin/lobbies')) {
       const adminRequest = url.pathname === '/admin/lobbies';
-      if (adminRequest && !(await isAndreAdmin(request))) {
+      if (adminRequest && !(await isAndreAdmin(request, env))) {
         return Response.json({ error: 'admin account required' }, { status: 403 });
       }
       const registry = env.REGISTRY.getByName('global');
