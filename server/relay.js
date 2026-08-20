@@ -381,10 +381,6 @@ class Room {
     }
   }
 
-  broadcastSurvivors(msg) {
-    for (const p of this.players.values()) if (p.role === 'survivor') p.conn.send(msg);
-  }
-
   add(player) {
     if (this.players.size >= MAX_PLAYERS) return false;
     const used = new Set([...this.players.values()].map(p => p.colorIdx));
@@ -676,7 +672,7 @@ class Room {
     for (const t of this.tungs()) {
       if (!t.alive) continue;
       for (const p of this.survivors()) {
-        if (!p.alive || p.hidden) continue;
+        if (!p.alive) continue;
         if ((p.x - t.x) ** 2 + (p.y - t.y) ** 2 > CATCH_DIST ** 2) continue;
         p.alive = false;
         t.caught++;
@@ -937,13 +933,13 @@ function handle(session, msg) {
     }
 
     case 'chat': {
-      if (room.phase !== 'play' || me.role !== 'survivor' || !me.alive) break;
+      if (room.phase !== 'play' || !me.alive) break;
       const now = Date.now();
       me.chatTimes = me.chatTimes.filter(at => now - at < 5000);
       if (me.chatTimes.length >= 5) break;
       me.chatTimes.push(now);
       const message = sanitizeChat(msg.m);
-      if (message) room.broadcastSurvivors({ t: 'chat', from: me.id, name: me.name, sigil: me.sigil, m: message });
+      if (message) room.broadcast({ t: 'chat', from: me.id, name: me.name, sigil: me.sigil, m: message });
       break;
     }
 

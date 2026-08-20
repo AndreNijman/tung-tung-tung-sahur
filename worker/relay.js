@@ -140,6 +140,23 @@ function originAllowed(origin) {
   }
 }
 
+async function isAndreAdmin(request) {
+  const cookie = request.headers.get('Cookie');
+  if (!cookie) return false;
+  try {
+    const response = await fetch('https://tung.andrenijman.com/_guard/status', {
+      headers: { Cookie: cookie, Accept: 'application/json' },
+      redirect: 'manual',
+    });
+    if (!response.ok) return false;
+    const identity = await response.json();
+    return identity.signedIn === true && String(identity.username).toLowerCase() === 'andrenijman';
+  } catch (error) {
+    console.error('admin identity check failed', error);
+    return false;
+  }
+}
+
 function round2(value) {
   return Math.round(value * 100) / 100;
 }
@@ -155,7 +172,7 @@ const reservationKey = code => `reservation:${code}`;
 function cleanLobbySummary(raw) {
   const code = normalizeCode(raw?.code);
   const players = Number(raw?.players);
-  if (code.length !== 5 || !Number.isInteger(players) || players < 1 || players >= MAX_PLAYERS) {
+  if (code.length !== 5 || !Number.isInteger(players) || players < 1 || players > 100) {
     return null;
   }
   return {
@@ -164,6 +181,7 @@ function cleanLobbySummary(raw) {
     max: MAX_PLAYERS,
     locked: !!raw.locked,
     host: sanitizeName(raw.host),
+    phase: ['lobby', 'play', 'over'].includes(raw.phase) ? raw.phase : 'lobby',
     settings: clampSettings(raw.settings),
   };
 }
@@ -292,10 +310,11 @@ export class Registry {
 }
 
 class Player {
-  constructor(id, socket, name, cosmetics = {}) {
+  constructor(id, socket, name, cosmetics = {}, admin = false) {
     this.id = id;
     this.socket = socket;
-    this.name = sanitizeName(name);
+    this.name = admin ? 'Dev Andre' : sanitizeName(name);
+    this.admin = admin;
     this.sigil = cosmetics.sigil || '';
     this.look = cosmetics.look || {};
     this.vote = null;
@@ -328,6 +347,8 @@ class Player {
       look: this.look,
       vote: this.vote,
       color: PLAYER_COLORS[this.colorIdx],
+      role: this.role,
+      admin: this.admin,
     };
   }
 }
@@ -392,6 +413,7 @@ export class Room {
       handshakeTimer: null,
       messageQueue: Promise.resolve(),
       ip: request.headers.get('CF-Connecting-IP') || 'unknown',
+      admin: request.headers.get('X-Tung-Admin') === '1',
     };
 
     server.accept();
@@ -492,11 +514,11 @@ export class Room {
         this.fatal(session, 'no lobby with that code');
         return;
       }
-      if (this.phase !== 'lobby') {
+      if (this.phase !== 'lobby' && !(session.admin && this.phase === 'play')) {
         this.fatal(session, 'that night has already started');
         return;
       }
-      if (this.players.size >= MAX_PLAYERS) {
+      if (this.players.size >= MAX_PLAYERS && !session.admin) {
         this.fatal(session, `lobby is full (${MAX_PLAYERS})`);
         return;
       }
@@ -508,17 +530,17 @@ export class Room {
         this.fatal(session, 'too many password attempts; wait a minute');
         return;
       }
-      const matches = await passwordMatches(this.passwordHash, message.password);
+      const matches = session.admin || await passwordMatches(this.passwordHash, message.password);
       if (session.closed) return;
       if (!this.created || this.code !== session.code || this.players.size === 0) {
         this.fatal(session, 'no lobby with that code');
         return;
       }
-      if (this.phase !== 'lobby') {
+      if (this.phase !== 'lobby' && !(session.admin && this.phase === 'play')) {
         this.fatal(session, 'that night has already started');
         return;
       }
-      if (this.players.size >= MAX_PLAYERS) {
+      if (this.players.size >= MAX_PLAYERS && !session.admin) {
         this.fatal(session, `lobby is full (${MAX_PLAYERS})`);
         return;
       }
@@ -530,7 +552,7 @@ export class Room {
       this.passwordAttempts.delete(session.ip);
     }
 
-    const player = new Player(this.nextPlayerId++, session.socket, message.name, sanitizeCosmetics(message));
+    const player = new Player(this.nextPlayerId++, session.socket, message.name, sanitizeCosmetics(message), session.admin);
     this.addPlayer(player);
     session.player = player;
     if (session.action === 'create') {
@@ -553,7 +575,8 @@ export class Room {
       code: this.code,
       color: PLAYER_COLORS[player.colorIdx],
     });
-    this.sendLobby();
+    if (this.phase === 'play' && player.admin) this.joinRunningGame(player);
+    else this.sendLobby();
   }
 
   handleMessage(session, message) {
@@ -561,7 +584,7 @@ export class Room {
     switch (message.t) {
       case 'name':
         if (this.phase !== 'lobby') break;
-        me.name = sanitizeName(message.name);
+        me.name = me.admin ? 'Dev Andre' : sanitizeName(message.name);
         this.sendLobby();
         this.syncRegistry();
         break;
@@ -599,13 +622,13 @@ export class Room {
         break;
 
       case 'chat': {
-        if (this.phase !== 'play' || me.role !== 'survivor' || !me.alive) break;
+        if (this.phase !== 'play' || !me.alive) break;
         const now = Date.now();
         me.chatTimes = me.chatTimes.filter(at => now - at < 5000);
         if (me.chatTimes.length >= 5) break;
         me.chatTimes.push(now);
         const chat = sanitizeChat(message.m);
-        if (chat) this.broadcastSurvivors({ t: 'chat', from: me.id, name: me.name, sigil: me.sigil, m: chat });
+        if (chat) this.broadcast({ t: 'chat', from: me.id, name: me.name, sigil: me.sigil, m: chat });
         break;
       }
 
@@ -616,7 +639,67 @@ export class Room {
       case 'leave':
         this.leaveSession(session);
         break;
+
+      case 'admin-start':
+        if (me.admin && this.phase === 'lobby') this.start();
+        break;
+
+      case 'admin-end':
+        if (me.admin && this.phase === 'play') this.finish('abandoned', 'Dev Andre ended the night');
+        break;
+
+      case 'admin-kick': {
+        if (!me.admin) break;
+        const target = [...this.sessions].find(candidate => candidate.player?.id === Number(message.id));
+        if (target && !target.player.admin) {
+          this.send(target.socket, { t: 'ev', e: 'kicked', m: 'removed by Dev Andre' });
+          this.closeSession(target, 1008, 'removed by admin');
+        }
+        break;
+      }
     }
+  }
+
+  joinRunningGame(player) {
+    player.role = 'survivor';
+    player.alive = true;
+    player.hidden = false;
+    player.carrying = -1;
+    player.spawnIdx = Math.max(0, ...[...this.players.values()].map(existing => existing.spawnIdx)) + 1;
+    const spawn = this.manifest?.surau || [1.5, 1.5];
+    player.x = spawn[0];
+    player.y = spawn[1];
+    player.a = 0;
+    player.lastMoveAt = Date.now();
+    player.moveTokens = MOVE_BURST;
+
+    this.send(player.socket, {
+      t: 'begin',
+      seed: this.seed,
+      settings: this.settings,
+      tung: this.tungs()[0]?.id || null,
+      tungs: this.tungs().map(tung => tung.id),
+      how: 'admin-join',
+      players: [...this.players.values()].map(existing => ({
+        id: existing.id,
+        name: existing.name,
+        sigil: existing.sigil,
+        look: existing.look,
+        role: existing.role,
+        admin: existing.admin,
+        color: PLAYER_COLORS[existing.colorIdx],
+        spawnIdx: existing.spawnIdx,
+        spawn: existing.id === player.id ? { x: player.x, y: player.y, a: player.a } : null,
+      })),
+    });
+    if (this.manifest) this.send(player.socket, { t: 'manifest', m: this.manifest });
+    this.send(player.socket, this.snapshot(player));
+    this.broadcast({
+      t: 'roster',
+      players: [...this.players.values()].map(existing => existing.publicLobby()),
+      host: this.hostId,
+    }, player.id);
+    this.broadcast({ t: 'ev', e: 'dev-joined', who: player.id });
   }
 
   fatal(session, message) {
@@ -638,13 +721,6 @@ export class Room {
     const encoded = JSON.stringify(message);
     for (const player of this.players.values()) {
       if (player.id !== exceptId) this.send(player.socket, encoded);
-    }
-  }
-
-  broadcastSurvivors(message) {
-    const encoded = JSON.stringify(message);
-    for (const player of this.players.values()) {
-      if (player.role === 'survivor') this.send(player.socket, encoded);
     }
   }
 
@@ -744,6 +820,7 @@ export class Room {
       max: MAX_PLAYERS,
       locked: !!this.passwordHash,
       host: host ? host.name : 'guest',
+      phase: this.phase,
       settings: { ...this.settings },
     };
   }
@@ -768,9 +845,8 @@ export class Room {
 
   syncRegistry(confirm = false) {
     if (!this.code) return Promise.resolve();
-    const joinable = this.created && this.phase === 'lobby' &&
-      this.players.size > 0 && this.players.size < MAX_PLAYERS;
-    if (!joinable) return this.removeFromRegistry(this.code);
+    const active = this.created && this.players.size > 0;
+    if (!active) return this.removeFromRegistry(this.code);
     return this.queueRegistryRequest('POST', { summary: this.lobbySummary(), confirm });
   }
 
@@ -902,11 +978,19 @@ export class Room {
     const spawns = Array.isArray(manifest.spawns) ? manifest.spawns : [];
     const spawnById = new Map(spawns.filter(spawn => spawn && Number.isInteger(spawn.id))
       .map(spawn => [spawn.id, spawn]));
-    if ([...this.players.keys()].some(id => !spawnById.has(id))) return reject();
+    if ([...this.players.values()].some(player => !player.admin && !spawnById.has(player.id))) return reject();
     for (const spawn of spawns) {
       if (!spawn || !Number.isFinite(spawn.x) || !Number.isFinite(spawn.y) ||
           spawn.x < 0 || spawn.y < 0 || spawn.x >= this.settings.mapN ||
           spawn.y >= this.settings.mapN) return reject();
+    }
+    for (const player of this.players.values()) {
+      if (!player.admin || spawnById.has(player.id)) continue;
+      player.x = this.manifest.surau[0];
+      player.y = this.manifest.surau[1];
+      player.a = 0;
+      player.lastMoveAt = Date.now();
+      player.moveTokens = MOVE_BURST;
     }
 
     this.manifest = {
@@ -1039,7 +1123,7 @@ export class Room {
     for (const tung of this.tungs()) {
       if (!tung.alive) continue;
       for (const player of this.survivors()) {
-        if (!player.alive || player.hidden) continue;
+        if (!player.alive) continue;
         if ((player.x - tung.x) ** 2 + (player.y - tung.y) ** 2 > CATCH_DIST ** 2) continue;
         player.alive = false;
         tung.caught++;
@@ -1250,7 +1334,11 @@ export class Room {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (request.method === 'GET' && url.pathname === '/lobbies') {
+    if (request.method === 'GET' && (url.pathname === '/lobbies' || url.pathname === '/admin/lobbies')) {
+      const adminRequest = url.pathname === '/admin/lobbies';
+      if (adminRequest && !(await isAndreAdmin(request))) {
+        return Response.json({ error: 'admin account required' }, { status: 403 });
+      }
       const registry = env.REGISTRY.getByName('global');
       let status = 200;
       let lobbies = [];
@@ -1260,6 +1348,9 @@ export default {
         if (response.ok) {
           const body = await response.json();
           lobbies = Array.isArray(body?.lobbies) ? body.lobbies : [];
+          lobbies = lobbies.filter(lobby => adminRequest
+            ? lobby.phase !== 'over'
+            : lobby.phase === 'lobby' && lobby.players < MAX_PLAYERS);
         }
       } catch (error) {
         console.error('lobby registry read failed', error);
@@ -1270,7 +1361,10 @@ export default {
         Vary: 'Origin',
       });
       const origin = request.headers.get('Origin');
-      if (originAllowed(origin)) headers.set('Access-Control-Allow-Origin', origin);
+      if (originAllowed(origin)) {
+        headers.set('Access-Control-Allow-Origin', origin);
+        if (adminRequest) headers.set('Access-Control-Allow-Credentials', 'true');
+      }
       return Response.json({ lobbies }, { status, headers });
     }
     if (url.pathname === '/health') {
@@ -1299,6 +1393,7 @@ export default {
     }
 
     const action = creating ? 'create' : 'join';
+    const admin = await isAndreAdmin(request);
     let code = suppliedCode;
     if (creating) {
       try {
@@ -1320,6 +1415,7 @@ export default {
     const headers = new Headers(request.headers);
     headers.set('X-Tung-Room-Action', action);
     headers.set('X-Tung-Room-Code', code);
+    headers.set('X-Tung-Admin', admin ? '1' : '0');
     const roomRequest = new Request(request, { headers });
     return env.ROOMS.getByName(code).fetch(roomRequest);
   },

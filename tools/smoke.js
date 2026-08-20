@@ -59,6 +59,20 @@ async function play(page, seconds, keys = ['KeyW']) {
   if ((await page.locator('#pass-catalog .catalog-item').count()) !== 100) problems.push('Sahur Pass did not render 100 levels');
   await page.click('#scr-pass .profile-back');
 
+  await page.evaluate(() => {
+    profile.owned.push('shirt-eclipse', 'pattern-batik', 'pants-ember', 'hat-crown', 'back-drum', 'aura-dawn');
+    profile.owned = [...new Set(profile.owned)];
+  });
+  await page.click('[data-profile-screen="scr-wardrobe"]');
+  const currentPreview = await page.locator('#wardrobe-preview').evaluate(canvas => canvas.toDataURL());
+  const crown = page.locator('#wardrobe-catalog .catalog-item').filter({ hasText: 'Dawn Crown' });
+  await crown.getByText('PREVIEW', { exact: true }).click();
+  const crownPreview = await page.locator('#wardrobe-preview').evaluate(canvas => canvas.toDataURL());
+  if (currentPreview === crownPreview) problems.push('wardrobe preview did not change for a hat cosmetic');
+  await crown.getByText('EQUIP', { exact: true }).click();
+  if ((await page.evaluate(() => profile.equipped.hat)) !== 'hat-crown') problems.push('wardrobe did not equip selected cosmetic');
+  await page.click('#scr-wardrobe .profile-back');
+
   // Start through the real menu. This also covers audio/pointer-lock setup.
   await page.click('#b-solo');
   await page.waitForTimeout(300);

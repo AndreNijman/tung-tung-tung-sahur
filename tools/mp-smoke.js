@@ -98,6 +98,9 @@ async function moveTo(page, x, y, movingFlags = 1) {
 
     const password = 'nightfall';
     const host = await openPlayer('Host');
+    await host.evaluate(() => {
+      profile.equipped = { hat: 'hat-crown', shirtPattern: 'pattern-batik', tung: 'tung-bombardiro' };
+    });
     await fillPassword(host, password);
     await host.click('#b-create');
     await host.waitForSelector('#scr-lobby.on');
@@ -196,6 +199,17 @@ async function moveTo(page, x, y, movingFlags = 1) {
     }
     const maps = await Promise.all(pages.map(p => p.evaluate(() => JSON.stringify({ grid: game.grid, items: game.items, hides: game.hides, pairs: game.hidePairs }))));
     if (!maps.every(m => m === maps[0])) problems.push('seeded maps differ between clients');
+    const hostCosmetics = await guests[0].evaluate(() => {
+      const hostPlayer = [...net.players.values()].find(player => player.role === 'tung');
+      return {
+        look: hostPlayer?.look,
+        customSprite: getTungSprite(hostPlayer, true, false) !== SPR.creatureHunt,
+      };
+    });
+    if (hostCosmetics.look?.hat !== 'hat-crown' || hostCosmetics.look?.shirtPattern !== 'pattern-batik' ||
+        hostCosmetics.look?.tung !== 'tung-bombardiro' || !hostCosmetics.customSprite) {
+      problems.push(`equipped cosmetics did not synchronize/render: ${JSON.stringify(hostCosmetics)}`);
+    }
     const initial = await host.evaluate(() => ({ alive: game.alive, count: game.itemState.length, time: game.timeLeft }));
     if (!initial.alive || initial.count !== 2 || initial.time > 120 || initial.time < 115) {
       problems.push(`match did not start cleanly: ${JSON.stringify(initial)}`);
@@ -229,8 +243,9 @@ async function moveTo(page, x, y, movingFlags = 1) {
 
     await survivor.evaluate(() => net.send({ t: 'chat', m: 'runner-only check' }));
     await guests[1].waitForFunction(() => document.getElementById('chat-log').textContent.includes('runner-only check'));
-    await host.waitForTimeout(250);
-    if ((await host.textContent('#chat-log')).includes('runner-only check')) problems.push('Tung received runner team chat');
+    await host.waitForFunction(() => document.getElementById('chat-log').textContent.includes('runner-only check'));
+    await host.evaluate(() => { openChat(); document.getElementById('chat-input').value = 'tung-global check'; closeChat(true); });
+    await guests[1].waitForFunction(() => document.getElementById('chat-log').textContent.includes('tung-global check'));
 
     // Paired alcove: enter one, ask the relay to swap, and verify the mover is
     // the only client that learns the destination.
@@ -244,15 +259,15 @@ async function moveTo(page, x, y, movingFlags = 1) {
     await survivor.waitForFunction((to) => game.hidden && game.hideIdx === to && game.swapTransit === 0 && !game.swapPending, hide.to);
     const landed = await survivor.evaluate(() => ({ idx: game.hideIdx, x: game.px, y: game.py, cd: game.swapCooldown, pending: game.swapPending }));
     if (landed.idx !== hide.to || landed.cd <= 0 || landed.pending) problems.push(`paired alcove did not land/cool down: ${JSON.stringify(landed)}`);
-    await survivor.keyboard.press('KeyE');
-    await survivor.waitForFunction(() => !game.hidden);
     console.log(`  alcove: 0 -> ${hide.to}, server cooldown active`);
 
-    // Move the real Tung onto the survivor. The relay, not either client,
-    // resolves the contact and changes the survivor to caught/spectator state.
+    // Move the real Tung onto the occupied alcove. Hiding conceals its location
+    // but no longer grants invulnerability when the Tung checks the right door.
     const target = await survivor.evaluate(() => [game.px, game.py]);
     await moveTo(host, target[0], target[1], 1);
     await survivor.waitForFunction(() => game.alive === false);
+    await host.waitForFunction(() => document.getElementById('event-banner').textContent.includes('Guest1 was caught'));
+    await guests[1].waitForFunction(() => document.getElementById('event-banner').textContent.includes('Guest1 was caught'));
     console.log('  catch: authoritative');
 
     // The Tung is the host in this round. Its disconnect must end the match and

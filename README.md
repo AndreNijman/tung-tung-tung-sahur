@@ -28,7 +28,7 @@ fight it. You can only be somewhere it is not looking.
 | `F` | torch — you see further, so does it |
 | `E` | duck into a shelter alcove |
 | `Q` | slip through to the paired alcove while hidden |
-| `T` | runner team chat; player Tungs cannot receive it |
+| `T` | global match chat for runners and player Tungs |
 | `Esc` | pause — also fires on alt-tab or losing pointer lock |
 | `R` | restart from a solo end screen |
 
@@ -114,7 +114,9 @@ Every alcove has one deterministic partner a medium distance across the map.
 Press `Q` while hidden to spend 1.2 seconds slipping through. The relay only
 tells that survivor which alcove they reached; the Tung receives neither the
 hidden position nor the swap event. A 12-second cooldown keeps alcoves from
-becoming fast travel. Camping the door wastes the Tung's time without making
+becoming fast travel. A runner is still caught if the Tung physically checks
+the occupied alcove, so hiding conceals the right door rather than granting
+permanent invulnerability. Camping one door wastes the Tung's time without making
 cover a free shortcut.
 
 ---
@@ -131,7 +133,7 @@ npm install                       # only needed for the browser smoke test
 npm run serve                     # game + relay at http://localhost:8787
 npm run sim                       # headless solo balance runs
 npm run smoke                     # solo browser smoke test
-npm run smoke:mp                  # real relay + five Chromium clients
+npm run smoke:mp                  # real relay + ten Chromium clients
 ```
 
 ### Relay and deployment
@@ -143,11 +145,17 @@ positions and swap destinations are withheld from other players. This is a
 friends' game, not a ranked anti-cheat system: a modified client can still read
 visible position snapshots or walk through walls.
 
-`GET /lobbies` returns only joinable 1-4 player rooms with their code, host
+`GET /lobbies` returns only joinable 1-9 player rooms with their code, host
 display name, lock status and gameplay settings. Started, full and abandoned
 rooms are not listed. The Cloudflare deployment keeps this directory in a
 persistent Registry Durable Object; individual room/password state stays
 isolated inside its Room Durable Object.
+
+The signed-in `andrenijman` account has a separate authenticated registry view.
+It can see private, full, and running rooms, bypass their password/capacity when
+joining, enter a running match as a survivor, start or end a night, and remove a
+player. The relay verifies the shared `.andrenijman.com` account session against
+the games guard; player names and client messages never grant admin access.
 
 Run it directly:
 
@@ -172,13 +180,12 @@ For a public relay, set a comma-separated origin allowlist, for example
 `ALLOWED_ORIGINS=https://tung.andrenijman.com`. Leave it unset for local
 `file://` development and smoke tests.
 
-The live GitHub Pages build uses the Cloudflare Durable Object relay at
-`tung-relay.tung-tung-tung-sahur.workers.dev`. The custom
-`relay.tung.andrenijman.com` alias is also configured, but the client stays on
-the Workers hostname so initial custom-domain certificate issuance cannot break
-multiplayer. Its implementation is `worker/relay.js`; it speaks the same client
-protocol and keeps each room inside one Durable Object. Deploy it with the
-account-scoped token in `CLOUDFLARE_API_TOKEN`:
+The live build uses the Cloudflare Durable Object relay at
+`relay.tung.andrenijman.com`. Using the custom `.andrenijman.com` hostname also
+lets the relay receive and verify the games account session for admin access.
+Its implementation is `worker/relay.js`; it speaks the same client protocol and
+keeps each room inside one Durable Object. Deploy it with the account-scoped
+token in `CLOUDFLARE_API_TOKEN`:
 
 ```bash
 npx wrangler deploy

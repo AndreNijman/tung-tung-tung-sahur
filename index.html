@@ -85,6 +85,18 @@
   .chat-name { color:var(--accent); }
   #chat-input { display:none; width:100%; min-height:40px; margin-top:4px; }
   #team-chat.typing #chat-input { display:block; }
+  #event-banner { display:none; position:absolute; z-index:8; top:64px; left:24px; right:24px;
+    color:#ff1818; text-align:center; font:bold clamp(22px, 4vw, 38px) monospace;
+    text-transform:uppercase; letter-spacing:2px; text-shadow:0 2px 0 #260000, 0 0 18px #b00000;
+    pointer-events:none; }
+  #event-banner.on { display:block; }
+  .admin-card { display:none; border-color:#781414; background:#160708; }
+  .admin-card.on { display:block; }
+  .admin-card label, .admin-mark { color:#ff3434; }
+  #admin-badge { display:none; position:absolute; left:18px; bottom:14px; color:#ff3434;
+    font:bold 12px monospace; letter-spacing:2px; border-left:3px solid #a81414; padding:5px 8px;
+    background:#160708; }
+  #admin-badge.on { display:block; }
   .profile-strip { display:flex; justify-content:center; gap:20px; color:var(--muted); margin-top:18px; }
   .profile-strip strong { color:var(--accent); }
   .menu-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; max-width:680px; margin:18px auto 0; }
@@ -93,6 +105,14 @@
   .catalog-item.legendary { border-color:var(--accent); background:#191207; }
   .catalog-item h3 { margin:0 0 6px; color:var(--text); font-size:14px; }
   .catalog-item p { margin:0 0 8px; color:var(--muted); font-size:11px; line-height:1.4; }
+  .catalog-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .wardrobe-layout { display:grid; grid-template-columns:220px minmax(0, 1fr); gap:16px;
+    max-width:900px; margin:0 auto; align-items:start; }
+  .wardrobe-preview { position:sticky; top:0; background:#08080b; border:1px solid var(--divider);
+    padding:12px; text-align:center; }
+  #wardrobe-preview { width:180px; height:260px; max-width:100%; image-rendering:pixelated;
+    background:#050507; border-bottom:1px solid #25252d; }
+  #wardrobe-preview-name { color:var(--accent); min-height:34px; margin-top:8px; font-size:12px; }
   .sigil { display:inline-grid; place-items:center; width:24px; height:24px; margin-right:8px; border:1px solid currentColor; transform:rotate(45deg); }
   .sigil span { transform:rotate(-45deg); font-size:9px; }
   .rarity-easy { color:#d8d8dc; } .rarity-medium { color:#72bc68; }
@@ -110,6 +130,8 @@
     .mp-connect { grid-template-columns:1fr; }
     .lobby-browser { max-height:none; }
     .menu-grid, .catalog { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .wardrobe-layout { grid-template-columns:1fr; }
+    .wardrobe-preview { position:static; }
   }
   @media (max-width:430px) {
     .scr { padding:16px 12px; }
@@ -157,6 +179,7 @@
         <b style="color:#c8c8cd">Alcoves come in pairs.</b> Hide in one and you can slip through to
         its partner, so camping a door is a waste of the Tung's night.
       </div>
+      <div id="admin-badge" role="status">ADMIN</div>
       <div class="credit">originally by tim</div>
     </div>
 
@@ -172,7 +195,14 @@
     </div>
     <div class="scr" id="scr-wardrobe">
       <div class="title">WARDROBE</div><div class="sub">cosmetic only - never changes speed, visibility, or reach</div>
-      <div class="screen-scroll"><div class="catalog" id="wardrobe-catalog"></div></div>
+      <div class="screen-scroll wardrobe-layout">
+        <div class="wardrobe-preview">
+          <canvas id="wardrobe-preview" width="180" height="260" aria-label="Outfit preview"></canvas>
+          <div id="wardrobe-preview-name">CURRENT OUTFIT</div>
+          <button class="ghost small" id="b-preview-current">CURRENT OUTFIT</button>
+        </div>
+        <div class="catalog" id="wardrobe-catalog"></div>
+      </div>
       <div class="row center"><button class="ghost profile-back">BACK</button></div>
     </div>
     <div class="scr" id="scr-achievements">
@@ -261,6 +291,11 @@
           <div id="lobby-settings"></div>
         </div>
       </div>
+      <div class="card admin-card" id="lobby-admin">
+        <label>DEV ANDRE ADMIN PANEL</label>
+        <div class="hint">Start this lobby, remove players, or end a running night.</div>
+        <div class="row" id="lobby-admin-actions"></div>
+      </div>
       <div class="err" id="lobby-err" role="status" aria-live="polite"></div>
       <div class="row center" style="margin-top:6px">
         <button id="b-start">START THE NIGHT</button>
@@ -278,7 +313,11 @@
         <div class="row" style="justify-content:space-between"><span>F</span><span>torch</span></div>
         <div class="row" style="justify-content:space-between"><span>E</span><span>hide in an alcove</span></div>
         <div class="row" style="justify-content:space-between"><span>Q</span><span>slip through to the paired alcove</span></div>
-        <div class="row" style="justify-content:space-between"><span>T</span><span>runner team chat (hidden from Tungs)</span></div>
+        <div class="row" style="justify-content:space-between"><span>T</span><span>global lobby chat</span></div>
+      </div>
+      <div class="card admin-card" id="pause-admin" style="max-width:520px;margin:10px auto 0">
+        <label>DEV ANDRE ADMIN PANEL</label>
+        <div class="row" id="pause-admin-actions"></div>
       </div>
       <div class="row center" style="margin-top:18px">
         <button id="b-resume">RESUME</button>
@@ -304,8 +343,9 @@
   </div>
   <div id="team-chat" aria-live="polite">
     <div id="chat-log"></div>
-    <input id="chat-input" maxlength="160" autocomplete="off" aria-label="Team message" placeholder="team message - Enter to send, Escape to close">
+    <input id="chat-input" maxlength="160" autocomplete="off" aria-label="Global chat message" placeholder="global message - Enter to send, Escape to close">
   </div>
+  <div id="event-banner" role="status" aria-live="assertive"></div>
 </div>
 <script>
 "use strict";
@@ -936,6 +976,30 @@ function createCreatureSprite(hunting, away) {
   g.beginPath(); g.moveTo(20, 46); g.lineTo(12, 64); g.stroke();
   return c;
 }
+const tungCosmeticSprites = new Map();
+function getTungSprite(player, hunting, away) {
+  const variant = player?.look?.tung || '';
+  if (!variant) return hunting ? (away ? SPR.creatureHuntBack : SPR.creatureHunt) : (away ? SPR.creatureBack : SPR.creature);
+  const key = `${variant}|${hunting ? 1 : 0}|${away ? 1 : 0}`;
+  let sprite = tungCosmeticSprites.get(key);
+  if (sprite) return sprite;
+  sprite = createCreatureSprite(hunting, away);
+  const g = sprite.getContext('2d');
+  if (variant === 'tung-tralalero') {
+    g.fillStyle = 'rgb(42,92,118)'; g.fillRect(20, 42, 24, 54);
+    g.fillStyle = 'rgb(218,224,190)';
+    for (let y = 46; y < 94; y += 12) g.fillRect(20, y, 24, 4);
+    g.fillStyle = 'rgb(72,122,142)'; g.fillRect(15, 11, 34, 7);
+  } else if (variant === 'tung-bombardiro') {
+    g.fillStyle = 'rgb(88,42,35)'; g.fillRect(20, 40, 24, 58);
+    g.fillStyle = 'rgb(190,142,54)'; g.fillRect(20, 48, 24, 4); g.fillRect(20, 76, 24, 4);
+    g.fillStyle = 'rgb(52,54,60)'; g.fillRect(13, 12, 38, 8);
+  } else {
+    g.fillStyle = 'rgba(224,160,64,.35)'; g.fillRect(18, 38, 28, 62);
+  }
+  tungCosmeticSprites.set(key, sprite);
+  return sprite;
+}
 // the doorway you left before the call: warm, unmistakable, and a long way off
 function createSurauSprite() {
   const w = 64, h = 112;
@@ -963,12 +1027,23 @@ function createSurauSprite() {
 // The other four. Drawn per lobby colour so a glance down a corridor tells you
 // who it is, and with a back-facing variant for the same reason the creature
 // has one: facing is information.
-function createSurvivorSprite(color, carrying, away) {
+function createSurvivorSprite(player, carrying, away) {
   const w = 48, h = 104;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d');
-  const skin = 'rgb(120,92,66)', skinD = 'rgb(88,66,48)';
-  const cloth = color || '#c8c0a8';
+  const look = player?.look || {};
+  const skin = look.skin === 'skin-moon' ? 'rgb(150,158,184)'
+    : look.skin === 'skin-carved' ? 'rgb(132,82,54)' : 'rgb(120,92,66)';
+  const skinD = look.skin === 'skin-moon' ? 'rgb(92,100,130)'
+    : look.skin === 'skin-carved' ? 'rgb(78,44,30)' : 'rgb(88,66,48)';
+  const cloth = outfitColor(player);
+  const pants = look.pants === 'pants-ember' ? 'rgb(112,48,34)' : 'rgb(38,38,46)';
+
+  if (look.aura === 'aura-dawn') {
+    for (const [r, a] of [[25, .08], [19, .12], [13, .18]]) {
+      g.fillStyle = `rgba(244,174,70,${a})`; g.beginPath(); g.arc(24, 58, r, 0, Math.PI * 2); g.fill();
+    }
+  }
 
   if (carrying) {
     // the lantern's halo, drawn behind everything so the body occludes it
@@ -977,13 +1052,48 @@ function createSurvivorSprite(color, carrying, away) {
       g.beginPath(); g.arc(38, 58, r, 0, Math.PI * 2); g.fill();
     }
   }
-  g.fillStyle = 'rgb(28,28,34)'; g.fillRect(18, 82, 5, 20); g.fillRect(26, 82, 5, 20);
+  if (look.back === 'back-drum') {
+    g.fillStyle = 'rgb(68,42,24)'; g.fillRect(10, 43, 29, 31);
+    g.strokeStyle = 'rgb(190,130,54)'; g.lineWidth = 2; g.strokeRect(11, 44, 27, 29);
+  } else if (look.back === 'back-moon') {
+    g.fillStyle = 'rgb(184,184,150)'; g.beginPath(); g.arc(24, 55, 12, 0, Math.PI * 2); g.fill();
+    g.fillStyle = 'rgb(30,30,38)'; g.beginPath(); g.arc(29, 51, 11, 0, Math.PI * 2); g.fill();
+  } else if (look.back) {
+    g.fillStyle = 'rgb(64,58,48)'; g.fillRect(12, 42, 25, 36);
+    g.strokeStyle = 'rgb(150,118,64)'; g.strokeRect(13.5, 43.5, 22, 33);
+  }
+  g.fillStyle = look.shoes === 'shoes-spark' ? 'rgb(228,168,58)' : 'rgb(28,28,34)';
+  g.fillRect(17, 96, 7, 6); g.fillRect(26, 96, 7, 6);
+  g.fillStyle = pants; g.fillRect(18, 78, 5, 20); g.fillRect(26, 78, 5, 20);
   g.fillStyle = cloth; g.fillRect(15, 40, 19, 44);
   g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(28, 40, 6, 44);
-  g.fillStyle = 'rgb(38,38,46)'; g.fillRect(15, 70, 19, 14);   // sarong
+  if (look.shirtPattern === 'pattern-static') {
+    g.fillStyle = 'rgba(220,225,235,.55)';
+    for (let y = 44; y < 69; y += 7) { g.fillRect(17, y, 5, 2); g.fillRect(25, y + 3, 6, 2); }
+  } else if (look.shirtPattern === 'pattern-batik') {
+    g.fillStyle = 'rgb(220,158,58)';
+    for (let y = 45; y < 70; y += 8) { g.fillRect(18, y, 3, 3); g.fillRect(26, y + 3, 3, 3); }
+  }
+  if (look.spray) {
+    g.fillStyle = look.spray === 'spray-eye' ? 'rgb(225,210,170)' : 'rgb(224,160,64)';
+    g.fillRect(21, 54, 7, 2); g.fillRect(23, 52, 3, 6);
+  }
+  g.fillStyle = pants; g.fillRect(15, 70, 19, 14);   // sarong
+  if (look.pantsPattern === 'pants-check') {
+    g.fillStyle = 'rgb(148,148,160)';
+    g.fillRect(15, 74, 19, 2); g.fillRect(20, 70, 2, 14); g.fillRect(28, 70, 2, 14);
+  }
   g.fillStyle = skin; g.fillRect(19, 20, 12, 16);              // head
   g.fillStyle = skinD; g.fillRect(19, 20, 12, 4);
-  g.fillStyle = 'rgb(24,24,30)'; g.fillRect(17, 14, 16, 8);    // songkok
+  if (look.hat === 'hat-crown') {
+    g.fillStyle = 'rgb(226,170,55)'; g.fillRect(16, 14, 18, 8);
+    g.fillRect(17, 9, 4, 6); g.fillRect(23, 7, 4, 8); g.fillRect(29, 9, 4, 6);
+  } else if (look.hat === 'hat-lantern') {
+    g.fillStyle = 'rgb(72,52,28)'; g.fillRect(15, 10, 20, 12);
+    g.fillStyle = 'rgb(236,172,60)'; g.fillRect(18, 12, 14, 7);
+  } else if (look.hat) {
+    g.fillStyle = 'rgb(122,94,52)'; g.fillRect(16, 12, 18, 10); g.fillRect(13, 20, 24, 3);
+  } else { g.fillStyle = 'rgb(24,24,30)'; g.fillRect(17, 14, 16, 8); }
   if (away) {
     g.fillStyle = 'rgb(20,20,26)'; g.fillRect(19, 22, 12, 12);
   } else {
@@ -1004,10 +1114,11 @@ function createSurvivorSprite(color, carrying, away) {
   return c;
 }
 const survivorSprites = new Map();
-function getSurvivorSprite(color, carrying, away) {
-  const key = `${color}|${carrying ? 1 : 0}|${away ? 1 : 0}`;
+function getSurvivorSprite(player, carrying, away) {
+  const lookKey = Object.entries(player?.look || {}).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}:${v}`).join(',');
+  const key = `${player?.color || ''}|${lookKey}|${carrying ? 1 : 0}|${away ? 1 : 0}`;
   let s = survivorSprites.get(key);
-  if (!s) { s = createSurvivorSprite(color, carrying, away); survivorSprites.set(key, s); }
+  if (!s) { s = createSurvivorSprite(player, carrying, away); survivorSprites.set(key, s); }
   return s;
 }
 function createItemSprite() {
@@ -1632,7 +1743,7 @@ class Game {
       audio.playSimple('boom', 0.9);
       return;
     }
-    if (this.cdist < CATCH_DIST && !this.hidden) {
+    if (this.cdist < CATCH_DIST) {
       this.state = 'caught';
       return;
     }
@@ -2000,11 +2111,11 @@ class Game {
         const cang = s.r ? (s.r.a || 0) : this.cangle;
         const hunting = s.r ? true : this.cstate === 'hunt';
         const away = Math.abs(angDiff(cang, Math.atan2(this.py - s.y, this.px - s.x))) > VIEW_CONE;
-        if (hunting) src = away ? SPR.creatureHuntBack : SPR.creatureHunt;
-        else src = away ? SPR.creatureBack : SPR.creature;
+        src = s.r ? getTungSprite(s.r, hunting, away)
+          : (hunting ? (away ? SPR.creatureHuntBack : SPR.creatureHunt) : (away ? SPR.creatureBack : SPR.creature));
       } else if (s.kind === 'player') {
         const away = Math.abs(angDiff(s.r.a || 0, Math.atan2(this.py - s.y, this.px - s.x))) > VIEW_CONE;
-        src = getSurvivorSprite(outfitColor(s.r), s.r.carrying >= 0, away);
+        src = getSurvivorSprite(s.r, s.r.carrying >= 0, away);
       } else if (s.kind === 'hide') src = SPR.hide;
       else if (s.kind === 'surau') src = SPR.surau;
       else src = SPR.item;
@@ -2364,6 +2475,7 @@ let caughtTimer = 0;
 let lastTime = performance.now();
 let resumeGuardUntil = 0;
 let roleRevealUntil = 0;
+let eventBannerUntil = 0;
 let droneStarted = false, droneHandle = null, whisperHandle = null;
 
 // ---------------------------------------------------------------------------
@@ -2389,6 +2501,7 @@ const SHOP_ITEMS = [
   ['aura-dawn', 'aura', 'Dawn Aura', 1800], ['trail-ash', 'trail', 'Ash Footfall', 1350],
   ['tung-tralalero', 'tung', 'Tralalero Tung', 2200], ['tung-bombardiro', 'tung', 'Bombardiro Tung', 2400],
 ].map(([id, slot, name, price]) => ({ id, slot, name, price }));
+const DEFAULT_COSMETIC = { id: 'default-shirt', slot: 'shirt', name: 'Street Shirt', price: 0 };
 const SHOP_BUNDLES = [
   { id: 'bundle-eclipse', name: 'Total Eclipse Set', price: 3600, includes: ['shirt-eclipse', 'pattern-static', 'pants-ember', 'back-moon', 'aura-dawn'] },
   { id: 'bundle-drum', name: 'Last Drum Set', price: 4100, includes: ['skin-carved', 'back-drum', 'hat-crown', 'emote-drumline', 'tung-bombardiro'] },
@@ -2460,6 +2573,7 @@ let profile = normalizeProfile(readStored('tung-profile-guest', readStored('tung
 let profileAccount = false;
 let profileCloudReady = false;
 let profileUsername = 'GUEST';
+let profileAdmin = false;
 let profileSaveTimer = null;
 
 function saveProfile() {
@@ -2477,6 +2591,7 @@ async function loadAccountProfile() {
     const status = await fetch('/_guard/status', { cache: 'no-store' });
     const identity = await status.json();
     profileAccount = !!identity.signedIn; profileUsername = identity.username || 'GUEST';
+    profileAdmin = profileAccount && profileUsername.toLowerCase() === 'andrenijman';
     if (profileAccount) {
       const response = await fetch('/_guard/profile', { cache: 'no-store' });
       if (response.ok) {
@@ -2492,7 +2607,15 @@ async function loadAccountProfile() {
 function renderProfileStrip() {
   $('profile-level').textContent = String(profileLevel(profile.xp));
   $('profile-coins').textContent = profile.unlimited ? '\u221E' : profile.coins.toLocaleString();
-  $('profile-user').textContent = profileAccount ? profileUsername : 'GUEST - LOCAL SAVE';
+  $('profile-user').textContent = profileAccount ? `${profileUsername}${profileAdmin ? ' - ADMIN' : ''}` : 'GUEST - LOCAL SAVE';
+  $('admin-badge').classList.toggle('on', profileAdmin);
+}
+
+function showEventBanner(message, duration = 3200) {
+  const banner = $('event-banner');
+  banner.textContent = message;
+  banner.classList.add('on');
+  eventBannerUntil = performance.now() + duration;
 }
 function sigilSymbol(id) { return ACHIEVEMENTS.find(item => item.id === id)?.symbol || ''; }
 function playerName(player) {
@@ -2502,6 +2625,9 @@ function playerName(player) {
 function outfitColor(player) {
   return ({ 'shirt-eclipse': '#5d6688', 'shirt-sunrise': '#d07848', 'pass-5-shirt': '#7e8b70',
     'pass-30-shirt': '#866b58', 'pass-55-shirt': '#7b657f', 'pass-80-shirt': '#9b864f' })[player?.look?.shirt] || player.color;
+}
+function outfitTrailColor(player) {
+  return player?.look?.trail === 'trail-ash' ? '#aaa6a0' : player?.color;
 }
 function grantPassRewards() {
   if (!profile.pass) return;
@@ -2580,7 +2706,27 @@ function renderShop() {
   }
 }
 function allCosmetics() {
-  return [...SHOP_ITEMS, ...PASS_REWARDS.filter(reward => reward.id)];
+  return [DEFAULT_COSMETIC, ...SHOP_ITEMS, ...PASS_REWARDS.filter(reward => reward.id)];
+}
+let wardrobePreviewLook = null;
+function renderWardrobePreview(label = 'CURRENT OUTFIT') {
+  const canvas = $('wardrobe-preview'), g = canvas.getContext('2d');
+  const look = wardrobePreviewLook || profile.equipped;
+  const background = look.background;
+  g.fillStyle = background ? '#17130d' : '#050507'; g.fillRect(0, 0, canvas.width, canvas.height);
+  if (background) {
+    g.fillStyle = '#282015';
+    for (let y = 18; y < canvas.height; y += 32) g.fillRect(0, y, canvas.width, 2);
+    g.fillStyle = 'rgba(224,160,64,.08)'; g.fillRect(20, 20, canvas.width - 40, canvas.height - 40);
+  }
+  g.fillStyle = '#111116'; g.fillRect(18, 218, 144, 3);
+  const wearer = { color: '#c8c0a8', look };
+  const sprite = look.tung ? getTungSprite(wearer, true, false) : getSurvivorSprite(wearer, false, false);
+  g.imageSmoothingEnabled = false;
+  const scale = look.tung ? 1.65 : 2.05;
+  const width = Math.round(sprite.width * scale), height = Math.round(sprite.height * scale);
+  g.drawImage(sprite, Math.round((canvas.width - width) / 2), 214 - height, width, height);
+  $('wardrobe-preview-name').textContent = label;
 }
 function renderWardrobe() {
   const list = $('wardrobe-catalog'); list.replaceChildren();
@@ -2588,11 +2734,21 @@ function renderWardrobe() {
   if (!owned.length) list.appendChild(catalogCard('EMPTY RAIL', 'Earn Sahur Pass rewards or visit the item shop.'));
   for (const item of owned) {
     const equipped = profile.equipped[item.slot] === item.id;
-    list.appendChild(catalogCard(item.name, item.slot.toUpperCase(), actionButton(equipped ? 'EQUIPPED' : 'EQUIP', () => {
-      profile.equipped[item.slot] = item.id; saveProfile(); renderWardrobe();
-    }, equipped), !!item.legendary));
+    const actions = document.createElement('div'); actions.className = 'catalog-actions';
+    actions.appendChild(actionButton('PREVIEW', () => {
+      wardrobePreviewLook = { ...profile.equipped, [item.slot]: item.id };
+      renderWardrobePreview(`PREVIEW: ${item.name.toUpperCase()}`);
+    }));
+    actions.appendChild(actionButton(equipped ? 'UNEQUIP' : 'EQUIP', () => {
+      if (equipped) delete profile.equipped[item.slot];
+      else profile.equipped[item.slot] = item.id;
+      wardrobePreviewLook = null; saveProfile(); renderWardrobe();
+    }));
+    list.appendChild(catalogCard(item.name, item.slot.toUpperCase(), actions, !!item.legendary));
   }
+  renderWardrobePreview();
 }
+$('b-preview-current').onclick = () => { wardrobePreviewLook = null; renderWardrobePreview(); };
 function renderAchievements() {
   const list = $('achievement-catalog'); list.replaceChildren();
   for (const achievement of ACHIEVEMENTS) {
@@ -2691,7 +2847,7 @@ function defaultRelayUrl() {
   const configured = window.TUNG_RELAY_URL;
   if (configured) return configured;
   if (location.hostname === 'tung.andrenijman.com') {
-    return 'wss://tung-relay.tung-tung-tung-sahur.workers.dev/ws';
+    return 'wss://relay.tung.andrenijman.com/ws';
   }
   if (location.protocol === 'http:' || location.protocol === 'https:') {
     return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
@@ -2741,15 +2897,16 @@ function renderAvailableLobbies(lobbies) {
     primary.textContent = `${String(lobby.host || 'guest').slice(0, 14)}  ·  ${Number(lobby.players) || 0}/${Number(lobby.max) || 10}`;
     const detail = document.createElement('div'); detail.className = 'lobby-detail';
     const settings = clampGameSettings(lobby.settings);
-    detail.textContent = `${settings.mapN}x${settings.mapN}  ·  ${settings.lanterns} lanterns  ·  ${fmtClock(settings.night)}`;
+    const phase = String(lobby.phase || 'lobby').toUpperCase();
+    detail.textContent = `${phase}  ·  ${settings.mapN}x${settings.mapN}  ·  ${settings.lanterns} lanterns  ·  ${fmtClock(settings.night)}`;
     const lock = document.createElement('span'); lock.className = 'lock';
-    lock.textContent = lobby.locked ? 'LOCKED' : 'OPEN';
+    lock.textContent = profileAdmin ? 'DEV ACCESS' : (lobby.locked ? 'LOCKED' : 'OPEN');
     primary.append(' ', lock); meta.append(primary, detail);
     const join = document.createElement('button'); join.className = 'ghost small'; join.textContent = 'JOIN';
     join.setAttribute('aria-label', `Join lobby ${code.textContent}${lobby.locked ? ', password required' : ''}`);
     join.onclick = () => {
       $('i-code').value = code.textContent;
-      if (lobby.locked && !$('i-password').value) {
+      if (!profileAdmin && lobby.locked && !$('i-password').value) {
         $('mp-err').textContent = 'enter this lobby\'s password first';
         $('i-password').focus();
         return;
@@ -2769,7 +2926,9 @@ async function refreshAvailableLobbies(showLoading = false) {
     browser.replaceChildren(loading);
   }
   try {
-    const response = await fetch(lobbyListUrl($('i-relay').value.trim() || defaultRelayUrl()), { cache: 'no-store' });
+    const url = lobbyListUrl($('i-relay').value.trim() || defaultRelayUrl());
+    if (profileAdmin) url.pathname = '/admin/lobbies';
+    const response = await fetch(url, { cache: 'no-store', credentials: 'include' });
     if (!response.ok) throw new Error(`relay returned ${response.status}`);
     const data = await response.json();
     if (request !== lobbyBrowserRequest) return;
@@ -2951,7 +3110,7 @@ class Net {
     game.net = this; game.state = 'play'; game.timeLeft = this.settings.night;
 
     for (const p of this.players.values()) {
-      const s = game.spawnForRole(p.role, p.spawnIdx);
+      const s = p.spawn || game.spawnForRole(p.role, p.spawnIdx);
       p.pos = [s.x, s.y]; p.target = [s.x, s.y]; p.a = s.a; p.targetA = s.a;
     }
     const ownSpawn = this.players.get(this.you).pos;
@@ -2990,7 +3149,7 @@ class Net {
         p.target = [row[4], row[5]]; p.targetA = row[6];
         if (!p.pos) { p.pos = [...p.target]; p.a = p.targetA; }
         if (game.role === 'tung' && id !== this.you && p.role !== 'tung' && (flags & 1)) {
-          game.stampFootprint(id, row[4], row[5], !!(flags & 2), carrying >= 0, p.color);
+          game.stampFootprint(id, row[4], row[5], !!(flags & 2), carrying >= 0, outfitTrailColor(p));
         }
       }
       if (id === this.you) {
@@ -3015,8 +3174,13 @@ class Net {
       audio.playSimple('boom', 0.3);
     } else if (msg.e === 'caught') {
       const p = this.players.get(msg.who); if (p) p.alive = false;
+      showEventBanner(`${playerName(p)} was caught`);
       if (msg.who === this.you) { game.alive = false; audio.playSimple('scare', 1.0); }
       else audio.playSimple('stinger', 0.45);
+    } else if (msg.e === 'dev-joined') {
+      showEventBanner('Dev Andre has joined', 4000);
+    } else if (msg.e === 'kicked') {
+      this.lastError = msg.m || 'removed by Dev Andre';
     } else if (msg.e === 'swap') {
       game.swapPending = false;
       game.swapCooldown = SWAP_COOLDOWN;
@@ -3063,6 +3227,13 @@ class Net {
     this.host = msg.host;
     const ids = new Set(msg.players.map(p => p.id));
     for (const id of [...this.players.keys()]) if (!ids.has(id)) this.players.delete(id);
+    for (const player of msg.players) {
+      const existing = this.players.get(player.id);
+      if (existing) Object.assign(existing, player);
+      else this.players.set(player.id, Object.assign({
+        alive: true, carrying: -1, hidden: false, flags: 0, pos: null, target: null, a: 0, targetA: 0,
+      }, player));
+    }
     if (this.phase === 'play' && this.you === this.host) this.sendManifest();
     if (this.phase === 'over') $('b-again').style.display = this.you === this.host ? '' : 'none';
   }
@@ -3112,7 +3283,7 @@ class Net {
 }
 
 function connectMultiplayer(kind, codeOverride) {
-  const name = $('i-name').value.trim() || 'guest';
+  const name = profileAdmin ? 'Dev Andre' : ($('i-name').value.trim() || 'guest');
   const relay = $('i-relay').value.trim() || defaultRelayUrl();
   const code = String(codeOverride || $('i-code').value).trim().toUpperCase();
   const password = $('i-password').value.slice(0, 64);
@@ -3146,6 +3317,7 @@ function renderLobby(n, max = 10, min = 2) {
     const tags = [];
     if (p.id === n.host) tags.push('HOST');
     if (p.id === n.you) tags.push('YOU');
+    if (p.admin) tags.push('DEV');
     const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = tags.join(' / ');
     const tally = document.createElement('span'); tally.className = 'tally';
     tally.textContent = votes.get(p.id) ? `${votes.get(p.id)} vote${votes.get(p.id) === 1 ? '' : 's'}` : '';
@@ -3167,6 +3339,21 @@ function renderLobby(n, max = 10, min = 2) {
   $('b-start').disabled = n.players.size < min;
   $('b-start').textContent = n.players.size < min ? `NEED ${min - n.players.size} MORE` : 'START THE NIGHT';
   $('b-start').onclick = () => n.send({ t: 'start' });
+  renderAdminPanel(n, 'lobby');
+}
+
+function renderAdminPanel(n, place) {
+  const panel = $(place === 'pause' ? 'pause-admin' : 'lobby-admin');
+  const actions = $(place === 'pause' ? 'pause-admin-actions' : 'lobby-admin-actions');
+  panel.classList.toggle('on', profileAdmin && !!n);
+  actions.replaceChildren();
+  if (!profileAdmin || !n) return;
+  const add = (label, message) => actions.appendChild(actionButton(label, () => n.send(message)));
+  if (n.phase === 'lobby') add('FORCE START', { t: 'admin-start' });
+  if (n.phase === 'play') add('END NIGHT', { t: 'admin-end' });
+  for (const player of n.players.values()) {
+    if (player.id !== n.you) add(`REMOVE ${playerName(player)}`, { t: 'admin-kick', id: player.id });
+  }
 }
 
 $('b-leave').onclick = () => goMain();
@@ -3218,7 +3405,7 @@ function clearKeys() { for (const k of Object.keys(keys)) keys[k] = false; }
 let chatOpen = false;
 
 function openChat() {
-  if (game.mode !== 'mp' || game.role === 'tung' || !game.alive || paused) return;
+  if (game.mode !== 'mp' || !game.alive || paused) return;
   chatOpen = true; clearKeys();
   $('team-chat').classList.add('on', 'typing');
   $('chat-input').value = '';
@@ -3256,6 +3443,7 @@ function pauseGame() {
   $('pause-title').textContent = game.mode === 'mp' ? 'THE NIGHT CONTINUES' : 'PAUSED';
   $('pause-sub').textContent = game.mode === 'mp' ? 'the other players are still moving' : 'the street holds its breath';
   $('k-shift').textContent = game.role === 'tung' ? 'surge' : 'sprint';
+  renderAdminPanel(net, 'pause');
   showScreen('scr-pause', true);
   if (whisperHandle) whisperHandle.gain.gain.value = 0;
   if (droneHandle) droneHandle.gain.gain.value = 0.25;
@@ -3346,6 +3534,10 @@ function drawRoleReveal(now) {
   if (now >= roleRevealUntil || game.mode !== 'mp') return;
   const left = Math.min(1, (roleRevealUntil - now) / 500);
   ctx.fillStyle = `rgba(0,0,0,${0.68 * left})`; ctx.fillRect(0, 180, WIN_W, 180);
+  if (profile.equipped.background) {
+    ctx.strokeStyle = `rgba(224,160,64,${0.7 * left})`; ctx.lineWidth = 3;
+    ctx.strokeRect(38, 192, WIN_W - 76, 156);
+  }
   const tung = game.role === 'tung';
   drawText(ctx, tung ? 'YOU ARE THE TUNG' : 'YOU ARE NOT THE TUNG', WIN_W / 2, 238,
            tung ? 'rgb(220,80,60)' : AMBER, { center: true, font: 'bold 34px monospace' });
@@ -3377,6 +3569,9 @@ function frame(now) {
   requestAnimationFrame(frame);
   let dt = Math.min(0.05, (now - lastTime) / 1000); lastTime = now;
   const mdx = mdxAccum; mdxAccum = 0;
+  if (eventBannerUntil && now >= eventBannerUntil) {
+    eventBannerUntil = 0; $('event-banner').classList.remove('on');
+  }
 
   if (game.state === 'play') {
     if (net && game.mode === 'mp') net.update(dt);
