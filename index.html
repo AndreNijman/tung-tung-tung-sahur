@@ -2872,6 +2872,10 @@ let lobbyBrowserRequest = 0;
 
 function lobbyListUrl(relay) {
   const url = new URL(relay, location.href);
+  if (location.hostname === 'tung.andrenijman.com' &&
+      (url.hostname === 'relay.tung.andrenijman.com' || url.hostname.endsWith('.workers.dev'))) {
+    return new URL('/_guard/tung-lobbies', location.origin);
+  }
   url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
   url.pathname = '/lobbies';
   url.search = '';
@@ -2927,7 +2931,10 @@ async function refreshAvailableLobbies(showLoading = false) {
   }
   try {
     const url = lobbyListUrl($('i-relay').value.trim() || defaultRelayUrl());
-    if (profileAdmin) url.pathname = '/admin/lobbies';
+    if (profileAdmin) {
+      if (url.pathname === '/_guard/tung-lobbies') url.searchParams.set('admin', '1');
+      else url.pathname = '/admin/lobbies';
+    }
     const response = await fetch(url, { cache: 'no-store', credentials: 'include' });
     if (!response.ok) throw new Error(`relay returned ${response.status}`);
     const data = await response.json();
