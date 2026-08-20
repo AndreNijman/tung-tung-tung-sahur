@@ -1363,7 +1363,7 @@ export default {
       const origin = request.headers.get('Origin');
       if (originAllowed(origin)) {
         headers.set('Access-Control-Allow-Origin', origin);
-        if (adminRequest) headers.set('Access-Control-Allow-Credentials', 'true');
+        headers.set('Access-Control-Allow-Credentials', 'true');
       }
       return Response.json({ lobbies }, { status, headers });
     }
