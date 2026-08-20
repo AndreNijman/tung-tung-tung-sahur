@@ -13,10 +13,10 @@
   }
   html, body { margin:0; padding:0; background:var(--bg); height:100%; overflow:hidden;
     display:flex; align-items:center; justify-content:center; font-family:monospace; }
-  #wrap { position:relative; width:min(960px, 100vw); height:min(540px, 100vh);
+  #wrap { position:relative; width:min(100vw, 177.7778vh); height:min(100vh, 56.25vw);
     box-shadow:0 0 40px rgba(0,0,0,0.8); }
-  #main { position:absolute; top:50%; left:0; width:100%; height:auto; aspect-ratio:16/9;
-    transform:translateY(-50%); image-rendering:pixelated; cursor:pointer; }
+  #main { position:absolute; inset:0; width:100%; height:100%;
+    image-rendering:pixelated; cursor:pointer; }
 
   /* Menus are DOM because lobbies need real form controls and focus handling. */
   #ui { position:absolute; inset:0; display:none; color:var(--text); font:14px monospace;
@@ -113,6 +113,10 @@
   #wardrobe-preview { width:180px; height:260px; max-width:100%; image-rendering:pixelated;
     background:#050507; border-bottom:1px solid #25252d; }
   #wardrobe-preview-name { color:var(--accent); min-height:34px; margin-top:8px; font-size:12px; }
+  .wardrobe-item { display:grid; grid-template-columns:72px minmax(0, 1fr); column-gap:12px; align-items:start; }
+  .wardrobe-item > canvas { grid-column:1; grid-row:1 / span 3; width:72px; height:88px;
+    background:#050507; border:1px solid #292932; image-rendering:pixelated; box-sizing:border-box; }
+  .wardrobe-item > h3, .wardrobe-item > p, .wardrobe-item > .catalog-actions { grid-column:2; }
   .sigil { display:inline-grid; place-items:center; width:24px; height:24px; margin-right:8px; border:1px solid currentColor; transform:rotate(45deg); }
   .sigil span { transform:rotate(-45deg); font-size:9px; }
   .rarity-easy { color:#d8d8dc; } .rarity-medium { color:#72bc68; }
@@ -139,6 +143,8 @@
     .setting label { flex-basis:104px; }
     .plist li { flex-wrap:wrap; }
     .plist .pname { min-width:120px; }
+    .wardrobe-item { grid-template-columns:64px minmax(0, 1fr); }
+    .wardrobe-item > canvas { width:64px; }
   }
   @media (prefers-reduced-motion:reduce) {
     *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
@@ -2709,23 +2715,41 @@ function allCosmetics() {
   return [DEFAULT_COSMETIC, ...SHOP_ITEMS, ...PASS_REWARDS.filter(reward => reward.id)];
 }
 let wardrobePreviewLook = null;
-function renderWardrobePreview(label = 'CURRENT OUTFIT') {
-  const canvas = $('wardrobe-preview'), g = canvas.getContext('2d');
-  const look = wardrobePreviewLook || profile.equipped;
-  const background = look.background;
+function drawWardrobeLook(canvas, look, compact = false, featuredSlot = '') {
+  const g = canvas.getContext('2d'), background = look.background;
+  g.clearRect(0, 0, canvas.width, canvas.height);
   g.fillStyle = background ? '#17130d' : '#050507'; g.fillRect(0, 0, canvas.width, canvas.height);
   if (background) {
     g.fillStyle = '#282015';
-    for (let y = 18; y < canvas.height; y += 32) g.fillRect(0, y, canvas.width, 2);
-    g.fillStyle = 'rgba(224,160,64,.08)'; g.fillRect(20, 20, canvas.width - 40, canvas.height - 40);
+    for (let y = compact ? 8 : 18; y < canvas.height; y += compact ? 14 : 32) g.fillRect(0, y, canvas.width, compact ? 1 : 2);
+    g.fillStyle = 'rgba(224,160,64,.08)';
+    const inset = compact ? 6 : 20; g.fillRect(inset, inset, canvas.width - inset * 2, canvas.height - inset * 2);
   }
-  g.fillStyle = '#111116'; g.fillRect(18, 218, 144, 3);
+  const groundY = canvas.height - (compact ? 5 : 42);
+  if (compact && featuredSlot === 'trail') {
+    g.fillStyle = 'rgba(190,184,174,.55)';
+    g.fillRect(8, groundY - 18, 5, 9); g.fillRect(17, groundY - 9, 5, 9);
+    g.fillRect(4, groundY - 20, 2, 4); g.fillRect(24, groundY - 11, 2, 4);
+  }
+  g.fillStyle = '#111116'; g.fillRect(compact ? 5 : 18, groundY, canvas.width - (compact ? 10 : 36), compact ? 2 : 3);
   const wearer = { color: '#c8c0a8', look };
   const sprite = look.tung ? getTungSprite(wearer, true, false) : getSurvivorSprite(wearer, false, false);
   g.imageSmoothingEnabled = false;
-  const scale = look.tung ? 1.65 : 2.05;
+  const scale = compact
+    ? Math.min((canvas.width - 12) / sprite.width, (canvas.height - 10) / sprite.height)
+    : (look.tung ? 1.65 : 2.05);
   const width = Math.round(sprite.width * scale), height = Math.round(sprite.height * scale);
-  g.drawImage(sprite, Math.round((canvas.width - width) / 2), 214 - height, width, height);
+  g.drawImage(sprite, Math.round((canvas.width - width) / 2), groundY - height, width, height);
+  if (compact && featuredSlot === 'emote') {
+    g.strokeStyle = '#e0a040'; g.lineWidth = 2;
+    g.beginPath(); g.arc(canvas.width - 14, 22, 6, -1.2, 1.2); g.stroke();
+    g.beginPath(); g.arc(canvas.width - 14, 22, 11, -1.1, 1.1); g.stroke();
+  }
+}
+function renderWardrobePreview(label = 'CURRENT OUTFIT') {
+  const canvas = $('wardrobe-preview');
+  const look = wardrobePreviewLook || profile.equipped;
+  drawWardrobeLook(canvas, look);
   $('wardrobe-preview-name').textContent = label;
 }
 function renderWardrobe() {
@@ -2744,7 +2768,12 @@ function renderWardrobe() {
       else profile.equipped[item.slot] = item.id;
       wardrobePreviewLook = null; saveProfile(); renderWardrobe();
     }));
-    list.appendChild(catalogCard(item.name, item.slot.toUpperCase(), actions, !!item.legendary));
+    const card = catalogCard(item.name, item.slot.toUpperCase(), actions, !!item.legendary);
+    card.classList.add('wardrobe-item');
+    const preview = document.createElement('canvas'); preview.width = 72; preview.height = 88;
+    preview.setAttribute('role', 'img'); preview.setAttribute('aria-label', `${item.name} cosmetic preview`);
+    drawWardrobeLook(preview, { ...profile.equipped, [item.slot]: item.id }, true, item.slot);
+    card.prepend(preview); list.appendChild(card);
   }
   renderWardrobePreview();
 }

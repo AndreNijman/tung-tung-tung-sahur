@@ -55,6 +55,10 @@ async function play(page, seconds, keys = ['KeyW']) {
   await page.waitForTimeout(500);
   await shot(page, '1-menu');
   if (!(await page.locator('#scr-main.on').count())) problems.push('main menu did not open');
+  const gameBounds = await page.locator('#wrap').boundingBox();
+  if (!gameBounds || gameBounds.width < 990 || gameBounds.height < 555) {
+    problems.push(`game did not fill viewport: ${JSON.stringify(gameBounds)}`);
+  }
   await page.click('[data-profile-screen="scr-pass"]');
   if ((await page.locator('#pass-catalog .catalog-item').count()) !== 100) problems.push('Sahur Pass did not render 100 levels');
   await page.click('#scr-pass .profile-back');
@@ -64,6 +68,10 @@ async function play(page, seconds, keys = ['KeyW']) {
     profile.owned = [...new Set(profile.owned)];
   });
   await page.click('[data-profile-screen="scr-wardrobe"]');
+  const wardrobeCards = await page.locator('#wardrobe-catalog .catalog-item').count();
+  const wardrobePreviews = await page.locator('#wardrobe-catalog .wardrobe-item canvas').count();
+  if (wardrobePreviews !== wardrobeCards) problems.push(`wardrobe previews missing: ${wardrobePreviews}/${wardrobeCards}`);
+  await shot(page, 'wardrobe');
   const currentPreview = await page.locator('#wardrobe-preview').evaluate(canvas => canvas.toDataURL());
   const crown = page.locator('#wardrobe-catalog .catalog-item').filter({ hasText: 'Dawn Crown' });
   await crown.getByText('PREVIEW', { exact: true }).click();
