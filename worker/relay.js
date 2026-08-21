@@ -144,7 +144,10 @@ function originAllowed(origin) {
 
 async function adminIdentity(request, env) {
   const proxyAuthorization = request.headers.get('X-Tung-Proxy-Authorization');
-  if (proxyAuthorization && envSecretMatches(proxyAuthorization, env?.TUNG_PROXY_SECRET)) return 'proxy';
+  if (proxyAuthorization && envSecretMatches(proxyAuthorization, env?.TUNG_PROXY_SECRET)) {
+    const username = String(request.headers.get('X-Tung-Proxy-Admin-Name') || '').toLowerCase();
+    return ADMIN_USERS.has(username) ? username : '';
+  }
   const cookie = request.headers.get('Cookie');
   if (!cookie) return '';
   try {

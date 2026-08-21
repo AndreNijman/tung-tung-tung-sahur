@@ -2878,7 +2878,7 @@ function defaultRelayUrl() {
   const configured = window.TUNG_RELAY_URL;
   if (configured) return configured;
   if (location.hostname === 'tung.andrenijman.com') {
-    return 'wss://relay.tung.andrenijman.com/ws';
+    return 'wss://tung.andrenijman.com/_guard/tung-ws';
   }
   if (location.protocol === 'http:' || location.protocol === 'https:') {
     return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
@@ -2890,7 +2890,16 @@ const storedIdentity = readStored('tung-identity', {
   name: '', relay: defaultRelayUrl(),
 });
 $('i-name').value = storedIdentity.name || '';
-$('i-relay').value = storedIdentity.relay || defaultRelayUrl();
+let storedRelay = storedIdentity.relay || defaultRelayUrl();
+if (location.hostname === 'tung.andrenijman.com') {
+  try {
+    const savedUrl = new URL(storedRelay, location.href);
+    if (savedUrl.hostname === 'relay.tung.andrenijman.com' || savedUrl.hostname.endsWith('.workers.dev')) {
+      storedRelay = defaultRelayUrl();
+    }
+  } catch { storedRelay = defaultRelayUrl(); }
+}
+$('i-relay').value = storedRelay;
 $('relay-hint').textContent = location.protocol === 'file:'
   ? 'Local game: start the relay with npm run serve.'
   : 'The combined relay serves this page and WebSocket on the same address.';
@@ -2904,7 +2913,7 @@ let lobbyBrowserRequest = 0;
 function lobbyListUrl(relay) {
   const url = new URL(relay, location.href);
   if (location.hostname === 'tung.andrenijman.com' &&
-      (url.hostname === 'relay.tung.andrenijman.com' || url.hostname.endsWith('.workers.dev'))) {
+      (url.hostname === 'tung.andrenijman.com' || url.hostname === 'relay.tung.andrenijman.com' || url.hostname.endsWith('.workers.dev'))) {
     return new URL('/_guard/tung-lobbies', location.origin);
   }
   url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
