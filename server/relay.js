@@ -672,7 +672,7 @@ class Room {
     for (const t of this.tungs()) {
       if (!t.alive) continue;
       for (const p of this.survivors()) {
-        if (!p.alive) continue;
+        if (!p.alive || p.hidden) continue;
         if ((p.x - t.x) ** 2 + (p.y - t.y) ** 2 > CATCH_DIST ** 2) continue;
         p.alive = false;
         t.caught++;

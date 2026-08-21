@@ -1146,7 +1146,7 @@ export class Room {
     for (const tung of this.tungs()) {
       if (!tung.alive) continue;
       for (const player of this.survivors()) {
-        if (!player.alive) continue;
+        if (!player.alive || player.hidden) continue;
         if ((player.x - tung.x) ** 2 + (player.y - tung.y) ** 2 > CATCH_DIST ** 2) continue;
         player.alive = false;
         tung.caught++;

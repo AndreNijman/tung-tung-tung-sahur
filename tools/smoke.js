@@ -151,6 +151,10 @@ async function play(page, seconds, keys = ['KeyW']) {
     problems.push(`paired alcove swap failed: ${JSON.stringify({ swap, swapped })}`);
   }
   console.log(`  alcove: ${swap.from.join(',')} -> ${swap.dest.join(',')}`);
+  await page.evaluate(() => { game.cx = game.px; game.cy = game.py; });
+  await page.waitForTimeout(200);
+  if ((await page.evaluate(() => game.state)) !== 'play') problems.push('Tung caught the player inside an alcove');
+  await page.evaluate(() => { game.cx = game.mapN - 1.5; game.cy = game.mapN - 1.5; });
   await page.keyboard.press('KeyE');
 
   // extraction HUD: strip the offerings and confirm the surau compass renders

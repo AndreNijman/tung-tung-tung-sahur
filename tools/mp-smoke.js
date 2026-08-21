@@ -261,10 +261,14 @@ async function moveTo(page, x, y, movingFlags = 1) {
     if (landed.idx !== hide.to || landed.cd <= 0 || landed.pending) problems.push(`paired alcove did not land/cool down: ${JSON.stringify(landed)}`);
     console.log(`  alcove: 0 -> ${hide.to}, server cooldown active`);
 
-    // Move the real Tung onto the occupied alcove. Hiding conceals its location
-    // but no longer grants invulnerability when the Tung checks the right door.
+    // Move the real Tung onto the occupied alcove. Contact must not catch the
+    // hidden survivor, but should catch immediately after they step outside.
     const target = await survivor.evaluate(() => [game.px, game.py]);
     await moveTo(host, target[0], target[1], 1);
+    await survivor.waitForTimeout(250);
+    if (!(await survivor.evaluate(() => game.alive))) problems.push('Tung caught a survivor inside an alcove');
+    await survivor.keyboard.press('KeyE');
+    await survivor.waitForFunction(() => !game.hidden);
     await survivor.waitForFunction(() => game.alive === false);
     await host.waitForFunction(() => document.getElementById('event-banner').textContent.includes('Guest1 was caught'));
     await guests[1].waitForFunction(() => document.getElementById('event-banner').textContent.includes('Guest1 was caught'));

@@ -1749,7 +1749,7 @@ class Game {
       audio.playSimple('boom', 0.9);
       return;
     }
-    if (this.cdist < CATCH_DIST) {
+    if (this.cdist < CATCH_DIST && !this.hidden) {
       this.state = 'caught';
       return;
     }
