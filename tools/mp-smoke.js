@@ -21,7 +21,7 @@ const URL = urlArg || `http://127.0.0.1:${PORT}/`;
 // Production serves an indexable SEO shell with the actual game in a
 // same-origin frame. Drive the inner document so the rest of this harness can
 // use the same Page-based input helpers as local testing.
-const GAME_URL = LIVE ? new URL('?_games_frame=1', URL).href : URL;
+const GAME_URL = LIVE ? new globalThis.URL('?_games_frame=1', URL).href : URL;
 
 async function waitForRelay() {
   for (let i = 0; i < 80; i++) {
