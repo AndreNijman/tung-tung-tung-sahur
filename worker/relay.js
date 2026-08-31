@@ -6,6 +6,8 @@ const MAX_SPEED = 3.85;
 const WALK_SPEED = 2.2;
 const MOVE_BURST = 1.0;
 const SWAP_COOLDOWN_MS = 12000;
+const BOT_WANDER_SPEED = 2.34;
+const BOT_HUNT_SPEED = 2.72;
 
 const TICK_HZ = 20;
 const MAX_PLAYERS = 10;
@@ -22,8 +24,7 @@ const REGISTRY_STALE_MS = 60 * 60 * 1000;
 const CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXYZ23456789';
 const PLAYER_COLORS = ['#e0a040', '#68c0d8', '#8ad06a', '#d878b8', '#c8c0a8', '#e07058', '#7890d8', '#b098e0', '#58b890', '#d0cc58'];
 const PRODUCTION_ORIGIN = 'https://tung.andrenijman.com';
-const ADMIN_NAMES = { andrenijman: 'Dev Andre', mechtical: 'Dev Mechtical', pojodragon365: 'Dev Ethan' };
-const ADMIN_USERS = new Set(Object.keys(ADMIN_NAMES));
+const ADMIN_USERS = new Set(['andrenijman', 'mechtical', 'pojodragon365']);
 
 const DEFAULT_SETTINGS = {
   mapN: 21,
@@ -33,13 +34,17 @@ const DEFAULT_SETTINGS = {
   stamina: 'medium',
   tungIntel: false,
   tungs: 1,
+  botTungs: 1,
   tracks: 'normal',
+  speedrun: false,
 };
 
 const FLAG_MOVING = 1;
 const FLAG_SPRINT = 2;
 const FLAG_HIDDEN = 4;
 const FLAG_SURGE = 32;
+const FLAG_EMOTE = 64;
+const FLAG_TAUNT = 128;
 
 function clampSettings(raw) {
   const settings = { ...DEFAULT_SETTINGS };
@@ -62,10 +67,12 @@ function clampSettings(raw) {
     settings.stamina = raw.stamina;
   }
   if (typeof raw.tungIntel === 'boolean') settings.tungIntel = raw.tungIntel;
-  if (Number.isFinite(raw.tungs)) settings.tungs = Math.max(1, Math.min(3, Math.round(raw.tungs)));
+  if (Number.isFinite(raw.tungs)) settings.tungs = Math.max(0, Math.min(3, Math.round(raw.tungs)));
+  if (Number.isFinite(raw.botTungs)) settings.botTungs = Math.max(1, Math.min(3, Math.round(raw.botTungs)));
   if (['off', 'faint', 'normal', 'strong'].includes(raw.tracks)) {
     settings.tracks = raw.tracks;
   }
+  if (typeof raw.speedrun === 'boolean') settings.speedrun = raw.speedrun;
   return settings;
 }
 
@@ -109,7 +116,7 @@ function sanitizeCosmetics(message) {
   if (message.look && typeof message.look === 'object') {
     for (const [slot, value] of Object.entries(message.look).slice(0, 16)) look[clean(slot)] = clean(value);
   }
-  return { sigil: clean(message.sigil), look };
+  return { sigil: clean(message.sigil), look, level:Math.max(1,Math.min(100,Math.round(Number(message.level)||1))) };
 }
 
 function normalizeCode(code) {
@@ -163,10 +170,6 @@ async function adminIdentity(request, env) {
     console.error('admin identity check failed', error);
     return '';
   }
-}
-
-function adminDisplayName(username) {
-  return ADMIN_NAMES[username] || '';
 }
 
 function envSecretMatches(authorization, expected) {
@@ -334,11 +337,12 @@ class Player {
   constructor(id, socket, name, cosmetics = {}, adminName = '') {
     this.id = id;
     this.socket = socket;
-    this.name = adminDisplayName(adminName) || sanitizeName(name);
+    this.name = sanitizeName(name);
     this.admin = Boolean(adminName);
     this.adminName = adminName;
     this.sigil = cosmetics.sigil || '';
     this.look = cosmetics.look || {};
+    this.level = cosmetics.level || 1;
     this.vote = null;
     this.role = 'survivor';
     this.x = 1.5;
@@ -367,6 +371,7 @@ class Player {
       name: this.name,
       sigil: this.sigil,
       look: this.look,
+      level:this.level,
       vote: this.vote,
       color: PLAYER_COLORS[this.colorIdx],
       role: this.role,
@@ -410,6 +415,9 @@ export class Room {
     this.manifestRequestedAt = 0;
     this.passwordHash = null;
     this.passwordAttempts = new Map();
+    this.bots=[];
+    this.sprays=[];
+    this.kickVotes=new Map();
   }
 
   async fetch(request) {
@@ -607,7 +615,7 @@ export class Room {
     switch (message.t) {
       case 'name':
         if (this.phase !== 'lobby') break;
-        me.name = adminDisplayName(me.adminName) || sanitizeName(message.name);
+        me.name = sanitizeName(message.name);
         this.sendLobby();
         this.syncRegistry();
         break;
@@ -643,6 +651,14 @@ export class Room {
       case 'swap':
         this.handleSwap(me);
         break;
+
+      case 'spray':{
+        if(this.phase!=='play'||!me.alive||me.hidden)break;const now=Date.now(),id=String(message.id||'').replace(/[^a-z0-9-]/gi,'').slice(0,40);if(!/^(spray-|pass-\d+-spray)/.test(id)||now-(me.lastSprayAt||0)<1000||!Number.isFinite(message.x)||!Number.isFinite(message.y)||Math.hypot(message.x-me.x,message.y-me.y)>3.5)break;me.lastSprayAt=now;const mark={id,x:message.x,y:message.y,a:Number(message.a)||0,by:me.id};this.sprays.push(mark);if(this.sprays.length>64)this.sprays.shift();this.broadcast({t:'ev',e:'spray',...mark});break;
+      }
+
+      case 'votekick':{
+        if(this.phase!=='play')break;const target=this.players.get(Number(message.id));if(!target||target.id===me.id)break;let votes=this.kickVotes.get(target.id);if(!votes){votes=new Set();this.kickVotes.set(target.id,votes);}votes.add(me.id);const needed=Math.floor(this.players.size/2)+1,passed=votes.size>=needed;this.broadcast({t:'ev',e:'votekick',who:target.id,by:me.id,votes:votes.size,needed,passed});if(passed){const targetSession=[...this.sessions].find(candidate=>candidate.player?.id===target.id);if(targetSession){this.send(target.socket,{t:'ev',e:'kicked',m:'removed by lobby vote'});if(target.role==='tung')this.backToLobby();this.closeSession(targetSession,1008,'removed by lobby vote');}}break;
+      }
 
       case 'chat': {
         if (this.phase !== 'play' || !me.alive) break;
@@ -703,23 +719,13 @@ export class Room {
       tung: this.tungs()[0]?.id || null,
       tungs: this.tungs().map(tung => tung.id),
       how: 'admin-join',
-      players: [...this.players.values()].map(existing => ({
-        id: existing.id,
-        name: existing.name,
-        sigil: existing.sigil,
-        look: existing.look,
-        role: existing.role,
-        admin: existing.admin,
-        color: PLAYER_COLORS[existing.colorIdx],
-        spawnIdx: existing.spawnIdx,
-        spawn: existing.id === player.id ? { x: player.x, y: player.y, a: player.a } : null,
-      })),
+      players:this.publicRoster().map(existing=>({...existing,spawnIdx:this.players.get(existing.id)?.spawnIdx??this.bots.find(bot=>bot.id===existing.id)?.spawnIdx??0,spawn:existing.id===player.id?{x:player.x,y:player.y,a:player.a}:null})),
     });
     if (this.manifest) this.send(player.socket, { t: 'manifest', m: this.manifest });
     this.send(player.socket, this.snapshot(player));
     this.broadcast({
       t: 'roster',
-      players: [...this.players.values()].map(existing => existing.publicLobby()),
+      players: this.publicRoster(),
       host: this.hostId,
     }, player.id);
     this.broadcast({ t: 'ev', e: 'dev-joined', who: player.id });
@@ -746,6 +752,10 @@ export class Room {
       if (player.id !== exceptId) this.send(player.socket, encoded);
     }
   }
+
+  botPublic(bot){return{id:bot.id,name:bot.name,sigil:'',look:bot.look,level:100,vote:null,color:bot.color,role:'tung',bot:true};}
+  allActors(){return[...this.players.values(),...this.bots];}
+  publicRoster(){return[...this.players.values()].map(player=>player.publicLobby()).concat(this.bots.map(bot=>this.botPublic(bot)));}
 
   addPlayer(player) {
     const used = new Set([...this.players.values()].map(existing => existing.colorIdx));
@@ -786,6 +796,8 @@ export class Room {
     const player = this.players.get(id);
     if (!player) return;
     this.players.delete(id);
+    this.kickVotes.delete(id);
+    for(const votes of this.kickVotes.values())votes.delete(id);
     for (const other of this.players.values()) {
       if (other.vote === id) other.vote = null;
     }
@@ -815,7 +827,7 @@ export class Room {
     } else {
       this.broadcast({
         t: 'roster',
-        players: [...this.players.values()].map(player => player.publicLobby()),
+        players: this.publicRoster(),
         host: this.hostId,
       });
       this.syncRegistry();
@@ -830,7 +842,7 @@ export class Room {
       phase: this.phase,
       settings: this.settings,
       max: MAX_PLAYERS,
-      min: MIN_PLAYERS,
+      min: this.settings.tungs===0?1:MIN_PLAYERS,
       players: [...this.players.values()].map(player => player.publicLobby()),
     });
   }
@@ -908,18 +920,14 @@ export class Room {
 
   start() {
     if (this.phase === 'play') return;
-    if (this.players.size < MIN_PLAYERS) {
-      this.toHost({ t: 'err', m: `need at least ${MIN_PLAYERS} players` });
+    const minimum=this.settings.tungs===0?1:MIN_PLAYERS;
+    if (this.players.size < minimum) {
+      this.toHost({ t: 'err', m: `need at least ${minimum} player${minimum===1?'':'s'}` });
       return;
     }
 
-    const { id: firstTungId, how } = this.pickTung();
-    const tungIds = [firstTungId];
-    const candidates = [...this.players.keys()].filter(id => id !== firstTungId);
-    const wanted = Math.min(this.settings.tungs, this.players.size - 1);
-    while (tungIds.length < wanted && candidates.length) {
-      tungIds.push(candidates.splice(randomInt(candidates.length), 1)[0]);
-    }
+    let firstTungId=null,how='bot',tungIds=[];
+    if(this.settings.tungs>0){const picked=this.pickTung();firstTungId=picked.id;how=picked.how;tungIds=[firstTungId];const candidates=[...this.players.keys()].filter(id=>id!==firstTungId);const wanted=Math.min(this.settings.tungs,this.players.size-1);while(tungIds.length<wanted&&candidates.length)tungIds.push(candidates.splice(randomInt(candidates.length),1)[0]);}
     this.seed = randomInt(0x7fffffff);
     this.phase = 'play';
     this.syncRegistry();
@@ -928,6 +936,7 @@ export class Room {
     this.timeLeft = this.settings.night;
     this.tick = 0;
     this.result = null;
+    this.sprays=[];this.kickVotes.clear();this.bots=[];
     this.manifestWaitSince = Date.now();
     this.manifestRequestedAt = 0;
 
@@ -948,6 +957,8 @@ export class Room {
       player.motionSpeed = 0;
       player.swapCooldownUntil = 0;
     });
+    if(this.settings.tungs===0){const looks=['','tung-tralalero','tung-bombardiro'];for(let i=0;i<this.settings.botTungs;i++)this.bots.push({id:-1-i,name:`BOT TUNG ${i+1}`,look:{tung:looks[i%looks.length]},role:'tung',bot:true,color:PLAYER_COLORS[(order.length+i)%PLAYER_COLORS.length],x:1.5,y:1.5,a:0,flags:0,hidden:false,alive:true,carrying:-1,delivered:0,caught:0,spawnIdx:order.length+i,pathAt:0,targetCell:null,nextCell:null});}
+    const actors=this.publicRoster();
 
     this.broadcast({
       t: 'begin',
@@ -956,15 +967,7 @@ export class Room {
       tung: firstTungId,
       tungs: tungIds,
       how,
-      players: order.map(player => ({
-        id: player.id,
-        name: player.name,
-        sigil: player.sigil,
-        look: player.look,
-        role: player.role,
-        color: PLAYER_COLORS[player.colorIdx],
-        spawnIdx: player.spawnIdx,
-      })),
+      players: actors.map(player=>({...player,spawnIdx:this.players.get(player.id)?.spawnIdx??this.bots.find(bot=>bot.id===player.id)?.spawnIdx??0})),
     });
 
     this.lastTickAt = Date.now();
@@ -997,6 +1000,8 @@ export class Room {
     if (cleanPairs.length * 2 !== manifest.hides.length || paired.size !== manifest.hides.length) {
       return reject();
     }
+    const grid=Array.isArray(manifest.grid)&&manifest.grid.length===this.settings.mapN&&manifest.grid.every(row=>Array.isArray(row)&&row.length===this.settings.mapN&&row.every(cell=>cell===0||cell===1))?manifest.grid.map(row=>row.slice()):null;
+    if(this.bots.length&&!grid)return reject();
 
     const spawns = Array.isArray(manifest.spawns) ? manifest.spawns : [];
     const spawnById = new Map(spawns.filter(spawn => spawn && Number.isInteger(spawn.id))
@@ -1009,8 +1014,8 @@ export class Room {
     }
     for (const player of this.players.values()) {
       if (!player.admin || spawnById.has(player.id)) continue;
-      player.x = this.manifest.surau[0];
-      player.y = this.manifest.surau[1];
+      player.x = manifest.surau[0];
+      player.y = manifest.surau[1];
       player.a = 0;
       player.lastMoveAt = Date.now();
       player.moveTokens = MOVE_BURST;
@@ -1021,9 +1026,10 @@ export class Room {
       hides: manifest.hides.map(point => [point[0], point[1]]),
       pairs: cleanPairs,
       surau: [manifest.surau[0], manifest.surau[1]],
+      grid,
     };
     for (const spawn of spawns) {
-      const player = this.players.get(spawn.id);
+      const player = this.players.get(spawn.id)||this.bots.find(bot=>bot.id===spawn.id);
       if (!player) continue;
       player.x = spawn.x;
       player.y = spawn.y;
@@ -1091,6 +1097,7 @@ export class Room {
 
     this.tick++;
     this.timeLeft -= dt;
+    this.updateBots(dt);
     this.resolvePickups();
     this.resolveDeliveries();
     this.resolveCatches();
@@ -1106,8 +1113,13 @@ export class Room {
   }
 
   tungs() {
-    return [...this.players.values()].filter(player => player.role === 'tung');
+    return [...this.players.values()].filter(player => player.role === 'tung').concat(this.bots);
   }
+
+  botLos(bot,player){const grid=this.manifest?.grid;if(!grid)return false;const dx=player.x-bot.x,dy=player.y-bot.y,dist=Math.hypot(dx,dy);if(dist>9||Math.abs(((Math.atan2(dy,dx)-bot.a+Math.PI*3)%(Math.PI*2))-Math.PI)>Math.PI/3)return false;for(let d=.12;d<dist;d+=.12)if(grid[Math.floor(bot.y+dy*d/dist)]?.[Math.floor(bot.x+dx*d/dist)])return false;return true;}
+  randomOpenCell(){const grid=this.manifest?.grid;if(!grid)return[1,1];for(let tries=0;tries<100;tries++){const x=randomInt(grid.length),y=randomInt(grid.length);if(grid[y][x]===0)return[x,y];}return[1,1];}
+  nextPathCell(start,target){const grid=this.manifest?.grid;if(!grid)return null;const n=grid.length,key=(x,y)=>y*n+x,skey=key(start[0],start[1]),tkey=key(target[0],target[1]);if(skey===tkey)return target;const queue=[start],parent=new Map([[skey,-1]]),dirs=[[1,0],[-1,0],[0,1],[0,-1]];let qi=0;while(qi<queue.length){const[x,y]=queue[qi++];if(key(x,y)===tkey)break;for(const[dx,dy]of dirs){const nx=x+dx,ny=y+dy,k=key(nx,ny);if(nx<0||ny<0||nx>=n||ny>=n||grid[ny][nx]!==0||parent.has(k))continue;parent.set(k,key(x,y));queue.push([nx,ny]);}}if(!parent.has(tkey))return null;let walk=tkey,prev=parent.get(walk);while(prev!==skey&&prev!==-1){walk=prev;prev=parent.get(walk);}return[walk%n,Math.floor(walk/n)];}
+  updateBots(dt){if(!this.bots.length||!this.manifest?.grid)return;const now=Date.now(),survivors=this.survivors().filter(player=>player.alive);for(const bot of this.bots){if(!survivors.length)continue;const visible=survivors.filter(player=>!player.hidden&&this.botLos(bot,player)).sort((a,b)=>Math.hypot(a.x-bot.x,a.y-bot.y)-Math.hypot(b.x-bot.x,b.y-bot.y))[0];const heard=visible?null:survivors.filter(player=>!player.hidden&&((player.flags&FLAG_SPRINT)?Math.hypot(player.x-bot.x,player.y-bot.y)<7:(player.flags&FLAG_MOVING)&&Math.hypot(player.x-bot.x,player.y-bot.y)<3.2)).sort((a,b)=>Math.hypot(a.x-bot.x,a.y-bot.y)-Math.hypot(b.x-bot.x,b.y-bot.y))[0];const sensed=visible||heard;if(sensed)bot.targetCell=[Math.floor(sensed.x),Math.floor(sensed.y)];const current=[Math.floor(bot.x),Math.floor(bot.y)];if(!bot.targetCell||current[0]===bot.targetCell[0]&&current[1]===bot.targetCell[1])bot.targetCell=this.randomOpenCell();if(now>=bot.pathAt||!bot.nextCell){bot.nextCell=this.nextPathCell(current,bot.targetCell);bot.pathAt=now+350;}if(!bot.nextCell)continue;const tx=bot.nextCell[0]+.5,ty=bot.nextCell[1]+.5,dx=tx-bot.x,dy=ty-bot.y,dist=Math.hypot(dx,dy);if(dist<.08){bot.nextCell=null;continue;}const speed=visible?BOT_HUNT_SPEED:BOT_WANDER_SPEED,step=Math.min(dist,speed*dt);bot.x+=dx/dist*step;bot.y+=dy/dist*step;bot.a=Math.atan2(dy,dx);bot.flags=FLAG_MOVING|(visible?FLAG_SURGE:0);}}
 
   resolvePickups() {
     for (const player of this.survivors()) {
@@ -1170,9 +1182,8 @@ export class Room {
 
   snapshot(viewer) {
     const players = [];
-    for (const player of this.players.values()) {
-      const concealed = player.hidden || !player.alive ||
-        (viewer && viewer.role === 'survivor' && !viewer.alive && player.id !== viewer.id);
+    for (const player of this.allActors()) {
+      const concealed = player.hidden || !player.alive;
       const carrying = !viewer || player.id === viewer.id || !player.hidden ? player.carrying : -1;
       const row = [
         player.id,
@@ -1189,6 +1200,7 @@ export class Room {
       p: players,
       it: this.items.map(item => viewer?.role === 'tung' && !this.settings.tungIntel
         ? [item.state, -1, 0, 0] : [item.state, item.carrier, round2(item.x), round2(item.y)]),
+      sp:this.sprays.map(mark=>({id:mark.id,x:round2(mark.x),y:round2(mark.y),a:round3(mark.a),by:mark.by})),
     };
   }
 
@@ -1222,7 +1234,7 @@ export class Room {
       delivered,
       total: this.items.length,
       timeLeft: Math.max(0, round2(this.timeLeft)),
-      scores: [...this.players.values()].map(player => ({
+      scores: this.allActors().map(player => ({
         id: player.id,
         name: player.name,
         sigil: player.sigil,
@@ -1231,7 +1243,7 @@ export class Room {
         alive: player.alive,
         delivered: player.delivered,
         caught: player.caught,
-        color: PLAYER_COLORS[player.colorIdx],
+        color: player.color||PLAYER_COLORS[player.colorIdx],
       })),
     });
   }
@@ -1241,6 +1253,7 @@ export class Room {
     this.stopTick();
     this.manifest = null;
     this.items = [];
+    this.bots=[];this.sprays=[];this.kickVotes.clear();
     for (const player of this.players.values()) {
       player.role = 'survivor';
       player.alive = true;
@@ -1287,7 +1300,8 @@ export class Room {
       : player.motionSpeed > WALK_SPEED + 0.65;
     player.flags = (player.motionSpeed > 0.15 ? FLAG_MOVING : 0) |
       (sprinting ? FLAG_SPRINT : 0) |
-      (player.role === 'tung' && (message.f & FLAG_SURGE) ? FLAG_SURGE : 0);
+      (player.role === 'tung' && (message.f & FLAG_SURGE) ? FLAG_SURGE : 0) |
+      (message.f&FLAG_EMOTE?FLAG_EMOTE:0)|(message.f&FLAG_TAUNT?FLAG_TAUNT:0);
 
     let hidden = !!(message.f & FLAG_HIDDEN) && player.role === 'survivor';
     if (hidden && this.manifest) {

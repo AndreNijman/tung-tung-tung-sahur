@@ -76,6 +76,7 @@ async function moveTo(page, x, y, movingFlags = 1) {
       page.on('console', m => { if (m.type() === 'error') problems.push(`${name} console: ${m.text()}`); });
       page.on('requestfailed', r => problems.push(`${name} request failed: ${r.url()}`));
       await page.goto(URL);
+      await page.click('#b-play-menu');
       await page.click('#b-mp');
       await page.fill('#i-name', name);
       if (relayOverride) {
@@ -164,7 +165,8 @@ async function moveTo(page, x, y, movingFlags = 1) {
     // Host-controlled settings, including the three requested lobby dials.
     for (const [index, value, key] of [
       [0, '15', 'mapN'], [1, '2', 'lanterns'], [2, '120', 'night'],
-      [3, '0', 'torch'], [4, 'high', 'stamina'], [5, 'false', 'tungIntel'], [6, '1', 'tungs'], [7, 'normal', 'tracks'],
+      [3, '0', 'torch'], [4, 'high', 'stamina'], [5, 'false', 'tungIntel'], [6, '1', 'tungs'], [7, '1', 'botTungs'],
+      [8, 'normal', 'tracks'], [9, 'true', 'speedrun'],
     ]) {
       await host.locator('#lobby-settings select').nth(index).selectOption(value);
       await host.waitForFunction(([key, value]) => String(net.settings[key]) === value, [key, value]);
@@ -175,7 +177,7 @@ async function moveTo(page, x, y, movingFlags = 1) {
     await guests[0].waitForFunction(() => net.settings.tungs === 3);
     await host.locator('#lobby-settings select').nth(6).selectOption('1');
     await guests[0].waitForFunction(() => net.settings.tungs === 1);
-    console.log('  settings: 15x15, 2 lanterns, 2:00, infinite torch, high stamina, hidden objectives');
+    console.log('  settings: 15x15, 2 lanterns, 2:00, infinite torch, high stamina, hidden objectives, speedrun timer');
 
     // Everyone votes for the host, making role selection deterministic while
     // exercising the normal vote buttons in all five pages.
@@ -315,6 +317,94 @@ async function moveTo(page, x, y, movingFlags = 1) {
     }, openCode);
     await openHost.close();
 
+    // A strict majority can remove the player Tung, which immediately resets
+    // the running night to the lobby for everyone still connected.
+    const kickHost = await openPlayer('KickHost');
+    await kickHost.click('#b-create');
+    await kickHost.waitForSelector('#scr-lobby.on');
+    const kickCode = (await kickHost.textContent('#lobby-code')).trim();
+    const kickA = await openPlayer('KickA');
+    const kickB = await openPlayer('KickB');
+    for (const page of [kickA, kickB]) {
+      await page.fill('#i-code', kickCode);
+      await page.click('#b-join');
+      await page.waitForSelector('#scr-lobby.on');
+    }
+    await kickHost.waitForFunction(() => net.players.size === 3);
+    for (const page of [kickHost, kickA, kickB]) {
+      await page.locator('#lobby-players li').filter({ hasText: 'KickHost' }).locator('button').click();
+    }
+    await kickHost.click('#b-start');
+    await Promise.all([kickHost, kickA, kickB].map(page => page.waitForFunction(() => game.state === 'play')));
+    for (const page of [kickA, kickB]) await page.keyboard.press('Escape');
+    const voteA = kickA.locator('#votekick-list .vote-row').filter({ hasText: 'KickHost' });
+    const voteB = kickB.locator('#votekick-list .vote-row').filter({ hasText: 'KickHost' });
+    await voteA.getByText('VOTE OUT', { exact: true }).click();
+    await kickB.waitForFunction((id) => net.kickVotes.get(id)?.votes === 1, await kickHost.evaluate(() => net.you));
+    await voteB.getByText('VOTE OUT', { exact: true }).click();
+    await Promise.all([kickA, kickB].map(page => page.waitForSelector('#scr-lobby.on')));
+    if ((await kickA.locator('#lobby-players li').count()) !== 2) problems.push('voting out the player Tung did not reset/remove cleanly');
+    console.log('  votekick: 2/3 strict majority removed the player Tung and reset the night');
+    await Promise.all([kickHost, kickA, kickB].map(page => page.close()));
+
+    // Zero player Tungs starts a runner-only human team with the selected
+    // number of authoritative server bots. Sprays must replicate to peers.
+    const botHost = await openPlayer('BotHost');
+    await botHost.evaluate(() => { profile.equipped.spray = 'spray-eye'; });
+    await botHost.click('#b-create');
+    await botHost.waitForSelector('#scr-lobby.on');
+    const botCode = (await botHost.textContent('#lobby-code')).trim();
+    const botGuest = await openPlayer('BotGuest');
+    await botGuest.fill('#i-code', botCode);
+    if ((await botGuest.inputValue('#i-code')).trim() !== botCode) await botGuest.fill('#i-code', botCode);
+    await botGuest.click('#b-join');
+    try {
+      await botGuest.waitForSelector('#scr-lobby.on', { timeout: 10000 });
+    } catch (error) {
+      const state = await botGuest.evaluate(() => ({
+        code: document.getElementById('i-code').value,
+        error: document.getElementById('mp-err').textContent,
+        screen: document.querySelector('.scr.on')?.id,
+        ready: net?.ws?.readyState,
+        phase: net?.phase,
+      }));
+      throw new Error(`BotGuest failed to join ${botCode}: ${JSON.stringify(state)}; relay=${relayErr.trim() || 'no stderr'}; ${error.message}`);
+    }
+    await botHost.locator('#lobby-settings select').nth(6).selectOption('0');
+    await botHost.locator('#lobby-settings select').nth(7).selectOption('2');
+    await botGuest.waitForFunction(() => net.settings.tungs === 0 && net.settings.botTungs === 2);
+    await botHost.click('#b-start');
+    await Promise.all([botHost, botGuest].map(page => page.waitForFunction(() => game.state === 'play' && [...net.players.values()].filter(p => p.bot).length === 2)));
+    const botStart = await botGuest.evaluate(() => [...net.players.values()].filter(p => p.bot).map(p => [p.id, ...(p.pos || [])]));
+    await botGuest.waitForFunction((before) => [...net.players.values()].filter(p => p.bot).some((p, i) => p.pos && (p.pos[0] !== before[i][1] || p.pos[1] !== before[i][2])), botStart);
+    const botRoles = await botHost.evaluate(() => [...net.players.values()].map(p => ({ bot: !!p.bot, role: p.role })));
+    if (botRoles.filter(p => p.bot && p.role === 'tung').length !== 2 || botRoles.some(p => !p.bot && p.role !== 'survivor')) {
+      problems.push(`bot Tung roles were wrong: ${JSON.stringify(botRoles)}`);
+    }
+    const foundWall = await botHost.evaluate(() => {
+      for (let i = 0; i < 64; i++) {
+        game.angle = i * Math.PI * 2 / 64;
+        if (game.wallAhead()) return true;
+      }
+      return false;
+    });
+    if (!foundWall) problems.push('could not find a nearby wall for spray replication test');
+    else {
+      await botHost.keyboard.press('KeyG');
+      await botGuest.waitForFunction(() => game.sprays.some(mark => mark.id === 'spray-eye'));
+    }
+    const spectate = await botGuest.evaluate(() => {
+      game.alive = false;
+      const me = net.players.get(net.you); if (me) me.alive = false;
+      game.cycleSpectate(1);
+      return { target: game.spectating, candidates: [...net.players.values()].filter(p => p.id !== net.you && p.alive && p.pos).length };
+    });
+    if (spectate.candidates < 1 || spectate.target == null) problems.push(`spectator did not select a live viewpoint: ${JSON.stringify(spectate)}`);
+    await botGuest.keyboard.press('ArrowRight');
+    if ((await botGuest.evaluate(() => game.spectating)) == null) problems.push('spectator arrow cycling cleared the viewpoint');
+    console.log('  bot mode: two server Tungs moved; spray replicated; spectator viewpoint cycled');
+    await Promise.all([botHost, botGuest].map(page => page.close()));
+
     // Static serving must not expose the repository internals.
     const dotGit = await fetch(`${URL}.git/config`);
     if (dotGit.status !== 404) problems.push(`relay exposed .git/config (${dotGit.status})`);
@@ -324,7 +414,7 @@ async function moveTo(page, x, y, movingFlags = 1) {
       for (const p of problems) console.error('  - ' + p);
       process.exitCode = 1;
     } else {
-      console.log('\nPASS - listing/password, ten clients, settings/vote, trail, alcove, catch and failover');
+      console.log('\nPASS - listing/password, ten clients, settings/vote, trail, alcove, catch, failover, votekick, bots, sprays and spectating');
     }
   } finally {
     if (browser) await browser.close();

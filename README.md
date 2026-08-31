@@ -1,6 +1,6 @@
 # Tung Tung Tung Sahorror
 
-A first-person raycaster horror game with solo and 2-5 player multiplayer. The
+A first-person raycaster horror game with solo and up-to-ten-player multiplayer. The
 client is one HTML file: no build step, no assets, and every sprite and sound is
 generated in the browser. Multiplayer uses a zero-dependency Node WebSocket
 relay in `server/relay.js`.
@@ -28,9 +28,17 @@ fight it. You can only be somewhere it is not looking.
 | `F` | torch — you see further, so does it |
 | `E` | duck into a shelter alcove |
 | `Q` | slip through to the paired alcove while hidden |
+| `G` | spray equipped graffiti onto the wall ahead |
+| `V` | perform the equipped moving emote |
+| `B` | taunt |
 | `T` | global match chat for runners and player Tungs |
+| `←` `→` | switch live viewpoints after being caught |
 | `Esc` | pause — also fires on alt-tab or losing pointer lock |
 | `R` | restart from a solo end screen |
+
+The same controls are grouped by role in the in-game **How to Play** window.
+An optional speedrun timer records elapsed time to the millisecond without
+changing the night clock.
 
 ## What it knows about you
 
@@ -57,16 +65,22 @@ the rooftops while you are still out there.
 ## Multiplayer
 
 Create a lobby and share its five-character code, or join directly from the live
-available-lobbies list. A lobby holds at most ten players and starts with two
-or more. An optional password can protect the room; relays store only its
+available-lobbies list. A lobby holds at most ten players. Player-Tung nights
+start with two or more humans; bot-Tung nights can start with one. An optional
+password can protect the room; relays store only its
 SHA-256 digest and the public list exposes only a `LOCKED` marker. Everyone
 votes for a player to become the first Tung, or votes to leave it random. A strict
 plurality wins; ties and a winning random vote are resolved randomly. Hosts can
-select up to three player Tungs, capped so at least one runner remains.
+select up to three player Tungs, capped so at least one runner remains. Setting
+player Tungs to zero makes every human a runner and adds one to three
+authoritative relay-controlled Tungs.
 
 The host controls the map size, number of lanterns, night timer, torch duration
 (including infinite), runner stamina, whether Tungs can see objectives, the
-number of player Tungs, and how clearly Tungs can read tracks.
+number of player and bot Tungs, how clearly Tungs can read tracks, and the
+optional speedrun timer. During a running match, the pause window exposes a
+vote-kick ballot. A strict majority of all human players is required; removing
+the player Tung resets the night to the lobby.
 
 ## Progression and cosmetics
 
@@ -74,10 +88,18 @@ Finished games award XP and T-bucks from individual contribution, survival,
 time played, and the result. Five offerings in a loss are worth more than doing
 nothing in a win. Currency and XP appear only in menus and result screens.
 
-The 100-level Sahur Pass rewards every level and grants a cosmetic every fifth
-level, ending with the legendary Sahur Sovereign. The item shop sells individual
-legendary cosmetics and discounted bundles. Owned items, achievement sigils,
-and outfits are managed in the wardrobe and never alter gameplay values.
+The 100-level side-scrolling Sahur Pass rewards every level and hides its level
+100 Sahur Sovereign until it is earned. The item shop is split into player,
+Tung, spray, emote, street, Pass, and bundle sections; every item has a rarity
+and can be previewed alone or on its wearer. Mythic showpieces cost as much as
+15,000 T-bucks. Common, Rare, Legendary, and Mythic lootboxes publish their
+odds and can award currency, XP, or shop cosmetics.
+
+The wardrobe separates player clothes from full Tung characters and sorts
+owned items by slot. Shirt and trouser patterns, auras, backs, trails, emotes,
+sprays, and street nameplates never alter gameplay values. Sprays are no longer
+worn: they are persistent-in-match graffiti decals placed on walls. Achievement
+progress is shown with drawn circular sigils rather than forgeable name text.
 
 On `tung.andrenijman.com`, signed-in profiles sync through the existing Games
 Guard account session. Guests and local/self-hosted games use browser storage.
@@ -91,9 +113,10 @@ when every lantern is home.
 
 ### The Tung
 
-The Tung is another player, not the solo AI. It walks faster than a survivor
-walks but slower than a survivor sprints. `Shift` triggers a short surge on an
-11-second cooldown.
+A player Tung walks faster than a survivor walks but slower than a survivor
+sprints. `Shift` triggers a short surge on an 11-second cooldown. In bot mode,
+the relay navigates each Tung through the generated maze using sight, nearby
+movement noise, and remembered target positions.
 
 The Tung's view is colourless and gives it no player markers or compass. It sees
 footprints instead:
@@ -138,8 +161,9 @@ npm run smoke:mp                  # real relay + ten Chromium clients
 
 ### Relay and deployment
 
-The relay owns room membership, voting, the clock, lantern pickup/delivery,
-alcove swaps, catches, and match endings. Clients own their immediate movement
+The relay owns room membership, role and kick voting, bot pathfinding, the
+clock, wall sprays, lantern pickup/delivery, alcove swaps, catches, and match
+endings. Clients own their immediate movement
 to avoid input latency; the relay bounds movement by elapsed wall time. Hidden
 positions and swap destinations are withheld from other players. This is a
 friends' game, not a ranked anti-cheat system: a modified client can still read
@@ -257,12 +281,15 @@ it brutal. Nothing in the harness settles this — only playing it does.
 
 ### Browser smoke tests
 
-`tools/smoke.js` covers the menu, paired-alcove transit, sprite cache, HUD,
-compass arrows, pause and all four solo end screens. `tools/mp-smoke.js` starts a
-real relay and five independent Chromium pages, then verifies lobby capacity,
+`tools/smoke.js` covers the three-button menu, How to Play, Pass, wardrobe,
+lootboxes, speedrun timer, performance inputs, paired-alcove transit, sprite
+cache, HUD, compass arrows, pause, and all four solo end screens.
+`tools/mp-smoke.js` starts a real relay and up to ten independent Chromium pages,
+then verifies lobby capacity,
 public listing, locked/open rooms, wrong/correct password handling, host settings,
 voting, seeded map agreement, pickup/delivery, delayed tracks, private alcove
-swaps, catches, and disconnect cleanup. Both fail on any console, page or request
+swaps, catches, bot movement, replicated sprays, spectator cycling, strict-majority
+vote-kicks, and disconnect cleanup. Both fail on any console, page or request
 error; the solo test writes screenshots to `shots/`.
 
 ## Licence

@@ -59,13 +59,47 @@ async function play(page, seconds, keys = ['KeyW']) {
   if (!gameBounds || gameBounds.width < 990 || gameBounds.height < 555) {
     problems.push(`game did not fill viewport: ${JSON.stringify(gameBounds)}`);
   }
+  if ((await page.locator('#scr-main > .menu-stack > button').count()) !== 3) {
+    problems.push('main menu did not contain exactly three primary buttons');
+  }
+  await page.click('#b-howto');
+  await page.click('[data-how="how-keys"]');
+  const controls = await page.locator('#how-keys').textContent();
+  for (const binding of ['W A S D', 'G', 'V', 'B', 'ESC']) {
+    if (!controls.includes(binding)) problems.push(`How to Play omitted ${binding}`);
+  }
+  await page.keyboard.press('ArrowRight');
+  if ((await page.locator('[data-how="how-social"][aria-selected="true"]').count()) !== 1) problems.push('How to Play tabs did not support arrow-key navigation');
+  await page.click('#scr-howto .menu-back');
+  await page.click('#b-cosmetics-menu');
   await page.click('[data-profile-screen="scr-pass"]');
-  if ((await page.locator('#pass-catalog .catalog-item').count()) !== 100) problems.push('Sahur Pass did not render 100 levels');
+  if ((await page.locator('#pass-catalog .pass-node').count()) !== 100) problems.push('Sahur Pass did not render 100 levels');
   await page.click('#scr-pass .profile-back');
 
+  await page.click('[data-profile-screen="scr-shop"]');
+  if ((await page.locator('#shop-tabs button').count()) !== 7) problems.push('item shop sections did not render');
+  const itemPreview = await page.locator('#shop-preview').evaluate(canvas => canvas.toDataURL());
+  await page.click('#b-shop-wearer');
+  const wearerPreview = await page.locator('#shop-preview').evaluate(canvas => canvas.toDataURL());
+  if (itemPreview === wearerPreview) problems.push('item/on-player shop preview modes were identical');
+  const catalogIntegrity = await page.evaluate(() => ({
+    rarities: allCosmetics().every(item => item.rarity && RARITY_META[item.rarity]),
+    streetCount: STREET_THEMES.length,
+    uniqueStreets: new Set(STREET_THEMES.map(street => `${street.name}|${street.a}|${street.b}|${street.pattern}`)).size,
+    mythicShowpieces: SHOP_ITEMS.filter(item => item.rarity === 'mythic' && item.price >= 10000).length,
+    xp: [xpForLevel(2), xpForLevel(3), xpForLevel(4)],
+  }));
+  if (!catalogIntegrity.rarities || catalogIntegrity.streetCount !== catalogIntegrity.uniqueStreets ||
+      catalogIntegrity.mythicShowpieces < 3 || !(catalogIntegrity.xp[1] - catalogIntegrity.xp[0] < catalogIntegrity.xp[2] - catalogIntegrity.xp[1])) {
+    problems.push(`catalog/progression integrity failed: ${JSON.stringify(catalogIntegrity)}`);
+  }
+  await page.click('#scr-shop .profile-back');
+
   await page.evaluate(() => {
-    profile.owned.push('shirt-eclipse', 'pattern-batik', 'pants-ember', 'hat-crown', 'back-drum', 'aura-dawn');
+    profile.owned.push('shirt-eclipse', 'pattern-batik', 'pants-ember', 'hat-crown', 'back-drum', 'aura-dawn', 'tung-tralalero', 'spray-eye', 'emote-moonwalk');
     profile.owned = [...new Set(profile.owned)];
+    profile.equipped.spray = 'spray-eye';
+    profile.equipped.emote = 'emote-moonwalk';
   });
   await page.click('[data-profile-screen="scr-wardrobe"]');
   const wardrobeCards = await page.locator('#wardrobe-catalog .catalog-item').count();
@@ -79,10 +113,23 @@ async function play(page, seconds, keys = ['KeyW']) {
   if (currentPreview === crownPreview) problems.push('wardrobe preview did not change for a hat cosmetic');
   await crown.getByText('EQUIP', { exact: true }).click();
   if ((await page.evaluate(() => profile.equipped.hat)) !== 'hat-crown') problems.push('wardrobe did not equip selected cosmetic');
+  await page.click('[data-wardrobe-mode="tung"]');
+  if (!(await page.locator('#wardrobe-catalog .catalog-item').filter({ hasText: 'Tralalero Tung' }).count())) problems.push('Tung wardrobe mode did not show owned Tung characters');
+  await page.click('[data-wardrobe-mode="player"]');
+  if (await page.locator('#wardrobe-catalog .catalog-item').filter({ hasText: 'Tralalero Tung' }).count()) problems.push('player wardrobe mode leaked Tung characters');
   await page.click('#scr-wardrobe .profile-back');
 
+  await page.click('[data-profile-screen="scr-lootboxes"]');
+  if ((await page.locator('#lootbox-catalog .lootbox').count()) !== 4) problems.push('lootbox screen did not render four tiers');
+  await page.click('#scr-lootboxes .profile-back');
+  await page.click('#scr-cosmetics .menu-back');
+
   // Start through the real menu. This also covers audio/pointer-lock setup.
+  await page.click('#b-play-menu');
   await page.click('#b-solo');
+  await page.waitForSelector('#scr-solo.on');
+  await page.locator('#solo-settings select').nth(9).selectOption('true');
+  await page.click('#b-solo-start');
   await page.waitForTimeout(300);
   if ((await page.evaluate(() => game.state)) !== 'play') problems.push('Play Alone did not start');
 
@@ -130,8 +177,27 @@ async function play(page, seconds, keys = ['KeyW']) {
   // torch toggle and hide key must not throw
   await page.keyboard.press('KeyF');
   await page.keyboard.press('KeyE');
+  const emoteStart = await page.evaluate(() => [game.px, game.py]);
+  await page.keyboard.press('KeyV');
+  await page.waitForTimeout(240);
+  const emoteEnd = await page.evaluate(() => [game.px, game.py]);
+  if (Math.hypot(emoteEnd[0] - emoteStart[0], emoteEnd[1] - emoteStart[1]) < 0.04) problems.push('moving emote did not move the player');
+  await page.evaluate(() => { game.emoteTime = 0; game.performanceKind = ''; });
+  await page.keyboard.press('KeyB');
+  const foundSprayWall = await page.evaluate(() => {
+    for (let i = 0; i < 64; i++) {
+      game.angle = i * Math.PI * 2 / 64;
+      if (game.wallAhead()) return true;
+    }
+    return false;
+  });
+  if (foundSprayWall) await page.keyboard.press('KeyG');
   await page.waitForTimeout(200);
   await page.keyboard.press('KeyF');
+  const performanceStats = await page.evaluate(() => ({ emotes: profile.stats.emotes, taunts: profile.stats.taunts, sprays: profile.stats.sprays, marks: game.sprays.length, speedrun: game.speedrun }));
+  if (!performanceStats.speedrun || performanceStats.emotes < 1 || performanceStats.taunts < 1 || performanceStats.sprays < 1 || performanceStats.marks < 1) {
+    problems.push(`speedrun/emote/taunt input failed: ${JSON.stringify(performanceStats)}`);
+  }
 
   // Every alcove is paired, and Q moves a hidden player to its partner after
   // the transit delay. Do this by the real E/Q input path rather than mutating
@@ -163,14 +229,18 @@ async function play(page, seconds, keys = ['KeyW']) {
   await shot(page, '4-extraction');
 
   // win: stand on the surau with everything gathered
-  await page.evaluate(() => { game.px = game.surau[0]; game.py = game.surau[1]; });
+  await page.evaluate(() => {
+    game.cx = game.mapN - 1.5; game.cy = game.mapN - 1.5;
+    game.px = game.surau[0]; game.py = game.surau[1];
+  });
   await page.waitForTimeout(400);
   let state = await page.evaluate(() => game.state);
   if (state !== 'win') problems.push(`reaching the surau with 6/6 did not win (state=${state})`);
+  if (!(await page.locator('#scr-solo-over.on').count())) problems.push('solo win did not expose direct action buttons');
   await shot(page, '5-win');
 
   // dawn: restart, run the clock out
-  await page.keyboard.press('KeyR');
+  await page.click('#b-solo-again');
   await page.waitForTimeout(300);
   await page.evaluate(() => { game.timeLeft = 0.4; });
   await page.waitForTimeout(600);
@@ -178,8 +248,10 @@ async function play(page, seconds, keys = ['KeyW']) {
   if (state !== 'dawn') problems.push(`clock expiry did not end the night (state=${state})`);
   await shot(page, '6-dawn');
 
-  // caught: restart, drop the creature on top of the player
-  await page.keyboard.press('KeyR');
+  // End-screen navigation returns to a clean settings screen, then starts fresh.
+  await page.click('#b-solo-lobby');
+  if (!(await page.locator('#scr-solo.on').count())) problems.push('solo end did not return to night settings');
+  await page.click('#b-solo-start');
   await page.waitForTimeout(300);
   await page.evaluate(() => { game.cx = game.px; game.cy = game.py; game.hidden = false; });
   await page.waitForTimeout(400);
@@ -188,7 +260,7 @@ async function play(page, seconds, keys = ['KeyW']) {
   await shot(page, '7-caught');
 
   // restart from an end screen must produce a fresh, playable night
-  await page.keyboard.press('KeyR');
+  await page.click('#b-solo-again');
   await page.waitForTimeout(500);
   const fresh = await page.evaluate(() => ({
     state: game.state, items: game.items.length, t: game.timeLeft, nerve: game.composure,
@@ -197,6 +269,16 @@ async function play(page, seconds, keys = ['KeyW']) {
     problems.push(`restart did not reset cleanly: ${JSON.stringify(fresh)}`);
   }
   console.log(`  restart: ${JSON.stringify(fresh)}`);
+
+  await page.keyboard.press('Escape');
+  await page.click('#b-quit');
+  const menuReturn = await page.evaluate(() => ({
+    screen: document.querySelector('.scr.on')?.id,
+    pixel: [...ctx.getImageData(Math.floor(WIN_W / 2), Math.floor(WIN_H / 2), 1, 1).data],
+  }));
+  if (menuReturn.screen !== 'scr-main' || menuReturn.pixel.slice(0, 3).some(value => value !== 0)) {
+    problems.push(`leaving a solo night did not return to a plain black menu: ${JSON.stringify(menuReturn)}`);
+  }
 
   await browser.close();
 

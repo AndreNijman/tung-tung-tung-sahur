@@ -23,6 +23,7 @@
     background:rgba(4,4,6,0.90); overflow:auto; }
   #ui.on { display:block; }
   #ui.thin { background:rgba(4,4,6,0.72); }
+  #ui.solo-end { background:transparent; }
   .scr { display:none; position:absolute; inset:0; padding:26px 34px; box-sizing:border-box; }
   .scr.on { display:block; }
   .title { color:var(--accent); font-weight:bold; font-size:clamp(24px, 5vw, 34px);
@@ -99,13 +100,35 @@
   #admin-badge.on { display:block; }
   .profile-strip { display:flex; justify-content:center; gap:20px; color:var(--muted); margin-top:18px; }
   .profile-strip strong { color:var(--accent); }
+  .menu-stack { display:grid; gap:10px; width:min(360px, 100%); margin:34px auto 0; }
+  .menu-stack > button { min-height:58px; font-size:16px; }
   .menu-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; max-width:680px; margin:18px auto 0; }
+  .cosmetics-menu-grid { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .menu-panel { max-width:720px; margin:24px auto 0; padding:20px; background:var(--surface); border-left:3px solid var(--accent); }
+  .menu-panel .menu-grid { margin-top:0; }
+  .nav-tabs { display:flex; gap:0; overflow:auto; max-width:900px; margin:0 auto 12px; border-bottom:1px solid var(--divider); }
+  .nav-tabs button { flex:0 0 auto; min-height:44px; border:0; border-bottom:2px solid transparent;
+    background:transparent; color:var(--muted); padding:10px 14px; }
+  .nav-tabs button:hover { background:var(--surface); color:var(--text); }
+  .nav-tabs button.sel, .nav-tabs button[aria-selected="true"] { color:var(--accent); border-bottom-color:var(--accent); background:transparent; }
+  .section-heading { grid-column:1 / -1; margin:14px 0 2px; padding:8px 2px; color:var(--accent);
+    border-bottom:1px solid var(--divider); font:bold 12px monospace; letter-spacing:2px; }
   .catalog { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; max-width:820px; margin:0 auto; }
   .catalog-item { min-height:92px; background:var(--surface); border-left:3px solid var(--divider); padding:12px; box-sizing:border-box; }
   .catalog-item.legendary { border-color:var(--accent); background:#191207; }
   .catalog-item h3 { margin:0 0 6px; color:var(--text); font-size:14px; }
   .catalog-item p { margin:0 0 8px; color:var(--muted); font-size:11px; line-height:1.4; }
   .catalog-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .rarity-label { display:inline-block; margin-bottom:6px; color:var(--rarity, var(--muted)); font:bold 10px monospace; letter-spacing:1px; }
+  .rarity-common { --rarity:#a7a7ad; } .rarity-uncommon { --rarity:#78b86d; }
+  .rarity-rare { --rarity:#6f9fe7; } .rarity-epic { --rarity:#b484dc; }
+  .rarity-legendary { --rarity:#e0a040; } .rarity-mythic { --rarity:#f05b4c; }
+  .catalog-item[class*="rarity-"] { border-left-color:var(--rarity); }
+  .cosmetic-layout { display:grid; grid-template-columns:230px minmax(0, 1fr); gap:16px; max-width:940px; margin:0 auto; align-items:start; }
+  .cosmetic-preview { position:sticky; top:0; background:#08080b; border:1px solid var(--divider); padding:12px; text-align:center; }
+  .cosmetic-preview canvas { width:200px; height:250px; max-width:100%; image-rendering:pixelated; background:#050507; border-bottom:1px solid #25252d; }
+  .preview-name { color:var(--accent); min-height:34px; margin:8px 0; font-size:12px; }
+  .preview-toggle { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
   .wardrobe-layout { display:grid; grid-template-columns:220px minmax(0, 1fr); gap:16px;
     max-width:900px; margin:0 auto; align-items:start; }
   .wardrobe-preview { position:sticky; top:0; background:#08080b; border:1px solid var(--divider);
@@ -117,11 +140,67 @@
   .wardrobe-item > canvas { grid-column:1; grid-row:1 / span 3; width:72px; height:88px;
     background:#050507; border:1px solid #292932; image-rendering:pixelated; box-sizing:border-box; }
   .wardrobe-item > h3, .wardrobe-item > p, .wardrobe-item > .catalog-actions { grid-column:2; }
-  .sigil { display:inline-grid; place-items:center; width:24px; height:24px; margin-right:8px; border:1px solid currentColor; transform:rotate(45deg); }
-  .sigil span { transform:rotate(-45deg); font-size:9px; }
+  .sigil { display:inline-grid; place-items:center; width:25px; height:25px; margin-right:8px; border:2px solid currentColor;
+    border-radius:50%; box-shadow:inset 0 0 0 2px #08080b, inset 0 0 0 3px currentColor; vertical-align:middle; }
+  .sigil span { font-size:8px; line-height:1; }
+  .level-badge { display:inline-grid; place-items:center; min-width:28px; height:22px; padding:0 4px; box-sizing:border-box;
+    border:1px solid var(--divider); color:var(--muted); font-size:9px; letter-spacing:0; }
+  .nameplate { position:relative; isolation:isolate; padding:7px 8px !important; overflow:hidden; }
+  .nameplate::before { content:""; position:absolute; inset:0; z-index:-1; opacity:.34;
+    background:var(--street-bg, linear-gradient(90deg,#111118,#18130b)); }
   .rarity-easy { color:#d8d8dc; } .rarity-medium { color:#72bc68; }
   .rarity-difficult { color:#6898d8; } .rarity-impossible { color:#e0a040; }
   .screen-scroll { max-height:390px; overflow:auto; padding-right:4px; }
+  .pass-scroll { max-height:390px; overflow:auto hidden; padding:8px 0 14px; }
+  .pass-track { display:flex; width:max-content; min-width:100%; align-items:stretch; padding:0 28px; box-sizing:border-box; }
+  .pass-node { position:relative; flex:0 0 150px; min-height:210px; padding:12px; box-sizing:border-box;
+    background:var(--surface); border-top:3px solid var(--rarity, var(--divider)); }
+  .pass-node + .pass-node { margin-left:24px; }
+  .pass-node + .pass-node::before { content:""; position:absolute; width:24px; height:2px; left:-24px; top:44px; background:var(--divider); }
+  .pass-node canvas { width:126px; height:126px; background:#050507; image-rendering:pixelated; }
+  .pass-node h3 { margin:8px 0 4px; color:var(--text); font-size:12px; }
+  .pass-node p { margin:0; color:var(--muted); font-size:10px; line-height:1.4; }
+  .pass-node.locked { opacity:.55; }
+  .pass-node.secret canvas { background:#000; }
+  .lootbox-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; max-width:900px; margin:0 auto; }
+  .lootbox { min-height:230px; position:relative; overflow:hidden; text-align:left; border-top:4px solid var(--rarity); background:var(--surface); padding:16px; }
+  .lootbox-art { height:92px; display:grid; place-items:center; margin-bottom:12px; background:#07070a; color:var(--rarity); font:bold 28px monospace; }
+  .lootbox-art::before { content:""; width:62px; height:48px; border:4px solid currentColor; box-shadow:inset 0 0 0 3px #07070a, inset 0 0 0 5px currentColor; }
+  .lootbox h3 { margin:0 0 6px; color:var(--text); }
+  .lootbox p { min-height:48px; color:var(--muted); font-size:11px; line-height:1.45; }
+  #lootbox-result { max-width:900px; min-height:38px; margin:12px auto; color:var(--accent); text-align:center; }
+  .how-layout { display:grid; grid-template-columns:180px minmax(0,1fr); gap:18px; max-width:900px; height:min(390px,calc(100vh - 150px)); margin:0 auto; }
+  .how-nav { display:flex; flex-direction:column; border-right:1px solid var(--divider); }
+  .how-nav button { text-align:left; background:transparent; color:var(--muted); border-left:2px solid transparent; }
+  .how-nav button.sel { color:var(--accent); border-left-color:var(--accent); background:var(--surface); }
+  .how-content { overflow:auto; padding:4px 20px 20px 4px; line-height:1.65; }
+  .how-section { display:none; }
+  .how-section.on { display:block; }
+  .how-section h2 { margin:0 0 12px; color:var(--accent); font-size:18px; }
+  .key-list { display:grid; grid-template-columns:110px 1fr; gap:0; }
+  .key-list > * { padding:10px 8px; border-bottom:1px solid #24242b; }
+  .key-list kbd { color:var(--accent); font:bold 12px monospace; }
+  .vote-panel { max-width:620px; margin:12px auto 0; }
+  .vote-row { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; align-items:center; min-height:44px; border-bottom:1px solid #24242b; }
+  .solo-end-screen { background:transparent; pointer-events:none; display:none; }
+  .solo-end-screen.on { display:flex; align-items:flex-end; justify-content:center; padding-bottom:34px; }
+  .solo-end-screen .row { pointer-events:auto; background:rgba(3,3,4,.92); padding:10px; }
+  #scr-pass.on, #scr-shop.on, #scr-wardrobe.on, #scr-lootboxes.on, #scr-achievements.on {
+    display:flex; flex-direction:column;
+  }
+  #scr-pass .pass-scroll, #scr-shop .screen-scroll, #scr-wardrobe .screen-scroll,
+  #scr-lootboxes .screen-scroll, #scr-achievements .screen-scroll {
+    flex:1 1 auto; min-height:0; max-height:none;
+  }
+  #scr-pass > .row, #scr-shop > .row, #scr-wardrobe > .row,
+  #scr-lootboxes > .row, #scr-achievements > .row { flex:0 0 auto; }
+  #scr-pass > .title, #scr-pass > .sub, #scr-shop > .title, #scr-shop > .sub,
+  #scr-wardrobe > .title, #scr-wardrobe > .sub, #scr-lootboxes > .title,
+  #scr-lootboxes > .sub, #scr-achievements > .title, #scr-achievements > .sub,
+  #scr-shop > .nav-tabs, #scr-wardrobe > .nav-tabs { flex:0 0 auto; }
+  #scr-howto.on { display:flex; flex-direction:column; }
+  #scr-howto > .title, #scr-howto > .sub, #scr-howto > .row { flex:0 0 auto; }
+  #scr-howto > .how-layout { flex:1 1 auto; min-height:0; height:auto; }
 
   @media (max-width:700px) {
     .scr { padding:20px; }
@@ -133,9 +212,14 @@
     #scr-main .credit { position:absolute; }
     .mp-connect { grid-template-columns:1fr; }
     .lobby-browser { max-height:none; }
-    .menu-grid, .catalog { grid-template-columns:repeat(2, minmax(0, 1fr)); }
-    .wardrobe-layout { grid-template-columns:1fr; }
+    .menu-grid, .cosmetics-menu-grid, .catalog { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .wardrobe-layout, .cosmetic-layout { grid-template-columns:1fr; }
     .wardrobe-preview { position:static; }
+    .cosmetic-preview { position:static; }
+    .lootbox-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .how-layout { grid-template-columns:1fr; height:auto; }
+    .how-nav { flex-direction:row; overflow:auto; border-right:0; border-bottom:1px solid var(--divider); }
+    .how-nav button { flex:0 0 auto; }
   }
   @media (max-width:430px) {
     .scr { padding:16px 12px; }
@@ -145,6 +229,8 @@
     .plist .pname { min-width:120px; }
     .wardrobe-item { grid-template-columns:64px minmax(0, 1fr); }
     .wardrobe-item > canvas { width:64px; }
+    .lootbox-grid { grid-template-columns:1fr; }
+    .key-list { grid-template-columns:86px 1fr; }
   }
   @media (prefers-reduced-motion:reduce) {
     *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
@@ -160,47 +246,115 @@
     <div class="scr" id="scr-main">
       <div class="title">TUNG TUNG TUNG SAHORROR</div>
       <div class="sub">the drumming thing walks the streets before dawn</div>
-      <div class="row center" style="margin-top:34px">
-        <button id="b-solo">PLAY ALONE</button>
-        <button id="b-mp">PLAY TOGETHER</button>
-      </div>
-      <div class="row center" style="margin-top:18px">
-        <button class="ghost small" id="b-solo-settings">NIGHT SETTINGS</button>
-        <button class="ghost small" id="b-howto" aria-expanded="false" aria-controls="howto">HOW TO PLAY</button>
+      <div class="menu-stack">
+        <button id="b-play-menu">PLAY</button>
+        <button id="b-cosmetics-menu">COSMETICS</button>
+        <button id="b-howto">HOW TO PLAY</button>
       </div>
       <div class="profile-strip"><span>LEVEL <strong id="profile-level">1</strong></span><span>T-BUCKS <strong id="profile-coins">0</strong></span><span id="profile-user">GUEST</span></div>
-      <div class="menu-grid">
-        <button class="ghost small" data-profile-screen="scr-pass">SAHUR PASS</button>
-        <button class="ghost small" data-profile-screen="scr-shop">ITEM SHOP</button>
-        <button class="ghost small" data-profile-screen="scr-wardrobe">WARDROBE</button>
-        <button class="ghost small" data-profile-screen="scr-achievements">ACHIEVEMENTS</button>
-      </div>
-      <div id="howto" class="card hint" style="display:none;max-width:640px;margin:18px auto 0">
-        <b style="color:#c8c8cd">Alone.</b> Gather every offering and carry them back to the surau
-        before the call to Subuh. The thing only sees what it is facing. It always hears panic.<br><br>
-        <b style="color:#c8c8cd">Together.</b> Up to ten to a lobby, one of you is the Tung. The rest
-        carry offerings home one at a time. The Tung cannot see in colour and cannot hear well —
-        it reads the <span style="color:#8ab0d8">footprints you left a moment ago</span>.
-        Sprinting leaves a brighter, longer-lasting trail. Standing still leaves none.<br><br>
-        <b style="color:#c8c8cd">Alcoves come in pairs.</b> Hide in one and you can slip through to
-        its partner, so camping a door is a waste of the Tung's night.
-      </div>
       <div id="admin-badge" role="status">ADMIN</div>
       <div class="credit">originally by tim</div>
     </div>
 
+    <div class="scr" id="scr-play">
+      <div class="title">PLAY</div><div class="sub">choose how the night hunts you</div>
+      <div class="menu-stack">
+        <button id="b-solo">PLAY ALONE</button>
+        <button id="b-mp">PLAY TOGETHER</button>
+        <button class="ghost menu-back">BACK</button>
+      </div>
+    </div>
+
+    <div class="scr" id="scr-cosmetics">
+      <div class="title">COSMETICS</div><div class="sub">collect it, wear it, make the whole lobby notice</div>
+      <div class="menu-panel">
+        <div class="menu-grid cosmetics-menu-grid">
+          <button class="ghost small" data-profile-screen="scr-pass">SAHUR PASS</button>
+          <button class="ghost small" data-profile-screen="scr-shop">ITEM SHOP</button>
+          <button class="ghost small" data-profile-screen="scr-wardrobe">WARDROBE</button>
+          <button class="ghost small" data-profile-screen="scr-lootboxes">LOOTBOXES</button>
+          <button class="ghost small" data-profile-screen="scr-achievements">ACHIEVEMENTS</button>
+        </div>
+      </div>
+      <div class="row center"><button class="ghost menu-back">BACK</button></div>
+    </div>
+
+    <div class="scr" id="scr-howto">
+      <div class="title">HOW TO PLAY</div><div class="sub">everything the street expects you to know</div>
+      <div class="how-layout card">
+        <nav class="how-nav" aria-label="How to play sections">
+          <button class="sel" role="tab" tabindex="0" data-how="how-basics" aria-controls="how-basics" aria-selected="true">BASICS</button>
+          <button role="tab" tabindex="-1" data-how="how-runner" aria-controls="how-runner" aria-selected="false">RUNNERS</button>
+          <button role="tab" tabindex="-1" data-how="how-tung" aria-controls="how-tung" aria-selected="false">THE TUNG</button>
+          <button role="tab" tabindex="-1" data-how="how-keys" aria-controls="how-keys" aria-selected="false">CONTROLS</button>
+          <button role="tab" tabindex="-1" data-how="how-social" aria-controls="how-social" aria-selected="false">MULTIPLAYER</button>
+        </nav>
+        <div class="how-content">
+          <section class="how-section on" role="tabpanel" aria-hidden="false" id="how-basics">
+            <h2>Bring the night home</h2>
+            <p>Gather every offering and carry it to the surau before the call to Subuh. The solo Tung only sees inside the cone it is facing. If you cannot see its eyes, it cannot see you. Breaking line of sight matters; hiding is the fastest way to recover your nerve.</p>
+            <p>The optional speedrun timer appears in the HUD and records the run to one millisecond. It never changes the night timer.</p>
+          </section>
+          <section class="how-section" role="tabpanel" aria-hidden="true" id="how-runner">
+            <h2>Runner rules</h2>
+            <p>In multiplayer, carry one offering at a time. Sprinting leaves brighter footprints that last longer. Walking leaves a quieter trail. Standing still leaves none. A carried offering lights you up and makes your trail linger.</p>
+            <p>Alcoves come in pairs. Hide with E, then press Q to slip to the paired alcove after a short crawl. There is a cooldown, so use it to escape rather than travel.</p>
+          </section>
+          <section class="how-section" role="tabpanel" aria-hidden="true" id="how-tung">
+            <h2>Hunt by evidence</h2>
+            <p>A player Tung sees farther but without colour, reads delayed footprints, and uses a short Shift surge instead of stamina. A bot Tung uses sight, nearby noise, and its last known position. The lobby can choose zero player Tungs to make every human a runner.</p>
+          </section>
+          <section class="how-section" role="tabpanel" aria-hidden="true" id="how-keys">
+            <h2>Keyboard and mouse</h2>
+            <div class="key-list">
+              <kbd>W A S D</kbd><span>move</span>
+              <kbd>MOUSE / ← →</kbd><span>look around; while spectating, Left and Right switch viewpoints</span>
+              <kbd>SHIFT</kbd><span>sprint as a runner; surge as a player Tung</span>
+              <kbd>F</kbd><span>toggle the torch</span>
+              <kbd>E</kbd><span>enter or leave a nearby alcove</span>
+              <kbd>Q</kbd><span>slip through a paired alcove while hidden</span>
+              <kbd>G</kbd><span>spray your equipped graffiti on the wall in front of you</span>
+              <kbd>V</kbd><span>perform your equipped moving emote</span>
+              <kbd>B</kbd><span>taunt with a loud, ridiculous stomp</span>
+              <kbd>T</kbd><span>open global match chat</span>
+              <kbd>ESC</kbd><span>pause alone; open the live match menu together</span>
+            </div>
+          </section>
+          <section class="how-section" role="tabpanel" aria-hidden="true" id="how-social">
+            <h2>Lobby and match rules</h2>
+            <p>Create or join a lobby of up to ten. The host controls the night. Vote for a player Tung, choose random, or set player Tungs to zero for bot mode. Dead players can spectate any surviving runner or Tung.</p>
+            <p>During a match, pause to vote to remove a player. A strict majority of the whole lobby is required: 2/2, 2/3, 3/4, 3/5, and so on. Removing a player Tung resets the night to the lobby.</p>
+          </section>
+        </div>
+      </div>
+      <div class="row center"><button class="ghost menu-back">BACK</button></div>
+    </div>
+
     <div class="scr" id="scr-pass">
       <div class="title">SAHUR PASS</div><div class="sub" id="pass-summary"></div>
-      <div class="screen-scroll"><div class="catalog" id="pass-catalog"></div></div>
+      <div class="pass-scroll"><div class="pass-track" id="pass-catalog"></div></div>
       <div class="row center"><button id="b-buy-pass">BUY PASS - 1,000 T-BUCKS</button><button class="ghost profile-back">BACK</button></div>
     </div>
     <div class="scr" id="scr-shop">
-      <div class="title">ITEM SHOP</div><div class="sub">legendary pieces and discounted sets</div>
-      <div class="screen-scroll"><div class="catalog" id="shop-catalog"></div></div>
+      <div class="title">ITEM SHOP</div><div class="sub">every wearable, sorted and previewable before you buy</div>
+      <div class="nav-tabs" id="shop-tabs" role="tablist"></div>
+      <div class="screen-scroll cosmetic-layout">
+        <div class="cosmetic-preview">
+          <canvas id="shop-preview" width="200" height="250" aria-label="Item shop preview"></canvas>
+          <div class="preview-name" id="shop-preview-name">SELECT AN ITEM</div>
+          <div class="preview-toggle"><button class="ghost small sel" id="b-shop-icon">ITEM</button><button class="ghost small" id="b-shop-wearer">ON PLAYER</button></div>
+        </div>
+        <div class="catalog" id="shop-catalog"></div>
+      </div>
       <div class="row center"><button class="ghost profile-back">BACK</button></div>
     </div>
     <div class="scr" id="scr-wardrobe">
       <div class="title">WARDROBE</div><div class="sub">cosmetic only - never changes speed, visibility, or reach</div>
+      <div class="nav-tabs" id="wardrobe-mode" role="tablist">
+        <button class="sel" role="tab" tabindex="0" data-wardrobe-mode="player" aria-selected="true">PLAYER MODE</button>
+        <button role="tab" tabindex="-1" data-wardrobe-mode="tung" aria-selected="false">TUNG MODE</button>
+      </div>
+      <div class="nav-tabs" id="wardrobe-tabs" role="tablist"></div>
       <div class="screen-scroll wardrobe-layout">
         <div class="wardrobe-preview">
           <canvas id="wardrobe-preview" width="180" height="260" aria-label="Outfit preview"></canvas>
@@ -208,6 +362,14 @@
           <button class="ghost small" id="b-preview-current">CURRENT OUTFIT</button>
         </div>
         <div class="catalog" id="wardrobe-catalog"></div>
+      </div>
+      <div class="row center"><button class="ghost profile-back">BACK</button></div>
+    </div>
+    <div class="scr" id="scr-lootboxes">
+      <div class="title">LOOTBOXES</div><div class="sub">odds are shown before you spend - duplicate cosmetics pay T-bucks</div>
+      <div class="screen-scroll">
+        <div class="lootbox-grid" id="lootbox-catalog"></div>
+        <div id="lootbox-result" role="status" aria-live="polite">Choose a box. Mythic boxes guarantee a Mythic cosmetic.</div>
       </div>
       <div class="row center"><button class="ghost profile-back">BACK</button></div>
     </div>
@@ -313,13 +475,13 @@
     <div class="scr" id="scr-pause">
       <div class="title" id="pause-title">PAUSED</div>
       <div class="sub" id="pause-sub">the street holds its breath</div>
-      <div class="card hint" style="max-width:520px;margin:0 auto">
-        <div class="row" style="justify-content:space-between"><span>WASD</span><span>move</span></div>
-        <div class="row" style="justify-content:space-between"><span>SHIFT</span><span id="k-shift">sprint</span></div>
-        <div class="row" style="justify-content:space-between"><span>F</span><span>torch</span></div>
-        <div class="row" style="justify-content:space-between"><span>E</span><span>hide in an alcove</span></div>
-        <div class="row" style="justify-content:space-between"><span>Q</span><span>slip through to the paired alcove</span></div>
-        <div class="row" style="justify-content:space-between"><span>T</span><span>global lobby chat</span></div>
+      <div class="card hint" style="max-width:620px;margin:0 auto">
+        Controls are documented in How to Play. Multiplayer does not pause while this menu is open.
+      </div>
+      <div class="card vote-panel" id="pause-votekick">
+        <label>VOTE TO REMOVE A PLAYER</label>
+        <div class="hint">A strict majority of the entire lobby is required.</div>
+        <div id="votekick-list"></div>
       </div>
       <div class="card admin-card" id="pause-admin" style="max-width:520px;margin:10px auto 0">
         <label>DEV ADMIN PANEL</label>
@@ -330,6 +492,13 @@
         <button class="ghost" id="b-quit">LEAVE THE NIGHT</button>
       </div>
       <div class="credit">originally by tim</div>
+    </div>
+
+    <div class="scr solo-end-screen" id="scr-solo-over">
+      <div class="row center">
+        <button id="b-solo-again">PLAY AGAIN</button>
+        <button class="ghost" id="b-solo-lobby">BACK TO NIGHT SETTINGS</button>
+      </div>
     </div>
 
     <!-- multiplayer result -->
@@ -349,7 +518,7 @@
   </div>
   <div id="team-chat" aria-live="polite">
     <div id="chat-log"></div>
-    <input id="chat-input" maxlength="160" autocomplete="off" aria-label="Global chat message" placeholder="global message - Enter to send, Escape to close">
+    <input id="chat-input" maxlength="160" autocomplete="off" aria-label="Global chat message" placeholder="global message">
   </div>
   <div id="event-banner" role="status" aria-live="assertive"></div>
 </div>
@@ -495,7 +664,9 @@ const DEFAULT_SETTINGS = {
   stamina: 'medium',
   tungIntel: false,
   tungs: 1,
+  botTungs: 1,
   tracks: 'normal',
+  speedrun: false,
 };
 const STAMINA_PRESETS = {
   veryLow: 2.0,
@@ -518,8 +689,10 @@ function clampGameSettings(raw) {
   if (Number.isFinite(raw.torch)) s.torch = raw.torch === 0 ? 0 : Math.max(20, Math.min(1800, Math.round(raw.torch)));
   if (STAMINA_PRESETS[raw.stamina] !== undefined) s.stamina = raw.stamina;
   if (typeof raw.tungIntel === 'boolean') s.tungIntel = raw.tungIntel;
-  if (Number.isFinite(raw.tungs)) s.tungs = Math.max(1, Math.min(3, Math.round(raw.tungs)));
+  if (Number.isFinite(raw.tungs)) s.tungs = Math.max(0, Math.min(3, Math.round(raw.tungs)));
+  if (Number.isFinite(raw.botTungs)) s.botTungs = Math.max(1, Math.min(3, Math.round(raw.botTungs)));
   if (TRACK_PRESETS[raw.tracks]) s.tracks = raw.tracks;
+  if (typeof raw.speedrun === 'boolean') s.speedrun = raw.speedrun;
   return s;
 }
 
@@ -535,6 +708,10 @@ function angDiff(a, b) { return pymod(b - a + Math.PI, 2 * Math.PI) - Math.PI; }
 function fmtClock(seconds) {
   const s = Math.max(0, Math.ceil(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+function fmtMilliseconds(seconds) {
+  const ms=Math.max(0,Math.floor(seconds*1000));
+  return `${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}.${String(ms%1000).padStart(3,'0')}`;
 }
 function shuffle(arr, rnd = Math.random) {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -704,6 +881,11 @@ function makeStep() {
   for (let i = 0; i < n; i++) s[i] *= 0.42;
   return s;
 }
+function makeSpray() {
+  const t=lin(.62),n=t.length;let s=new Float32Array(n);const noise=randUniform(n);
+  for(let i=0;i<n;i++){const on=t[i]<.48?1:Math.exp(-(t[i]-.48)*28);s[i]=noise[i]*on*(.65+.35*Math.sin(2*Math.PI*34*t[i]));}
+  s=lp(s,4,3);normalize(s);for(let i=0;i<n;i++)s[i]*=.42;return s;
+}
 function makeScare() {
   const t = lin(0.85), n = t.length, s = new Float32Array(n);
   for (let i = 0; i < n; i++) {
@@ -761,7 +943,7 @@ class AudioManager {
     const specs = {
       tung: makeTung, boom: makeBoom, heart: makeHeart, pickup: makePickup,
       stinger: makeStinger, hidefx: makeHidefx, breath: makeBreath, scare: makeScare,
-      dawn: makeDawn, drone: makeDrone, whisper: makeWhisper, step: makeStep
+      dawn: makeDawn, drone: makeDrone, whisper: makeWhisper, step: makeStep, spray: makeSpray
     };
     for (const [name, fn] of Object.entries(specs)) {
       const data = fn();
@@ -983,26 +1165,62 @@ function createCreatureSprite(hunting, away) {
   return c;
 }
 const tungCosmeticSprites = new Map();
+function createBrainrotTungSprite(variant, hunting, away) {
+  const c=document.createElement('canvas');c.width=80;c.height=144;const g=c.getContext('2d');
+  const eye=(x,y,w=6)=>{if(away)return;g.fillStyle='#0b0909';g.fillRect(x,y,w,7);g.fillStyle=hunting?'#ff4e38':'#f4e8cf';g.fillRect(x+1,y+1,w-2,4);};
+  if(variant==='tung-tralalero'){
+    g.fillStyle='#235e7b';g.beginPath();g.ellipse(39,53,32,24,-.08,0,Math.PI*2);g.fill();
+    g.beginPath();g.moveTo(32,31);g.lineTo(44,9);g.lineTo(49,35);g.fill();g.beginPath();g.moveTo(67,49);g.lineTo(79,38);g.lineTo(72,61);g.fill();
+    g.fillStyle='#d6e2de';g.beginPath();g.ellipse(35,61,23,12,0,0,Math.PI);g.fill();
+    g.fillStyle='#235e7b';for(const x of [23,38,53])g.fillRect(x,70,8,49);
+    g.fillStyle='#d7e9f3';for(const x of [18,33,48]){g.fillRect(x,116,20,10);g.fillStyle='#3b8dd2';g.fillRect(x+2,121,18,7);g.fillStyle='#d7e9f3';}
+    eye(23,43);eye(42,41);if(!away){g.fillStyle='#0c1114';g.fillRect(18,59,38,5);g.fillStyle='#eef4eb';for(let x=20;x<54;x+=6)g.fillRect(x,59,3,5);}
+  }else if(variant==='tung-bombardiro'){
+    g.fillStyle='#4d6536';g.beginPath();g.ellipse(40,34,24,18,0,0,Math.PI*2);g.fill();g.fillRect(18,32,51,17);
+    g.fillStyle='#d7c79a';for(let x=23;x<66;x+=8)g.fillRect(x,44,4,5);eye(27,27);eye(43,27);
+    g.fillStyle='#59616b';g.fillRect(31,48,18,64);g.beginPath();g.moveTo(31,58);g.lineTo(2,79);g.lineTo(32,84);g.fill();g.beginPath();g.moveTo(49,58);g.lineTo(78,79);g.lineTo(48,84);g.fill();
+    g.fillStyle='#8c3c2e';g.fillRect(35,52,10,48);g.fillStyle='#c9a64c';g.fillRect(37,58,6,7);g.fillRect(37,79,6,7);
+    g.fillStyle='#444850';g.fillRect(25,108,7,28);g.fillRect(48,108,7,28);g.fillStyle='#c9a64c';g.fillRect(20,132,17,7);g.fillRect(43,132,17,7);
+  }else if(variant==='tung-lirili'){
+    g.fillStyle='#6f9348';g.fillRect(25,42,31,73);for(let y=50;y<108;y+=13){g.fillStyle='#c7d08b';g.fillRect(28,y,4,4);g.fillRect(47,y+5,4,4);}
+    g.fillStyle='#8e928b';g.beginPath();g.ellipse(40,28,25,19,0,0,Math.PI*2);g.fill();g.fillRect(35,30,10,35);g.beginPath();g.arc(17,30,12,0,Math.PI*2);g.arc(63,30,12,0,Math.PI*2);g.fill();eye(28,23);eye(45,23);
+    g.fillStyle='#6f9348';g.fillRect(17,54,10,38);g.fillRect(54,61,10,34);g.fillStyle='#658540';g.fillRect(31,111,8,22);g.fillRect(46,111,8,22);
+    g.fillStyle='#b8874e';g.fillRect(24,130,21,8);g.fillRect(41,130,21,8);g.fillStyle='#342319';g.fillRect(27,128,14,3);g.fillRect(44,128,14,3);
+  }else if(variant==='tung-ballerina'){
+    g.fillStyle='#eee3d3';g.fillRect(25,12,30,24);g.fillRect(53,17,10,6);g.strokeStyle='#eee3d3';g.lineWidth=4;g.beginPath();g.arc(57,24,10,-1.4,1.4);g.stroke();g.fillStyle='#8c5d3f';g.beginPath();g.arc(40,16,10,0,Math.PI);g.fill();eye(31,25,5);eye(43,25,5);
+    g.fillStyle='#d9a2ae';g.fillRect(34,38,12,43);g.beginPath();g.moveTo(18,76);g.lineTo(62,76);g.lineTo(50,93);g.lineTo(29,93);g.closePath();g.fill();
+    g.strokeStyle='#d9a2ae';g.lineWidth=6;g.beginPath();g.moveTo(35,46);g.lineTo(14,63);g.lineTo(5,49);g.moveTo(45,46);g.lineTo(66,57);g.lineTo(76,43);g.stroke();
+    g.strokeStyle='#d8b7a8';g.lineWidth=6;g.beginPath();g.moveTo(35,90);g.lineTo(24,133);g.moveTo(46,90);g.lineTo(59,132);g.stroke();g.fillStyle='#d9a2ae';g.fillRect(16,130,17,7);g.fillRect(52,130,18,7);
+  }else if(variant==='tung-cappuccino'){
+    g.fillStyle='#ece3d2';g.fillRect(24,12,32,25);g.fillRect(53,17,12,7);g.fillStyle='#7d5038';g.fillRect(27,13,26,6);eye(31,24);eye(44,24);
+    g.fillStyle='#15151b';g.beginPath();g.moveTo(22,40);g.lineTo(58,40);g.lineTo(66,105);g.lineTo(14,105);g.closePath();g.fill();g.fillStyle='#9d2025';g.fillRect(18,61,44,8);
+    g.strokeStyle='#15151b';g.lineWidth=8;g.beginPath();g.moveTo(24,48);g.lineTo(4,75);g.moveTo(56,48);g.lineTo(75,68);g.stroke();g.fillStyle='#c9c7c1';g.fillRect(2,72,18,4);g.fillRect(60,65,18,4);
+    g.fillStyle='#15151b';g.fillRect(23,102,11,31);g.fillRect(47,102,11,31);g.fillStyle='#9d2025';g.fillRect(17,130,23,7);g.fillRect(41,130,23,7);
+  }else if(variant==='pass-100-sahur-sovereign'){
+    // The secret capstone is deliberately readable from the far end of a
+    // corridor: a sun-wheel silhouette, six gold arms, crown and molten core.
+    g.strokeStyle='rgba(255,67,42,.72)';g.lineWidth=4;for(let i=0;i<12;i++){const a=i*Math.PI/6;g.beginPath();g.moveTo(40+Math.cos(a)*27,43+Math.sin(a)*27);g.lineTo(40+Math.cos(a)*37,43+Math.sin(a)*37);g.stroke();}
+    for(const [r,color,width] of [[33,'rgba(255,67,42,.30)',5],[26,'rgba(255,184,55,.42)',4],[19,'rgba(255,219,104,.28)',3]]){g.strokeStyle=color;g.lineWidth=width;g.beginPath();g.arc(40,43,r,0,Math.PI*2);g.stroke();}
+    g.fillStyle='#591425';g.beginPath();g.moveTo(8,47);g.lineTo(29,27);g.lineTo(29,117);g.lineTo(3,137);g.closePath();g.fill();g.beginPath();g.moveTo(72,47);g.lineTo(51,27);g.lineTo(51,117);g.lineTo(77,137);g.closePath();g.fill();
+    g.fillStyle='#a51e2d';g.fillRect(7,54,5,65);g.fillRect(68,54,5,65);g.fillStyle='#f3b83e';for(let y=60;y<116;y+=14){g.fillRect(8,y,3,6);g.fillRect(69,y,3,6);}
+    g.fillStyle='#843e20';g.fillRect(25,28,30,91);g.fillStyle='#d89127';g.fillRect(25,42,30,5);g.fillRect(25,74,30,5);g.fillRect(25,103,30,5);g.fillStyle='#f7ce5a';g.fillRect(28,45,3,57);g.fillRect(49,45,3,57);
+    g.fillStyle='#2b1119';g.fillRect(21,13,38,25);g.fillStyle='#d89127';g.fillRect(18,34,44,8);g.fillRect(15,37,8,12);g.fillRect(57,37,8,12);
+    eye(27,21,8);eye(45,21,8);if(!away){g.fillStyle='#fff2a2';for(let x=26;x<55;x+=6)g.fillRect(x,32,4,4);g.fillStyle='#ff4a32';g.fillRect(29,22,5,3);g.fillRect(47,22,5,3);}
+    g.fillStyle='#f3b83e';g.beginPath();g.moveTo(16,16);g.lineTo(20,0);g.lineTo(31,9);g.lineTo(40,-2);g.lineTo(50,9);g.lineTo(61,0);g.lineTo(64,18);g.closePath();g.fill();g.fillStyle='#fff0a0';g.fillRect(37,0,7,9);g.fillStyle='#ff4932';g.fillRect(39,2,3,5);
+    g.fillStyle='#ff633d';g.fillRect(34,55,12,18);g.fillStyle='#ffd45f';g.fillRect(37,58,6,12);g.fillStyle='#fff4b0';g.fillRect(39,60,2,8);
+    g.strokeStyle='#e6a632';g.lineWidth=6;g.beginPath();g.moveTo(25,50);g.lineTo(9,66);g.moveTo(55,50);g.lineTo(72,63);g.moveTo(25,63);g.lineTo(5,85);g.moveTo(55,63);g.lineTo(76,83);g.moveTo(25,79);g.lineTo(10,102);g.moveTo(55,79);g.lineTo(70,101);g.stroke();
+    g.fillStyle='#f8d264';for(const [x,y] of [[4,62],[69,59],[0,82],[72,80],[5,98],[66,97]]){g.fillRect(x,y,10,7);g.fillStyle='#8e3d22';g.fillRect(x+3,y-5,4,8);g.fillStyle='#f8d264';}
+    g.fillStyle='#843e20';g.fillRect(27,116,10,23);g.fillRect(45,116,10,23);g.fillStyle='#f3b83e';g.fillRect(19,133,24,9);g.fillRect(39,133,24,9);g.fillStyle='#fff0a0';g.fillRect(22,134,17,3);g.fillRect(43,134,17,3);
+  }else return createCreatureSprite(hunting,away);
+  return c;
+}
 function getTungSprite(player, hunting, away) {
   const variant = player?.look?.tung || '';
   if (!variant) return hunting ? (away ? SPR.creatureHuntBack : SPR.creatureHunt) : (away ? SPR.creatureBack : SPR.creature);
   const key = `${variant}|${hunting ? 1 : 0}|${away ? 1 : 0}`;
   let sprite = tungCosmeticSprites.get(key);
   if (sprite) return sprite;
-  sprite = createCreatureSprite(hunting, away);
-  const g = sprite.getContext('2d');
-  if (variant === 'tung-tralalero') {
-    g.fillStyle = 'rgb(42,92,118)'; g.fillRect(20, 42, 24, 54);
-    g.fillStyle = 'rgb(218,224,190)';
-    for (let y = 46; y < 94; y += 12) g.fillRect(20, y, 24, 4);
-    g.fillStyle = 'rgb(72,122,142)'; g.fillRect(15, 11, 34, 7);
-  } else if (variant === 'tung-bombardiro') {
-    g.fillStyle = 'rgb(88,42,35)'; g.fillRect(20, 40, 24, 58);
-    g.fillStyle = 'rgb(190,142,54)'; g.fillRect(20, 48, 24, 4); g.fillRect(20, 76, 24, 4);
-    g.fillStyle = 'rgb(52,54,60)'; g.fillRect(13, 12, 38, 8);
-  } else {
-    g.fillStyle = 'rgba(224,160,64,.35)'; g.fillRect(18, 38, 28, 62);
-  }
+  sprite = createBrainrotTungSprite(variant,hunting,away);
   tungCosmeticSprites.set(key, sprite);
   return sprite;
 }
@@ -1038,17 +1256,21 @@ function createSurvivorSprite(player, carrying, away) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d');
   const look = player?.look || {};
+  const shirtItem=cosmeticById(look.shirt),shirtPattern=cosmeticById(look.shirtPattern);
+  const pantsItem=cosmeticById(look.pants),pantsPattern=cosmeticById(look.pantsPattern);
+  const hatItem=cosmeticById(look.hat);
   const skin = look.skin === 'skin-moon' ? 'rgb(150,158,184)'
     : look.skin === 'skin-carved' ? 'rgb(132,82,54)' : 'rgb(120,92,66)';
   const skinD = look.skin === 'skin-moon' ? 'rgb(92,100,130)'
     : look.skin === 'skin-carved' ? 'rgb(78,44,30)' : 'rgb(88,66,48)';
-  const cloth = outfitColor(player);
-  const pants = look.pants === 'pants-ember' ? 'rgb(112,48,34)' : 'rgb(38,38,46)';
+  const cloth = shirtItem?.primary || outfitColor(player);
+  const cloth2=shirtItem?.secondary||'#272730';
+  const pants = pantsItem?.primary || 'rgb(38,38,46)',pants2=pantsItem?.secondary||'#17171d';
 
-  if (look.aura === 'aura-dawn') {
-    for (const [r, a] of [[25, .08], [19, .12], [13, .18]]) {
-      g.fillStyle = `rgba(244,174,70,${a})`; g.beginPath(); g.arc(24, 58, r, 0, Math.PI * 2); g.fill();
-    }
+  if (look.aura) {
+    const aura=look.aura==='aura-sovereign'?'255,76,48':look.aura==='aura-storm'?'92,156,224':'244,174,70';
+    for (const [r, a] of [[29,.09],[23,.13],[17,.2]]) {g.strokeStyle=`rgba(${aura},${a})`;g.lineWidth=3;g.beginPath();g.arc(24,56,r,0,Math.PI*2);g.stroke();}
+    if(look.aura==='aura-sovereign'){g.fillStyle='rgba(255,76,48,.7)';for(let i=0;i<8;i++){const a=i*Math.PI/4;g.fillRect(22+Math.cos(a)*27,54+Math.sin(a)*37,4,4);}}
   }
 
   if (carrying) {
@@ -1058,7 +1280,11 @@ function createSurvivorSprite(player, carrying, away) {
       g.beginPath(); g.arc(38, 58, r, 0, Math.PI * 2); g.fill();
     }
   }
-  if (look.back === 'back-drum') {
+  if (look.back === 'back-throne') {
+    g.fillStyle='#28151d';g.fillRect(5,33,38,56);g.fillStyle='#e0a040';g.fillRect(7,35,4,51);g.fillRect(37,35,4,51);g.fillRect(11,42,26,4);g.fillRect(11,77,26,6);
+  } else if(look.back==='back-peacock'){
+    for(let i=0;i<7;i++){const a=-2.7+i*.36;g.fillStyle=i%2?'#d4ad38':'#167078';g.beginPath();g.ellipse(24+Math.cos(a)*21,57+Math.sin(a)*23,6,15,a+Math.PI/2,0,Math.PI*2);g.fill();}
+  } else if (look.back === 'back-drum') {
     g.fillStyle = 'rgb(68,42,24)'; g.fillRect(10, 43, 29, 31);
     g.strokeStyle = 'rgb(190,130,54)'; g.lineWidth = 2; g.strokeRect(11, 44, 27, 29);
   } else if (look.back === 'back-moon') {
@@ -1068,27 +1294,18 @@ function createSurvivorSprite(player, carrying, away) {
     g.fillStyle = 'rgb(64,58,48)'; g.fillRect(12, 42, 25, 36);
     g.strokeStyle = 'rgb(150,118,64)'; g.strokeRect(13.5, 43.5, 22, 33);
   }
-  g.fillStyle = look.shoes === 'shoes-spark' ? 'rgb(228,168,58)' : 'rgb(28,28,34)';
+  g.fillStyle = look.shoes === 'shoes-spark' ? 'rgb(228,168,58)' : look.shoes==='shoes-moonwalk'?'#dad8e8':'rgb(28,28,34)';
   g.fillRect(17, 96, 7, 6); g.fillRect(26, 96, 7, 6);
-  g.fillStyle = pants; g.fillRect(18, 78, 5, 20); g.fillRect(26, 78, 5, 20);
+  g.fillStyle = pants; g.fillRect(17, 77, 7, 21); g.fillRect(26, 77, 7, 21);
+  if(pantsPattern?.pattern){drawPattern(g,pantsPattern.pattern,17,77,7,21,pantsPattern.primary||pants2,pantsPattern.secondary||pants);drawPattern(g,pantsPattern.pattern,26,77,7,21,pantsPattern.primary||pants2,pantsPattern.secondary||pants);}
   g.fillStyle = cloth; g.fillRect(15, 40, 19, 44);
   g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(28, 40, 6, 44);
-  if (look.shirtPattern === 'pattern-static') {
-    g.fillStyle = 'rgba(220,225,235,.55)';
-    for (let y = 44; y < 69; y += 7) { g.fillRect(17, y, 5, 2); g.fillRect(25, y + 3, 6, 2); }
-  } else if (look.shirtPattern === 'pattern-batik') {
-    g.fillStyle = 'rgb(220,158,58)';
-    for (let y = 45; y < 70; y += 8) { g.fillRect(18, y, 3, 3); g.fillRect(26, y + 3, 3, 3); }
-  }
-  if (look.spray) {
-    g.fillStyle = look.spray === 'spray-eye' ? 'rgb(225,210,170)' : 'rgb(224,160,64)';
-    g.fillRect(21, 54, 7, 2); g.fillRect(23, 52, 3, 6);
-  }
+  if(shirtItem?.pattern)drawPattern(g,shirtItem.pattern,15,40,19,44,shirtItem.secondary||'#e0a040',cloth);
+  if(shirtPattern?.pattern)drawPattern(g,shirtPattern.pattern,15,40,19,34,shirtPattern.primary||'#e0a040',shirtPattern.secondary||cloth2);
+  if(shirtItem?.pattern==='ruffle'||shirtItem?.pattern==='peacock'){g.fillStyle=shirtItem.secondary||'#d4ad38';g.fillRect(11,41,5,39);g.fillRect(34,41,5,39);for(let y=43;y<79;y+=8){g.fillRect(8,y,5,5);g.fillRect(37,y,5,5);}}
   g.fillStyle = pants; g.fillRect(15, 70, 19, 14);   // sarong
-  if (look.pantsPattern === 'pants-check') {
-    g.fillStyle = 'rgb(148,148,160)';
-    g.fillRect(15, 74, 19, 2); g.fillRect(20, 70, 2, 14); g.fillRect(28, 70, 2, 14);
-  }
+  if(pantsItem?.id==='pants-peacock'||pantsItem?.id==='pants-sovereign'){g.fillStyle=pantsItem.secondary;g.fillRect(13,70,23,4);g.fillRect(14,78,21,3);}
+  if(pantsPattern?.pattern)drawPattern(g,pantsPattern.pattern,15,70,19,14,pantsPattern.primary||pants2,pantsPattern.secondary||pants);
   g.fillStyle = skin; g.fillRect(19, 20, 12, 16);              // head
   g.fillStyle = skinD; g.fillRect(19, 20, 12, 4);
   if (look.hat === 'hat-crown') {
@@ -1097,8 +1314,12 @@ function createSurvivorSprite(player, carrying, away) {
   } else if (look.hat === 'hat-lantern') {
     g.fillStyle = 'rgb(72,52,28)'; g.fillRect(15, 10, 20, 12);
     g.fillStyle = 'rgb(236,172,60)'; g.fillRect(18, 12, 14, 7);
+  } else if (look.hat === 'hat-sunwheel') {
+    g.strokeStyle='#ff593d';g.lineWidth=4;g.beginPath();g.arc(25,14,13,0,Math.PI*2);g.stroke();g.fillStyle='#e0a040';for(let i=0;i<8;i++){const a=i*Math.PI/4;g.fillRect(23+Math.cos(a)*17,12+Math.sin(a)*17,4,4);}
+  } else if(look.hat==='hat-minaret'){
+    g.fillStyle='#8793a4';g.fillRect(20,3,10,19);g.beginPath();g.arc(25,5,9,Math.PI,0);g.fill();g.fillStyle='#e0a040';g.fillRect(24,0,2,5);
   } else if (look.hat) {
-    g.fillStyle = 'rgb(122,94,52)'; g.fillRect(16, 12, 18, 10); g.fillRect(13, 20, 24, 3);
+    g.fillStyle = hatItem?.primary||'rgb(122,94,52)'; g.fillRect(16, 12, 18, 10); g.fillRect(13, 20, 24, 3);
   } else { g.fillStyle = 'rgb(24,24,30)'; g.fillRect(17, 14, 16, 8); }
   if (away) {
     g.fillStyle = 'rgb(20,20,26)'; g.fillRect(19, 22, 12, 12);
@@ -1127,6 +1348,8 @@ function getSurvivorSprite(player, carrying, away) {
   if (!s) { s = createSurvivorSprite(player, carrying, away); survivorSprites.set(key, s); }
   return s;
 }
+const spraySprites=new Map();
+function getSpraySprite(id){let s=spraySprites.get(id);if(s)return s;s=document.createElement('canvas');s.width=64;s.height=64;drawSprayArt(s.getContext('2d'),id,2,2,60,60);spraySprites.set(id,s);return s;}
 function createItemSprite() {
   const w = 32, h = 32;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -1230,6 +1453,7 @@ class Game {
     this.staminaDrain = STAMINA_DRAIN * STAMINA_PRESETS[o.stamina];
     this.infiniteStamina = o.stamina === 'infinite';
     this.tungIntel = o.tungIntel;
+    this.speedrun = o.speedrun === true;
     this.mode = o.mode || 'solo';
     this.role = o.role || 'survivor';
     this.tracks = TRACK_PRESETS[o.tracks] || TRACK_PRESETS.normal;
@@ -1246,6 +1470,7 @@ class Game {
     // You left the surau before the call. Everything you gather comes back here.
     this.surau = [1.5, 1.5];
     this.timeLeft = this.nightSeconds;
+    this.elapsed = 0;
     this.panicking = false;
 
     let far = this.cells[0], bestD = -1;
@@ -1325,10 +1550,15 @@ class Game {
     this.surgeCd = 0;
     this.trails = new Map();    // playerId -> footprint ring buffer (Tung only)
     this.spectating = null;
+    this.sprays = [];
+    this.sprayCooldown = 0;
+    this.emoteTime = 0;
+    this.performanceKind = '';
     this.stepT = 0;
     this.clock = 0;             // seconds since the match began, for footprints
     this.runStats = { distance: 0, sprinted: false, hides: 0 };
     this.rewarded = false;
+    this.endOverlayShown=false;
 
     if (this.mode === 'mp') this.placeForRole(o.spawnIdx | 0);
   }
@@ -1410,6 +1640,46 @@ class Game {
     }
   }
 
+  triggerPerformance(kind='emote') {
+    if (this.state!=='play'||!this.alive||this.hidden||this.emoteTime>0) return false;
+    const equipped=cosmeticById(profile.equipped.emote)?.emote;
+    this.performanceKind=kind==='taunt'?'taunt':(equipped||'drumline');
+    const durations={taunt:1.35,drumline:2.3,moonwalk:2.6,noodle:2.8,propeller:2.15,sovereign:3};
+    this.emoteTime=durations[this.performanceKind]||2.5;
+    if(kind==='taunt'){audio.playSimple('tung',.8);profile.stats.taunts++;}
+    else{audio.playSimple('boom',.38);profile.stats.emotes++;}
+    unlockAchievements({});saveProfile();return true;
+  }
+  updatePerformance(dt) {
+    if(this.emoteTime<=0)return;
+    this.emoteTime=Math.max(0,this.emoteTime-dt);
+    const phase=this.emoteTime*(this.performanceKind==='taunt'?13:9),forward=(amount)=>this.tryMove(this.px+Math.cos(this.angle)*amount*dt,this.py+Math.sin(this.angle)*amount*dt),side=(amount)=>this.tryMove(this.px-Math.sin(this.angle)*amount*dt,this.py+Math.cos(this.angle)*amount*dt);
+    if(this.performanceKind==='moonwalk'){forward(-.72);this.angle+=Math.sin(phase)*dt*.45;}
+    else if(this.performanceKind==='noodle'){side(Math.sin(phase*1.8)*1.15);forward(Math.cos(phase)*.22);this.angle+=Math.sin(phase*.7)*dt*.7;}
+    else if(this.performanceKind==='propeller'){this.angle+=dt*5.4;forward(.42);}
+    else if(this.performanceKind==='sovereign'){forward(.34);side(Math.sin(phase)*.68);this.angle+=Math.sin(phase*.5)*dt*.4;}
+    else if(this.performanceKind==='taunt'){side(Math.cos(phase)*.32);this.angle+=Math.sin(phase)*dt*1.5;}
+    else{side(Math.sin(phase*1.7)*.55);this.angle+=Math.sin(phase)*dt*3;}
+    if(this.emoteTime===0)this.performanceKind='';
+  }
+  wallAhead(maxDistance=3.2) {
+    const dx=Math.cos(this.angle),dy=Math.sin(this.angle);
+    for(let d=.15;d<=maxDistance;d+=.05){const x=this.px+dx*d,y=this.py+dy*d;if(this.isWall(x,y))return{x:this.px+dx*(d-.08),y:this.py+dy*(d-.08),a:this.angle};}
+    return null;
+  }
+  placeSpray(id=profile.equipped.spray) {
+    if(!id||this.state!=='play'||!this.alive||this.hidden||this.sprayCooldown>0)return false;
+    const hit=this.wallAhead();if(!hit)return false;
+    const mark={...hit,id:String(id).slice(0,40),by:this.net?.you||0};this.receiveSpray(mark);this.sprayCooldown=1.2;
+    if(this.mode==='mp'&&this.net)this.net.send({t:'spray',...mark});
+    audio.playSimple('spray',.72);profile.stats.sprays++;unlockAchievements({});saveProfile();return true;
+  }
+  receiveSpray(mark) {
+    if(!mark||!Number.isFinite(mark.x)||!Number.isFinite(mark.y)||!cosmeticById(mark.id)?.spray)return;
+    this.sprays.push({x:mark.x,y:mark.y,a:Number(mark.a)||0,id:mark.id,by:Number(mark.by)||0});
+    if(this.sprays.length>64)this.sprays.shift();
+  }
+
   // Slip through to the paired alcove. In multiplayer the relay decides where
   // you come out -- it is the only party that knows which alcove you are in and
   // it never tells anyone else -- so this only asks. Solo resolves it locally
@@ -1474,6 +1744,8 @@ class Game {
     // Dawn does not wait while you cower. The clock runs before anything else
     // so hiding always costs you night.
     this.timeLeft -= dt;
+    this.elapsed += dt;
+    this.sprayCooldown=Math.max(0,this.sprayCooldown-dt);
     this.panicking = this.composure < PANIC_THRESHOLD;
 
     this.updateNearestHide();
@@ -1493,6 +1765,7 @@ class Game {
     }
 
     const speed = this.applyMovement(dt, keys, WALK_SPEED, SPRINT_SPEED);
+    this.updatePerformance(dt);
     if (this.torchOn() && !this.infiniteTorch) this.battery = Math.max(0.0, this.battery - this.batteryDrain * dt);
 
     for (let i = this.items.length - 1; i >= 0; i--) {
@@ -1561,6 +1834,8 @@ class Game {
   // -------------------------------------------------------------------------
   updateMp(dt, keys, mdx) {
     this.clock += dt;
+    this.elapsed=this.clock;
+    this.sprayCooldown=Math.max(0,this.sprayCooldown-dt);
     this.angle += mdx * MOUSE_SENS;
     if (keys.left) this.angle -= TURN_SPEED * dt;
     if (keys.right) this.angle += TURN_SPEED * dt;
@@ -1582,6 +1857,7 @@ class Game {
     }
 
     this.applyMovement(dt, keys, WALK_SPEED, SPRINT_SPEED);
+    this.updatePerformance(dt);
     if (this.torchOn() && !this.infiniteTorch) this.battery = Math.max(0.0, this.battery - this.batteryDrain * dt);
     this.mpThreat(dt);
   }
@@ -1599,6 +1875,7 @@ class Game {
     // and let the surge be the only thing that changes its pace.
     this.stamina = 1.0;
     this.applyMovement(dt, { ...keys, shift: false }, speed, speed);
+    this.updatePerformance(dt);
     this.composure = 1.0;
     this.panicking = false;
     this.hidden = false;
@@ -1678,15 +1955,20 @@ class Game {
     }
   }
 
-  // Being caught is not the end of the night, only of yours. You ride along
-  // with the result, but not with another player's camera: a live spectator
-  // feed would become a sanctioned wallhack over voice chat.
   updateSpectate(dt, keys) {
     this.shake = 0; this.redAlpha = 0; this.hidden = false;
-    void dt; void keys;
+    const targets=[...this.net.players.values()].filter(p=>p.id!==this.net.you&&p.alive&&p.pos);
+    if(!targets.length){this.spectating=null;return;}
+    let target=targets.find(p=>p.id===this.spectating);
+    if(!target){target=targets[0];this.spectating=target.id;}
+    this.px=target.pos[0];this.py=target.pos[1];this.angle=target.a||0;this.spectateRole=target.role;
+    void dt;void keys;
   }
   cycleSpectate(dir) {
-    void dir;
+    if(this.mode!=='mp'||this.alive||!this.net)return;
+    const targets=[...this.net.players.values()].filter(p=>p.id!==this.net.you&&p.alive&&p.pos);
+    if(!targets.length){this.spectating=null;return;}
+    let index=targets.findIndex(p=>p.id===this.spectating);index=(index+(dir<0?-1:1)+targets.length)%targets.length;this.spectating=targets[index].id;
   }
 
   remoteList() { return this.net ? this.net.remoteList() : []; }
@@ -1959,7 +2241,7 @@ class Game {
   // warm cone of torchlight and very little else. Keeping this in one place
   // means the two roles cannot drift into looking like the same game.
   vision() {
-    if (this.mode === 'mp' && this.role === 'tung') {
+    if (this.mode === 'mp' && (this.role === 'tung' || (!this.alive && this.spectateRole === 'tung'))) {
       return { dark: TUNG_DARK_DIST, light: 0.62, wall: [104, 104, 128] };
     }
     return { dark: DARK_DIST, light: null, wall: [150, 130, 110] };
@@ -1978,6 +2260,7 @@ class Game {
     const lightFinal = vis.light !== null ? vis.light : (this.hidden
       ? 0.13
       : (this.torchOn() ? (this.infiniteTorch ? 1 : 0.25 + 0.75 * this.battery) : 0.10) * this.flicker);
+    const cameraHeight=(this.role==='tung'||(!this.alive&&this.spectateRole==='tung')) ? 0.62 : 0.5;
 
     for (let x = 0; x < RENDER_W; x++) {
       const camx = 2 * x / RENDER_W - 1;
@@ -2001,8 +2284,8 @@ class Game {
       perp = Math.max(perp, 1e-4);
       zbuf[x] = perp;
       const lineH = Math.floor(RENDER_H / perp);
-      const y0 = Math.max(0, Math.floor(-lineH / 2 + RENDER_H / 2));
-      const y1 = Math.min(RENDER_H, Math.floor(lineH / 2 + RENDER_H / 2));
+      const y0 = Math.max(0, Math.floor(RENDER_H/2-lineH*(1-cameraHeight)));
+      const y1 = Math.min(RENDER_H, Math.floor(RENDER_H/2+lineH*cameraHeight));
 
       const cone = 1.0 - Math.pow(Math.abs(x - RENDER_W / 2) / (RENDER_W / 2), 2) * 0.55;
       let bright = Math.max(0, 1.0 - perp / vis.dark) * lightFinal * cone;
@@ -2046,7 +2329,8 @@ class Game {
         if (sx < -8 || sx > RENDER_W + 8) continue;
         const col = Math.max(0, Math.min(RENDER_W - 1, Math.round(sx)));
         if (ty >= zbuf[col]) continue;          // behind a wall: not your problem
-        const sy = RENDER_H / 2 + RENDER_H / (2 * ty);
+        const cameraHeight=(this.role==='tung'||(!this.alive&&this.spectateRole==='tung')) ? 0.62 : 0.5;
+        const sy = RENDER_H / 2 + RENDER_H * cameraHeight / ty;
         if (sy >= RENDER_H) continue;
         const w = Math.max(1.2, 0.26 * RENDER_H / ty);
         const fade = 1 - age / p.life;
@@ -2071,6 +2355,7 @@ class Game {
     if (this.mode !== 'mp') {
       const out = this.items.map(it => ({ x: it[0], y: it[1], kind: 'item' }));
       for (const h of this.hides) out.push({ x: h[0], y: h[1], kind: 'hide' });
+      for(const mark of this.sprays)out.push({x:mark.x,y:mark.y,kind:'spray',mark});
       out.push({ x: this.surau[0], y: this.surau[1], kind: 'surau' });
       out.push({ x: this.cx, y: this.cy, kind: 'creature' });
       return out;
@@ -2085,7 +2370,9 @@ class Game {
       out.push({ x: this.surau[0], y: this.surau[1], kind: 'surau' });
     }
     for (const h of this.hides) out.push({ x: h[0], y: h[1], kind: 'hide' });
+    for(const mark of this.sprays)out.push({x:mark.x,y:mark.y,kind:'spray',mark});
     for (const r of this.remoteList()) {
+      if(!this.alive&&r.id===this.spectating)continue;
       if (!r.pos || r.hidden || !r.alive) continue;
       out.push({ x: r.pos[0], y: r.pos[1], kind: r.role === 'tung' ? 'creature' : 'player', r });
     }
@@ -2094,6 +2381,7 @@ class Game {
 
   renderSprites(rctx, zbuf, dirx, diry, planex, planey, light) {
     const vis = this.vision();
+    const cameraHeight=(this.role==='tung'||(!this.alive&&this.spectateRole==='tung')) ? 0.62 : 0.5;
     let sprites = this.spriteList();
     sprites.sort((a, b) => {
       const da = (a.x - this.px) ** 2 + (a.y - this.py) ** 2;
@@ -2107,7 +2395,9 @@ class Game {
       const tx = inv * (diry * rx - dirx * ry);
       const ty = inv * (-planey * rx + planex * ry);
       if (ty <= 0.05) continue;
-      const screenX = Math.floor((RENDER_W / 2) * (1 + tx / ty));
+      let screenX = Math.floor((RENDER_W / 2) * (1 + tx / ty));
+      if(s.r?.flags&64)screenX+=Math.round(Math.sin(this.clock*11)*Math.min(10,18/ty));
+      if(s.r?.flags&128)screenX+=Math.round(Math.sin(this.clock*18)*Math.min(6,12/ty));
       let src;
       if (s.kind === 'creature') {
         // If you cannot see his eyes, you are outside his cone. The sprite is
@@ -2122,17 +2412,19 @@ class Game {
       } else if (s.kind === 'player') {
         const away = Math.abs(angDiff(s.r.a || 0, Math.atan2(this.py - s.y, this.px - s.x))) > VIEW_CONE;
         src = getSurvivorSprite(s.r, s.r.carrying >= 0, away);
-      } else if (s.kind === 'hide') src = SPR.hide;
+      } else if(s.kind==='spray')src=getSpraySprite(s.mark.id);
+      else if (s.kind === 'hide') src = SPR.hide;
       else if (s.kind === 'surau') src = SPR.surau;
       else src = SPR.item;
 
       let sh = Math.abs(Math.floor(RENDER_H / ty));
       if (s.kind === 'creature') sh = Math.floor(sh * 1.15);
       if (s.kind === 'player') sh = Math.floor(sh * 0.94);
+      if(s.kind==='spray')sh=Math.floor(sh*.62);
       if (sh < 2 || sh > RENDER_H * 6) continue;
 
       // alcoves and the surau stay faintly lit so they can be found in the dark
-      let emissive = s.kind === 'hide' ? 0.45 : (s.kind === 'surau' ? 0.7 : 0.0);
+      let emissive = s.kind === 'hide' ? 0.45 : (s.kind === 'surau' ? 0.7 : (s.kind === 'spray' ? 0.38 : 0.0));
       // A carried offering is a lamp in someone's fist. It is the cost of
       // being the one who fetches: the Tung can see you coming.
       if (s.kind === 'player' && s.r.carrying >= 0) emissive = 0.75;
@@ -2143,7 +2435,8 @@ class Game {
       const buf = getScaledSprite(src, 0, sh, b);
       const bw = buf.width, bh = buf.height;
 
-      const drawY = Math.floor(RENDER_H / 2 - bh / 2);
+      let drawY = Math.floor(RENDER_H/2+RENDER_H*cameraHeight/ty-bh);
+      if(s.r?.flags&64)drawY-=Math.round(Math.abs(Math.sin(this.clock*9))*Math.min(7,12/ty));
       const startX = screenX - Math.floor(bw / 2);
       const colFrom = Math.max(0, startX), colTo = Math.min(RENDER_W, startX + bw);
       for (let col = colFrom; col < colTo; col++) {
@@ -2187,6 +2480,7 @@ function bar(ctx, x, y, w, h, frac, color, label) {
   ctx.fillStyle = color; ctx.fillRect(x, y, w * Math.max(0, Math.min(1, frac)), h);
   ctx.strokeStyle = INK_DIM; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 }
+function drawSigilCircle(ctx,symbol,x,y,color){if(!symbol)return 0;ctx.save();ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(x,y,7,0,Math.PI*2);ctx.stroke();drawText(ctx,symbol.slice(0,3),x,y,color,{center:true,font:'bold 7px monospace'});ctx.restore();return 26;}
 // One arrow, two jobs kept apart: pointing at cover only matters while he is
 // interested in you, pointing home only matters once every offering is gathered.
 function drawCompass(ctx, game, wx, wy, label, color, y) {
@@ -2224,6 +2518,7 @@ function drawHud(ctx, game) {
   drawText(ctx, `SUBUH IN ${fmtClock(game.timeLeft)}`, WIN_W / 2, 22,
            urgent ? 'rgb(220,80,60)' : INK_DIM,
            { center: true, font: urgent ? 'bold 16px monospace' : '14px monospace' });
+  if(game.speedrun)drawText(ctx,`RUN ${fmtMilliseconds(game.elapsed)}`,WIN_W/2,43,AMBER,{center:true,font:'bold 13px monospace'});
 
   if (extracting) {
     drawText(ctx, `ALL ${game.nItems} GATHERED — GET BACK TO THE SURAU`, WIN_W / 2, 46, AMBER,
@@ -2232,9 +2527,9 @@ function drawHud(ctx, game) {
 
   if (game.hidden) {
     drawText(ctx, 'HIDDEN', WIN_W / 2, WIN_H - 90, COOL, { center: true, font: 'bold 24px monospace' });
-    drawText(ctx, 'move or press E to leave', WIN_W / 2, WIN_H - 60, INK_DIM, { center: true, font: '14px monospace' });
+    drawText(ctx, 'THE ALCOVE HOLDS YOU', WIN_W / 2, WIN_H - 60, INK_DIM, { center: true, font: '14px monospace' });
   } else if (game.nearHide) {
-    drawText(ctx, '[E] HIDE', WIN_W / 2, WIN_H - 70, COOL, { center: true, font: 'bold 24px monospace' });
+    drawText(ctx, 'ALCOVE WITHIN REACH', WIN_W / 2, WIN_H - 70, COOL, { center: true, font: 'bold 18px monospace' });
   } else if (game.cstate !== 'wander') {
     drawCompass(ctx, game, game.nearestHide[0], game.nearestHide[1], 'SHELTER', COOL, WIN_H - 70);
   }
@@ -2258,6 +2553,7 @@ function drawHudMp(ctx, game) {
   drawText(ctx, `SUBUH IN ${fmtClock(game.timeLeft)}`, WIN_W / 2, 22,
            urgent ? 'rgb(220,80,60)' : INK_DIM,
            { center: true, font: urgent ? 'bold 16px monospace' : '14px monospace' });
+  if(game.speedrun)drawText(ctx,`RUN ${fmtMilliseconds(Math.max(0,game.opts.night-game.timeLeft))}`,WIN_W/2,43,AMBER,{center:true,font:'bold 13px monospace'});
 
   const home = game.itemState.filter(s => s && s[0] === 2).length;
   drawText(ctx, 'OFFERINGS HOME', 24, 18, INK_DIM, { font: '14px monospace' });
@@ -2272,11 +2568,12 @@ function drawHudMp(ctx, game) {
       const dead = !r.alive;
       ctx.fillStyle = dead ? 'rgb(70,70,76)' : r.color;
       ctx.fillRect(24, y + 4, 7, 7);
+      const sigil=sigilSymbol(r.sigil),badge=drawSigilCircle(ctx,sigil,43,y+7,dead?'rgb(90,90,96)':r.color);
       const label = playerName(r) + (r.id === net.you ? ' (you)' : '');
-      drawText(ctx, dead ? label + ' — caught' : label, 38, y, dead ? 'rgb(90,90,96)' : INK,
+      drawText(ctx, dead ? label + ' — caught' : label, 38+badge, y, dead ? 'rgb(90,90,96)' : INK,
                { font: '13px monospace' });
       if (!dead && r.carrying >= 0) {
-        drawText(ctx, '\u25c6', 38 + label.length * 7.9 + 8, y, AMBER, { font: '13px monospace' });
+      drawText(ctx, '\u25c6', 38+badge + label.length * 7.9 + 8, y, AMBER, { font: '13px monospace' });
       }
       y += 18;
     }
@@ -2286,7 +2583,7 @@ function drawHudMp(ctx, game) {
     const bw = 150, x = WIN_W - bw - 24;
     const cd = game.surge > 0 ? 1 : 1 - game.surgeCd / TUNG_SURGE_COOLDOWN;
     bar(ctx, x, 30, bw, 12, cd, game.surge > 0 ? 'rgb(220,90,60)' : (cd >= 1 ? AMBER : 'rgb(90,90,100)'),
-        game.surge > 0 ? 'SURGE' : (cd >= 1 ? 'SURGE  [SHIFT]' : 'SURGE'));
+        game.surge > 0 ? 'SURGE' : (cd >= 1 ? 'SURGE READY' : 'SURGE'));
     const alive = net ? net.allList().filter(r => r.role !== 'tung' && r.alive).length : 0;
     drawText(ctx, 'STILL BREATHING', x, 62, INK_DIM, { font: '14px monospace' });
     drawText(ctx, String(alive), x, 78, 'rgb(220,90,60)', { font: 'bold 24px monospace' });
@@ -2299,7 +2596,7 @@ function drawHudMp(ctx, game) {
 
   if (!game.alive) {
     drawText(ctx, 'CAUGHT', WIN_W / 2, WIN_H - 96, 'rgb(200,60,50)', { center: true, font: 'bold 26px monospace' });
-    drawText(ctx, 'the street moves on without you', WIN_W / 2, WIN_H - 62, INK_DIM,
+    const watched=net?.get(game.spectating);drawText(ctx,watched?`SPECTATING ${playerName(watched).toUpperCase()} · ${watched.role.toUpperCase()}`:'the street moves on without you', WIN_W / 2, WIN_H - 62, INK_DIM,
              { center: true, font: '14px monospace' });
     return;
   }
@@ -2324,11 +2621,11 @@ function drawHudMp(ctx, game) {
              { center: true, font: 'bold 24px monospace' });
     let hint;
     if (game.swapTransit > 0) hint = 'the wall is thin here';
-    else if (game.swapCooldown > 0) hint = `[Q] blocked for ${Math.ceil(game.swapCooldown)}s   ·   [E] step out`;
-    else hint = '[Q] slip through to the other alcove   ·   [E] step out';
+    else if (game.swapCooldown > 0) hint = `passage blocked for ${Math.ceil(game.swapCooldown)}s`;
+    else hint = 'the paired passage is ready';
     drawText(ctx, hint, WIN_W / 2, WIN_H - 62, INK_DIM, { center: true, font: '14px monospace' });
   } else if (game.nearHide) {
-    drawText(ctx, '[E] HIDE', WIN_W / 2, WIN_H - 70, COOL, { center: true, font: 'bold 24px monospace' });
+    drawText(ctx, 'ALCOVE WITHIN REACH', WIN_W / 2, WIN_H - 70, COOL, { center: true, font: 'bold 18px monospace' });
   }
 
   // teammate name tags, drawn last so they sit over the world
@@ -2341,7 +2638,8 @@ function drawHudMp(ctx, game) {
       const p = game.projectToScreen(r.pos[0], r.pos[1]);
       if (!p) continue;
       ctx.globalAlpha = Math.max(0.25, 1 - d / 11);
-      drawText(ctx, playerName(r), p.sx, Math.max(14, p.top - 16), r.color,
+      const badge=drawSigilCircle(ctx,sigilSymbol(r.sigil),p.sx-playerName(r).length*3.8-16,Math.max(14,p.top-16),r.color);
+      drawText(ctx, playerName(r), p.sx+(badge?8:0), Math.max(14, p.top - 16), r.color,
                { center: true, font: 'bold 12px monospace' });
       ctx.globalAlpha = 1;
     }
@@ -2366,16 +2664,14 @@ function screenIntro(ctx) {
     `before the call to Subuh. You have ${Math.round(NIGHT_SECONDS / 60)} minutes of dark.`,
     '',
     'It only sees what it is facing — get behind it and it is blind.',
-    'It always hears panic. Duck into an alcove with E to breathe.'
+    'It always hears panic. Duck into an alcove to breathe.'
   ];
   let y = 162;
   for (const ln of lines) {
     drawText(ctx, ln, cx, y, ln ? INK : INK_DIM, { center: true, font: '16px monospace' });
     y += 26;
   }
-  drawText(ctx, 'press any key to wake', cx, 418, INK_DIM, { center: true, font: 'bold 20px monospace' });
-  drawText(ctx, 'WASD move   SHIFT sprint   F torch   E hide   ESC pause',
-           cx, 458, INK_DIM, { center: true, font: '14px monospace' });
+  drawText(ctx, 'The controls are waiting in HOW TO PLAY.', cx, 438, INK_DIM, { center: true, font: 'bold 18px monospace' });
   drawText(ctx, 'originally by tim', cx, 500, INK_DIM, { center: true, font: '13px monospace' });
 }
 // The frozen frame is snapshotted once on pause rather than re-rendered, so the
@@ -2394,21 +2690,7 @@ function screenPaused(ctx, game, snapshot) {
   drawText(ctx, `SUBUH IN ${fmtClock(game.timeLeft)}`, cx - 110, 236, INK, { center: true, font: '15px monospace' });
   drawText(ctx, `OFFERINGS ${game.collected} / ${game.nItems}`, cx + 110, 236, INK, { center: true, font: '15px monospace' });
 
-  const rows = [
-    ['WASD', 'move'],
-    ['SHIFT', 'sprint'],
-    ['F', 'torch'],
-    ['E', 'hide in an alcove'],
-    ['R', 'abandon the night, start over'],
-  ];
-  let y = 292;
-  for (const [k, what] of rows) {
-    drawText(ctx, k, cx - 160, y, AMBER, { font: '14px monospace' });
-    drawText(ctx, what, cx - 90, y, INK_DIM, { font: '14px monospace' });
-    y += 24;
-  }
-
-  drawText(ctx, 'click to resume', cx, WIN_H - 74, INK, { center: true, font: 'bold 20px monospace' });
+  drawText(ctx, 'The controls are grouped in HOW TO PLAY.', cx, 310, INK_DIM, { center: true, font: '16px monospace' });
   drawText(ctx, 'originally by tim', cx, WIN_H - 40, INK_DIM, { center: true, font: '13px monospace' });
 }
 function screenDawn(ctx, game) {
@@ -2418,7 +2700,7 @@ function screenDawn(ctx, game) {
   drawText(ctx, 'The call to Subuh went up over the rooftops without you.', cx, 210, INK, { center: true, font: '16px monospace' });
   drawText(ctx, `You were still out there with ${game.collected} of ${game.nItems} offerings.`, cx, 244, INK, { center: true, font: '16px monospace' });
   drawText(ctx, 'The drumming has stopped. That is somehow worse.', cx, 286, INK_DIM, { center: true, font: '16px monospace' });
-  drawText(ctx, 'press R to try again', cx, WIN_H - 70, INK_DIM, { center: true, font: 'bold 20px monospace' });
+  drawText(ctx, 'Choose your next night below.', cx, WIN_H - 70, INK_DIM, { center: true, font: 'bold 18px monospace' });
 }
 function screenCaught(ctx, t) {
   // Two flashes per second, under the WCAG seizure threshold of three.
@@ -2432,7 +2714,7 @@ function screenCaught(ctx, t) {
   ctx.fillRect(0, 0, WIN_W, WIN_H);
   drawText(ctx, 'CAUGHT', WIN_W / 2, 90, 'rgb(200,60,50)', { center: true, font: 'bold 40px monospace' });
   drawText(ctx, 'You slept through the call.', WIN_W / 2, 150, INK, { center: true, font: '16px monospace' });
-  drawText(ctx, 'press R to restart', WIN_W / 2, WIN_H - 60, INK_DIM, { center: true, font: 'bold 20px monospace' });
+  drawText(ctx, 'Choose your next night below.', WIN_W / 2, WIN_H - 60, INK_DIM, { center: true, font: 'bold 18px monospace' });
 }
 function screenWin(ctx, game) {
   ctx.fillStyle = 'rgb(14,11,6)'; ctx.fillRect(0, 0, WIN_W, WIN_H);
@@ -2441,7 +2723,7 @@ function screenWin(ctx, game) {
   drawText(ctx, 'You set the last offering down inside the surau door.', cx, 220, INK, { center: true, font: '16px monospace' });
   drawText(ctx, 'Dawn breaks. The drumming fades down the empty street.', cx, 254, INK, { center: true, font: '16px monospace' });
   drawText(ctx, `home with ${fmtClock(game.timeLeft)} of dark to spare`, cx, 302, AMBER, { center: true, font: 'bold 18px monospace' });
-  drawText(ctx, 'press R to play again', cx, WIN_H - 70, INK_DIM, { center: true, font: 'bold 20px monospace' });
+  drawText(ctx, 'Choose your next night below.', cx, WIN_H - 70, INK_DIM, { center: true, font: 'bold 18px monospace' });
 }
 
 // ---------------------------------------------------------------------------
@@ -2495,34 +2777,105 @@ function store(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ }
 }
 
+const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
+const RARITY_META = {
+  common: { label: 'COMMON', color: '#a7a7ad' }, uncommon: { label: 'UNCOMMON', color: '#78b86d' },
+  rare: { label: 'RARE', color: '#6f9fe7' }, epic: { label: 'EPIC', color: '#b484dc' },
+  legendary: { label: 'LEGENDARY', color: '#e0a040' }, mythic: { label: 'MYTHIC', color: '#f05b4c' },
+};
+function cosmetic(id, slot, name, price, rarity, extra = {}) { return { id, slot, name, price, rarity, ...extra }; }
+
+const STREET_THEMES = [
+  ['monsoon-alley','Monsoon Alley','#10202a','#315669','rain'], ['neon-bazaar','Neon Bazaar','#1b0c22','#8e3e67','signs'],
+  ['ember-arcade','Ember Arcade','#24100a','#913b1e','embers'], ['moonwash-lane','Moonwash Lane','#0d1423','#596b9b','moon'],
+  ['lantern-row','Paper Lantern Row','#24160b','#b16a25','lanterns'], ['rainwire','Rainwire District','#071b20','#2c7f84','wires'],
+  ['jade-shops','Jade Shophouses','#0c2119','#39775a','windows'], ['chalk-court','Chalk Court','#222126','#77747e','chalk'],
+  ['red-canopy','Red Canopy Walk','#240b0d','#8d2630','canopy'], ['indigo-market','Indigo Night Market','#10102a','#47449a','stalls'],
+  ['gold-drain','Golden Drain Road','#211a0b','#99752d','grates'], ['moth-street','Mothlight Street','#201c10','#787143','moths'],
+  ['storm-shutters','Storm Shutters','#111820','#465b6a','shutters'], ['festival-end','After-Festival Lane','#21101d','#8d4d78','confetti'],
+  ['green-fluoro','Green Fluoro Walk','#071b0d','#3a8c4c','tubes'], ['brick-prayer','Brick Prayer Road','#24120e','#85483a','bricks'],
+  ['violet-puddles','Violet Puddles','#170f22','#624786','puddles'], ['market-close','Market at Closing','#21160d','#7d5a31','awnings'],
+  ['blue-hour','Blue Hour Boulevard','#0b1523','#315c89','horizon'], ['quiet-cables','Quiet Cable Street','#16151a','#5e5968','wires'],
+  ['saffron-gates','Saffron Gate Lane','#22170a','#a06920','gates'], ['moss-concrete','Moss Concrete Row','#111b14','#48664d','moss'],
+  ['rose-static','Rose Static Avenue','#210f18','#88405d','static'], ['silver-minaret','Silver Minaret View','#11151a','#687886','spires'],
+  ['blackout','Blackout Block','#050507','#302e38','windows'], ['dawn-flood','Dawn Floodway','#201513','#ae6242','water'],
+  ['last-procession','Last Procession','#1c1309','#bf8730','banners'], ['sovereign-street','Sovereign Street','#190c08','#d04a2f','crowns'],
+].map(([id,name,a,b,pattern]) => ({ id:`street-${id}`, name, a, b, pattern }));
+
 const SHOP_ITEMS = [
-  ['shirt-eclipse', 'shirt', 'Eclipse Shirt', 900], ['shirt-sunrise', 'shirt', 'Sunrise Shirt', 850],
-  ['pattern-static', 'shirtPattern', 'Midnight Static', 1100], ['pattern-batik', 'shirtPattern', 'Golden Batik', 1200],
-  ['pants-ember', 'pants', 'Ember Trousers', 800], ['pants-check', 'pantsPattern', 'Night Check', 1000],
-  ['skin-moon', 'skin', 'Moonlit Skin', 1400], ['skin-carved', 'skin', 'Carved Timber', 1500],
-  ['back-drum', 'back', 'Ceremonial Drum', 1600], ['back-moon', 'back', 'Caged Moon', 1700],
-  ['shoes-spark', 'shoes', 'Sparking Steps', 950], ['hat-crown', 'hat', 'Dawn Crown', 1500],
-  ['hat-lantern', 'hat', 'Lantern Helm', 1450], ['emote-drumline', 'emote', 'Victory Drumline', 1200],
-  ['spray-eye', 'spray', 'Watching Eye Spray', 800], ['spray-surau', 'spray', 'Surau Seal Spray', 850],
-  ['aura-dawn', 'aura', 'Dawn Aura', 1800], ['trail-ash', 'trail', 'Ash Footfall', 1350],
-  ['tung-tralalero', 'tung', 'Tralalero Tung', 2200], ['tung-bombardiro', 'tung', 'Bombardiro Tung', 2400],
-].map(([id, slot, name, price]) => ({ id, slot, name, price }));
-const DEFAULT_COSMETIC = { id: 'default-shirt', slot: 'shirt', name: 'Street Shirt', price: 0 };
-const SHOP_BUNDLES = [
-  { id: 'bundle-eclipse', name: 'Total Eclipse Set', price: 3600, includes: ['shirt-eclipse', 'pattern-static', 'pants-ember', 'back-moon', 'aura-dawn'] },
-  { id: 'bundle-drum', name: 'Last Drum Set', price: 4100, includes: ['skin-carved', 'back-drum', 'hat-crown', 'emote-drumline', 'tung-bombardiro'] },
+  cosmetic('shirt-eclipse','shirt','Eclipse Shirt',900,'uncommon',{primary:'#5d6688',secondary:'#25283a'}),
+  cosmetic('shirt-sunrise','shirt','Sunrise Shirt',850,'uncommon',{primary:'#d07848',secondary:'#59291d'}),
+  cosmetic('shirt-confetti','shirt','Midnight Confetti Shirt',1750,'rare',{primary:'#25283e',secondary:'#e2b447',pattern:'confetti'}),
+  cosmetic('shirt-volcano','shirt','Volcano Ruffle Shirt',2900,'epic',{primary:'#7d241c',secondary:'#f18c38',pattern:'ruffle'}),
+  cosmetic('shirt-royal-ruffle','shirt','Royal Peacock Ruffles',6800,'legendary',{primary:'#145f63',secondary:'#d7b443',pattern:'peacock'}),
+  cosmetic('shirt-sun-eater','shirt','Sun-Eater Regalia',12000,'mythic',{primary:'#16121d',secondary:'#ff4a32',pattern:'sun-eater'}),
+  cosmetic('pattern-static','shirtPattern','Midnight Static',1100,'rare',{pattern:'static'}),
+  cosmetic('pattern-batik','shirtPattern','Golden Batik',1200,'rare',{pattern:'batik'}),
+  cosmetic('pattern-neon-tiger','shirtPattern','Neon Tiger',2600,'epic',{pattern:'tiger',primary:'#d8e342',secondary:'#222'}),
+  cosmetic('pattern-galaxy','shirtPattern','Street Galaxy',5400,'legendary',{pattern:'galaxy',primary:'#6b5bc7',secondary:'#f2bd4b'}),
+  cosmetic('pattern-fireworks','shirtPattern','Sahur Fireworks',11500,'mythic',{pattern:'fireworks',primary:'#ff523f',secondary:'#ffd45e'}),
+  cosmetic('pants-ember','pants','Ember Trousers',800,'uncommon',{primary:'#703022',secondary:'#311612'}),
+  cosmetic('pants-indigo','pants','Indigo Parade Pants',1450,'rare',{primary:'#373c88',secondary:'#c38bda'}),
+  cosmetic('pants-saffron','pants','Saffron Flare Pants',2100,'epic',{primary:'#c27a28',secondary:'#5b241f'}),
+  cosmetic('pants-peacock','pants','Peacock Bell-Bottoms',6200,'legendary',{primary:'#126469',secondary:'#d5b63e'}),
+  cosmetic('pants-sovereign','pants','Sovereign Mosaic Pants',13500,'mythic',{primary:'#26151d',secondary:'#ff5b3f'}),
+  cosmetic('pants-check','pantsPattern','Night Check',1000,'rare',{pattern:'check'}),
+  cosmetic('pants-cosmic','pantsPattern','Cosmic Check',2400,'epic',{pattern:'cosmic',primary:'#6455bb',secondary:'#e25c8a'}),
+  cosmetic('pants-zebra','pantsPattern','Laser Zebra',4300,'legendary',{pattern:'zebra',primary:'#e8ef58',secondary:'#15151a'}),
+  cosmetic('pants-bloom','pantsPattern','Royal Bloom',10200,'mythic',{pattern:'bloom',primary:'#ff614e',secondary:'#d4ac3f'}),
+  cosmetic('skin-moon','skin','Moonlit Skin',1400,'rare'), cosmetic('skin-carved','skin','Carved Timber',1500,'rare'),
+  cosmetic('back-drum','back','Ceremonial Drum',1600,'rare'), cosmetic('back-moon','back','Caged Moon',1700,'rare'),
+  cosmetic('back-peacock','back','Peacock Sunburst',7200,'legendary'), cosmetic('back-throne','back','Walking Throne',14800,'mythic'),
+  cosmetic('shoes-spark','shoes','Sparking Steps',950,'uncommon'), cosmetic('shoes-moonwalk','shoes','Moonwalk Loafers',2300,'epic'),
+  cosmetic('hat-crown','hat','Dawn Crown',1500,'rare'), cosmetic('hat-lantern','hat','Lantern Helm',1450,'rare'),
+  cosmetic('hat-minaret','hat','Midnight Minaret',5800,'legendary'), cosmetic('hat-sunwheel','hat','Burning Sunwheel',12500,'mythic'),
+  cosmetic('emote-drumline','emote','Victory Drumline',1200,'rare',{emote:'drumline'}),
+  cosmetic('emote-moonwalk','emote','Wrong-Way Moonwalk',1800,'rare',{emote:'moonwalk'}),
+  cosmetic('emote-noodle','emote','Noodle-Leg Panic',2700,'epic',{emote:'noodle'}),
+  cosmetic('emote-propeller','emote','Sahur Propeller',5200,'legendary',{emote:'propeller'}),
+  cosmetic('emote-sovereign','emote','Sovereign Strut',10500,'mythic',{emote:'sovereign'}),
+  cosmetic('spray-eye','spray','THE WALL IS WATCHING',800,'uncommon',{spray:'eye'}),
+  cosmetic('spray-surau','spray','THIS WAY TO SAHUR',850,'uncommon',{spray:'surau'}),
+  cosmetic('spray-nope','spray','NOPE. WRONG ALLEY.',1550,'rare',{spray:'nope'}),
+  cosmetic('spray-shark','spray','SNEAKER SHARK',2300,'epic',{spray:'shark'}),
+  cosmetic('spray-cup','spray','LATTE PANIC',2600,'epic',{spray:'cup'}),
+  cosmetic('spray-crown','spray','I OWN THIS NIGHT',6400,'legendary',{spray:'crown'}),
+  cosmetic('spray-wow','spray','WOW!!!',10000,'mythic',{spray:'wow'}),
+  cosmetic('aura-dawn','aura','Dawn Aura',1800,'rare'), cosmetic('aura-storm','aura','Monsoon Lightning',4600,'legendary'),
+  cosmetic('aura-sovereign','aura','Sovereign Solar Halo',15000,'mythic'),
+  cosmetic('trail-ash','trail','Ash Footfall',1350,'rare'), cosmetic('trail-confetti','trail','Midnight Confetti Trail',3900,'epic'),
+  cosmetic('trail-gold','trail','Liquid Gold Footfall',12500,'mythic'),
+  cosmetic('tung-tralalero','tung','Tralalero Tung',2600,'epic',{character:'tralalero'}),
+  cosmetic('tung-bombardiro','tung','Bombardiro Tung',3200,'epic',{character:'bombardiro'}),
+  cosmetic('tung-lirili','tung','Lirili Larila Tung',5800,'legendary',{character:'lirili'}),
+  cosmetic('tung-ballerina','tung','Ballerina Cappuccina Tung',7600,'legendary',{character:'ballerina'}),
+  cosmetic('tung-cappuccino','tung','Cappuccino Assassino Tung',14000,'mythic',{character:'assassino'}),
+  ...STREET_THEMES.slice(0,8).map((street,index) => cosmetic(street.id,'background',street.name,900 + index * 325,
+    index < 2 ? 'uncommon' : index < 5 ? 'rare' : 'epic',{street})),
 ];
+const DEFAULT_COSMETIC = cosmetic('default-shirt','shirt','Street Shirt',0,'common',{primary:'#c8c0a8',secondary:'#55515a'});
+const SHOP_BUNDLES = [
+  { id: 'bundle-eclipse', name: 'Total Eclipse Set', price: 3600, rarity:'epic', includes: ['shirt-eclipse', 'pattern-static', 'pants-ember', 'back-moon', 'aura-dawn'] },
+  { id: 'bundle-drum', name: 'Last Drum Set', price: 5200, rarity:'legendary', includes: ['skin-carved', 'back-drum', 'hat-crown', 'emote-drumline', 'tung-bombardiro'] },
+  { id: 'bundle-wow', name: 'Everybody Says WOW Set', price: 15000, rarity:'mythic', includes: ['shirt-sun-eater','pants-sovereign','back-throne','hat-sunwheel','spray-wow','aura-sovereign'] },
+];
+let passStreetIndex = 0;
 const PASS_REWARDS = Array.from({ length: 100 }, (_, index) => {
   const level = index + 1;
-  if (level === 100) return { level, id: 'pass-100-sahur-sovereign', slot: 'tung', name: 'Sahur Sovereign', legendary: true };
+  if (level === 100) return cosmetic('pass-100-sahur-sovereign','tung','Sahur Sovereign',0,'mythic',{ level, character:'sovereign', secret:true });
   if (level % 5 === 0) {
     const slots = ['shirt', 'hat', 'spray', 'back', 'emote'];
     const slot = slots[(level / 5 - 1) % slots.length];
-    return { level, id: `pass-${level}-${slot}`, slot, name: `${['Quiet', 'Carved', 'Dusk', 'Drum'][level % 4]} ${slot}` };
+    const names = { shirt:'Procession Shirt',hat:'Call-to-Dawn Headpiece',spray:'Night Mark',back:'Offering Relic',emote:'Street Dance' };
+    return cosmetic(`pass-${level}-${slot}`,slot,`${['Quiet','Carved','Dusk','Drum'][level % 4]} ${names[slot]}`,0,
+      level >= 80 ? 'legendary' : level >= 45 ? 'epic' : level >= 20 ? 'rare' : 'uncommon',{level, pass:true});
   }
-  return level % 3 === 0
-    ? { level, id: `pass-bg-${level}`, slot: 'background', name: `Street ${level} background` }
-    : { level, coins: 20 + (level % 4) * 5, name: `${20 + (level % 4) * 5} T-bucks` };
+  if (level % 3 === 0) {
+    const street = STREET_THEMES[passStreetIndex++ % STREET_THEMES.length];
+    return cosmetic(`pass-bg-${level}`,'background',street.name,0,level >= 72 ? 'legendary' : level >= 36 ? 'epic' : 'rare',{level,street,pass:true});
+  }
+  const coins = 35 + (level % 5) * 10;
+  return { level, coins, name: `${coins} T-bucks`, rarity:level >= 75 ? 'epic' : level >= 30 ? 'rare' : 'common' };
 });
 const ACHIEVEMENTS = [
   ['first-three', 'III', 'Three for the street', 'easy', 'Collect or deliver 3 offerings', (p, c) => p.stats.offerings >= 3],
@@ -2544,15 +2897,25 @@ const ACHIEVEMENTS = [
   ['level-100', '100', 'Sahur legend', 'impossible', 'Reach level 100', (p) => profileLevel(p.xp) >= 100],
   ['hidden-one', '?', 'Breathless', 'difficult', '???', (p, c) => c?.won && c.hides >= 4 && !c.sprinted],
   ['hidden-two', '...', 'The street forgot', 'impossible', '???', (p, c) => c?.role === 'tung' && c.won && c.caught >= 8],
+  ['first-spray', 'TAG', 'Leave a mark', 'easy', 'Put a spray on a wall', (p) => p.stats.sprays >= 1],
+  ['spray-wall', '25', 'Wall curator', 'medium', 'Place 25 sprays', (p) => p.stats.sprays >= 25],
+  ['first-emote', 'V', 'Dance in the dark', 'easy', 'Perform an emote', (p) => p.stats.emotes >= 1],
+  ['taunt-ten', 'B!', 'Asking for it', 'medium', 'Taunt 10 times', (p) => p.stats.taunts >= 10],
+  ['box-five', 'BOX', 'Rattle the crate', 'medium', 'Open 5 lootboxes', (p) => p.stats.lootboxes >= 5],
+  ['mythic-owner', 'M', 'Impossible wardrobe', 'difficult', 'Own a Mythic cosmetic', (p) => SHOP_ITEMS.some(i => i.rarity === 'mythic' && p.owned.includes(i.id))],
+  ['bot-night', 'AI', 'Outrun the machine', 'difficult', 'Win a multiplayer night against a bot Tung', (p, c) => c?.won && c.botMode],
+  ['speed-three', '3M', 'Before the third call', 'impossible', 'Win alone in under 3 minutes', (p, c) => c?.role === 'survivor' && c.won && c.seconds > 0 && c.seconds < 180],
 ].map(([id, symbol, name, rarity, description, test]) => ({ id, symbol, name, rarity, description, test }));
 
 const DEFAULT_PROFILE = {
-  version: 1, coins: 0, xp: 0, unlimited: false, pass: false, passClaimed: 0,
+  version: 2, coins: 0, xp: 0, unlimited: false, pass: false, passClaimed: 0,
   owned: ['default-shirt'], equipped: {}, achievements: [], sigil: '',
-  stats: { games: 0, wins: 0, runnerWins: 0, tungWins: 0, offerings: 0, caught: 0, hides: 0, distance: 0 },
+  stats: { games: 0, wins: 0, runnerWins: 0, tungWins: 0, offerings: 0, caught: 0, hides: 0, distance: 0,
+    sprays:0, emotes:0, taunts:0, lootboxes:0 },
 };
 function normalizeProfile(raw) {
   const p = Object.assign({}, DEFAULT_PROFILE, raw || {});
+  p.version = DEFAULT_PROFILE.version;
   p.coins = Math.max(0, Math.floor(Number(p.coins) || 0));
   p.xp = Math.max(0, Math.floor(Number(p.xp) || 0));
   p.owned = [...new Set(Array.isArray(p.owned) ? p.owned.map(String).slice(0, 500) : DEFAULT_PROFILE.owned)];
@@ -2569,7 +2932,15 @@ function normalizeProfile(raw) {
 // Accounts flagged `unlimited` never spend T-bucks; the balance is cosmetic for them.
 function canAfford(price) { return profile.unlimited || profile.coins >= price; }
 function spendCoins(price) { if (!profile.unlimited) profile.coins -= price; }
-function xpForLevel(level) { return level <= 1 ? 0 : 50 * (level - 1) * (level + 6); }
+function xpStep(level) {
+  const n = Math.max(0, level - 1);
+  return 50 + 18 * n + 2 * n * n;
+}
+function xpForLevel(level) {
+  let total = 0;
+  for (let current = 1; current < Math.max(1, level); current++) total += xpStep(current);
+  return total;
+}
 function profileLevel(xp) {
   let level = 1;
   while (level < 100 && xp >= xpForLevel(level + 1)) level++;
@@ -2580,8 +2951,7 @@ let profileAccount = false;
 let profileCloudReady = false;
 let profileUsername = 'GUEST';
 let profileAdmin = false;
-const ADMIN_NAMES = { andrenijman: 'Dev Andre', mechtical: 'Dev Mechtical', pojodragon365: 'Dev Ethan' };
-const ADMIN_USERS = new Set(Object.keys(ADMIN_NAMES));
+const ADMIN_USERS = new Set(['andrenijman', 'mechtical', 'pojodragon365']);
 let profileSaveTimer = null;
 
 function saveProfile() {
@@ -2627,12 +2997,11 @@ function showEventBanner(message, duration = 3200) {
 }
 function sigilSymbol(id) { return ACHIEVEMENTS.find(item => item.id === id)?.symbol || ''; }
 function playerName(player) {
-  const symbol = sigilSymbol(player?.sigil);
-  return `${symbol ? `[${symbol}] ` : ''}${player?.name || 'guest'}`;
+  return player?.name || 'guest';
 }
 function outfitColor(player) {
-  return ({ 'shirt-eclipse': '#5d6688', 'shirt-sunrise': '#d07848', 'pass-5-shirt': '#7e8b70',
-    'pass-30-shirt': '#866b58', 'pass-55-shirt': '#7b657f', 'pass-80-shirt': '#9b864f' })[player?.look?.shirt] || player.color;
+  const item = allCosmetics().find(candidate => candidate.id === player?.look?.shirt);
+  return item?.primary || player.color;
 }
 function outfitTrailColor(player) {
   return player?.look?.trail === 'trail-ash' ? '#aaa6a0' : player?.color;
@@ -2669,8 +3038,14 @@ function grantMatchRewards(context) {
   return { coins, xp };
 }
 
-function catalogCard(title, description, action, legendary = false) {
-  const card = document.createElement('div'); card.className = `catalog-item${legendary ? ' legendary' : ''}`;
+function catalogCard(title, description, action, item = null) {
+  const rarity = typeof item === 'object' && item ? item.rarity : (item ? 'legendary' : '');
+  const card = document.createElement('div'); card.className = `catalog-item${rarity ? ` rarity-${rarity}` : ''}`;
+  if (rarity) {
+    const label = document.createElement('span'); label.className = 'rarity-label';
+    label.textContent = RARITY_META[rarity]?.label || String(rarity).toUpperCase();
+    card.appendChild(label);
+  }
   const heading = document.createElement('h3'); heading.textContent = title;
   const detail = document.createElement('p'); detail.textContent = description;
   card.append(heading, detail);
@@ -2682,51 +3057,160 @@ function actionButton(label, handler, disabled = false) {
   button.textContent = label; button.disabled = disabled; button.onclick = handler;
   return button;
 }
+function allCosmetics() { return [DEFAULT_COSMETIC, ...SHOP_ITEMS, ...PASS_REWARDS.filter(reward => reward.id)]; }
+function cosmeticById(id) { return allCosmetics().find(item => item.id === id) || null; }
+function streetForLook(look) { return cosmeticById(look?.background)?.street || null; }
+const streetCssCache=new Map();
+function streetCss(street) {
+  if (!street) return 'linear-gradient(90deg,#111118,#18130b)';
+  if(streetCssCache.has(street.id))return streetCssCache.get(street.id);
+  const canvas=document.createElement('canvas');canvas.width=192;canvas.height=44;drawStreetTheme(canvas.getContext('2d'),street,canvas.width,canvas.height);
+  const css=`url("${canvas.toDataURL()}") center / cover no-repeat`;streetCssCache.set(street.id,css);return css;
+}
+function drawStreetTheme(g, street, w, h) {
+  const s = street || { a:'#09090d', b:'#252028', pattern:'windows' };
+  g.fillStyle = s.a; g.fillRect(0,0,w,h);
+  g.fillStyle = s.b;g.strokeStyle=s.b;g.lineWidth=Math.max(1,w/180);g.save();
+  if(s.pattern==='rain')for(let x=-h;x<w+h;x+=15){g.beginPath();g.moveTo(x,0);g.lineTo(x-h*.3,h);g.stroke();}
+  else if(s.pattern==='signs')for(let y=8;y<h;y+=28)for(let x=7+(y%3)*8;x<w;x+=46){g.strokeRect(x,y,28,15);g.fillRect(x+5,y+5,18,3);}
+  else if(s.pattern==='embers')for(let i=0;i<Math.ceil(w*h/330);i++){const x=(i*37)%w,y=h-((i*53)%(h+20));g.fillRect(x,y,2+(i%3),2+(i%2));}
+  else if(s.pattern==='moon'){g.beginPath();g.arc(w*.72,h*.28,Math.min(w,h)*.18,0,Math.PI*2);g.fill();g.globalCompositeOperation='destination-out';g.beginPath();g.arc(w*.78,h*.23,Math.min(w,h)*.16,0,Math.PI*2);g.fill();g.globalCompositeOperation='source-over';for(let i=0;i<10;i++)g.fillRect((i*47)%w,7+(i*31)%(h*.5),2,2);}
+  else if(s.pattern==='lanterns')for(let x=9;x<w;x+=30){g.fillRect(x,0,2,9);g.fillRect(x-5,9,12,17);g.fillRect(x-2,26,6,3);}
+  else if(s.pattern==='wires'){for(let y=10;y<h;y+=24){g.beginPath();g.moveTo(0,y);g.bezierCurveTo(w*.25,y+13,w*.7,y-11,w,y+4);g.stroke();for(let x=18;x<w;x+=52){g.beginPath();g.arc(x,y+(x%9),3,0,Math.PI*2);g.fill();}}}
+  else if(s.pattern==='windows')for(let y=8;y<h;y+=24)for(let x=8;x<w;x+=28){g.fillRect(x,y,13,10);g.fillRect(x+5,y-4,2,18);}
+  else if(s.pattern==='chalk'){g.globalAlpha=.75;for(let i=0;i<8;i++){const x=(i*61)%w,y=8+(i*29)%h;g.beginPath();g.arc(x,y,8+i%4,0,Math.PI*1.6);g.stroke();g.fillRect(x+10,y+3,13,2);}}
+  else if(s.pattern==='canopy'){g.fillRect(0,0,w,20);for(let x=0;x<w;x+=24){g.beginPath();g.arc(x+12,20,12,0,Math.PI);g.fill();}for(let x=10;x<w;x+=54)g.fillRect(x,34,3,h-34);}
+  else if(s.pattern==='stalls'){for(let x=4;x<w;x+=44){g.fillRect(x,18,36,5);g.beginPath();g.moveTo(x,18);g.lineTo(x+8,5);g.lineTo(x+16,18);g.lineTo(x+24,5);g.lineTo(x+36,18);g.fill();g.fillRect(x+4,25,3,h-25);g.fillRect(x+29,25,3,h-25);}}
+  else if(s.pattern==='grates'){g.globalAlpha=.8;for(let y=h*.48;y<h;y+=10)g.fillRect(0,y,w,2);for(let x=0;x<w;x+=14)g.fillRect(x,h*.48,2,h*.52);}
+  else if(s.pattern==='moths')for(let i=0;i<18;i++){const x=(i*43)%w,y=5+(i*31)%h;g.fillRect(x,y+2,2,2);g.fillRect(x-3,y,3,2);g.fillRect(x+2,y,3,2);}
+  else if(s.pattern==='shutters'){for(let y=6;y<h;y+=11){g.fillRect(0,y,w,3);g.fillRect((y*3)%w,y-3,18,2);}}
+  else if(s.pattern==='confetti')for(let i=0;i<30;i++){const x=(i*67)%w,y=(i*41)%h;g.save();g.translate(x,y);g.rotate((i%6)*.45);g.fillRect(0,0,3+(i%5),2);g.restore();}
+  else if(s.pattern==='tubes'){g.lineWidth=5;for(let x=9;x<w;x+=35){g.beginPath();g.moveTo(x,0);g.lineTo(x,h*.42);g.lineTo(x+18,h*.42);g.lineTo(x+18,h);g.stroke();}}
+  else if(s.pattern==='bricks'){for(let y=4;y<h;y+=13){g.fillRect(0,y,w,2);for(let x=((y/13)%2)*19;x<w;x+=38)g.fillRect(x,y-11,2,11);}}
+  else if(s.pattern==='puddles')for(let i=0;i<7;i++){g.beginPath();g.ellipse((i*71)%w,h*.58+(i%3)*14,18+i*4,4+i%3,0,0,Math.PI*2);g.stroke();}
+  else if(s.pattern==='awnings')for(let x=3;x<w;x+=52){g.beginPath();g.moveTo(x,22);g.lineTo(x+8,5);g.lineTo(x+17,22);g.lineTo(x+26,5);g.lineTo(x+35,22);g.lineTo(x+44,5);g.lineTo(x+50,22);g.closePath();g.fill();g.fillRect(x+5,27,2,h-27);g.fillRect(x+44,27,2,h-27);}
+  else if(s.pattern==='horizon'){g.fillRect(0,h*.58,w,3);for(let x=0;x<w;x+=25){const bh=10+(x*7)%28;g.fillRect(x,h*.58-bh,18,bh);}}
+  else if(s.pattern==='gates'){for(let x=5;x<w;x+=38){g.fillRect(x,16,4,h);g.fillRect(x+27,16,4,h);g.beginPath();g.arc(x+15.5,18,13.5,Math.PI,0);g.stroke();}}
+  else if(s.pattern==='moss')for(let i=0;i<18;i++){g.beginPath();g.arc((i*47)%w,(i*23)%h,4+(i%8),0,Math.PI*2);g.fill();}
+  else if(s.pattern==='static')for(let y=2;y<h;y+=6)for(let x=(y*7)%13;x<w;x+=19)g.fillRect(x,y,3+(x%8),2);
+  else if(s.pattern==='spires'){for(let x=2;x<w;x+=35){const sh=18+(x%29);g.beginPath();g.moveTo(x,h*.65);g.lineTo(x+12,h*.65-sh);g.lineTo(x+24,h*.65);g.closePath();g.fill();g.fillRect(x+9,h*.65-sh-8,5,9);}}
+  else if(s.pattern==='water'){for(let y=h*.48;y<h;y+=9){g.beginPath();for(let x=0;x<=w;x+=12)g.lineTo(x,y+((x/12+y/9)%2)*3);g.stroke();}}
+  else if(s.pattern==='banners'){g.fillRect(0,6,w,2);for(let x=5;x<w;x+=22){g.beginPath();g.moveTo(x,8);g.lineTo(x+16,8);g.lineTo(x+8,25);g.closePath();g.fill();}}
+  else if(s.pattern==='crowns')for(let x=4;x<w;x+=35){const y=10+((x/35)%2)*18;g.beginPath();g.moveTo(x,y+18);g.lineTo(x+2,y);g.lineTo(x+10,y+10);g.lineTo(x+17,y-3);g.lineTo(x+25,y+10);g.lineTo(x+32,y);g.lineTo(x+30,y+18);g.closePath();g.fill();}
+  else for(let y=10;y<h;y+=22)for(let x=y%44;x<w;x+=38)g.fillRect(x,y,14,8);
+  g.restore();
+  const fade=g.createLinearGradient(0,0,0,h); fade.addColorStop(0,'rgba(0,0,0,.05)'); fade.addColorStop(1,'rgba(0,0,0,.72)');
+  g.fillStyle=fade; g.fillRect(0,0,w,h);
+}
+function drawPattern(g, pattern, x, y, w, h, primary='#e0a040', secondary='#202027') {
+  g.save(); g.beginPath(); g.rect(x,y,w,h); g.clip();
+  g.fillStyle=secondary; g.fillRect(x,y,w,h); g.fillStyle=primary;
+  if (['static','confetti','fireworks'].includes(pattern)) {
+    for(let yy=y+3;yy<y+h;yy+=7) for(let xx=x+((yy-y)%5);xx<x+w;xx+=9) g.fillRect(xx,yy,(xx+yy)%4+1,2);
+  } else if (['batik','bloom','peacock'].includes(pattern)) {
+    for(let yy=y+5;yy<y+h;yy+=10) for(let xx=x+5;xx<x+w;xx+=11) { g.beginPath(); g.arc(xx,yy,3,0,Math.PI*2); g.fill(); }
+  } else if (['tiger','zebra'].includes(pattern)) {
+    for(let yy=y-4;yy<y+h;yy+=8) { g.beginPath(); g.moveTo(x,yy); g.lineTo(x+w,yy+10); g.lineWidth=3; g.strokeStyle=primary; g.stroke(); }
+  } else if (['galaxy','cosmic'].includes(pattern)) {
+    for(let i=0;i<18;i++) g.fillRect(x+(i*17)%w,y+(i*29)%h,(i%3)+1,(i%3)+1);
+  } else if (pattern==='sun-eater') {
+    g.beginPath();g.arc(x+w/2,y+h/2,Math.min(w,h)*.3,0,Math.PI*2);g.fill();g.fillStyle=secondary;g.beginPath();g.arc(x+w*.6,y+h*.43,Math.min(w,h)*.29,0,Math.PI*2);g.fill();
+  } else {
+    for(let yy=y;yy<y+h;yy+=8) g.fillRect(x,yy,w,2); for(let xx=x;xx<x+w;xx+=8) g.fillRect(xx,y,2,h);
+  }
+  g.restore();
+}
+function drawSprayArt(g, id, x, y, w, h) {
+  const item=cosmeticById(id); const kind=item?.spray || 'eye';
+  g.save(); g.translate(x,y); g.strokeStyle='#171219'; g.lineWidth=Math.max(2,w/24); g.fillStyle=RARITY_META[item?.rarity]?.color || '#e0a040';
+  if(kind==='eye'){ g.beginPath();g.ellipse(w*.5,h*.42,w*.38,h*.2,0,0,Math.PI*2);g.fill();g.fillStyle='#161218';g.beginPath();g.arc(w*.5,h*.42,h*.13,0,Math.PI*2);g.fill(); }
+  else if(kind==='surau'){ g.fillRect(w*.22,h*.22,w*.56,h*.5);g.fillStyle='#171219';g.fillRect(w*.41,h*.42,w*.18,h*.3); }
+  else if(kind==='shark'){ g.beginPath();g.moveTo(w*.12,h*.5);g.lineTo(w*.68,h*.2);g.lineTo(w*.92,h*.5);g.lineTo(w*.68,h*.72);g.closePath();g.fill();g.fillStyle='#171219';g.fillRect(w*.68,h*.39,w*.08,h*.06); }
+  else if(kind==='cup'){ g.fillRect(w*.24,h*.23,w*.45,h*.46);g.strokeRect(w*.67,h*.31,w*.2,h*.23);g.fillStyle='#171219';g.fillRect(w*.28,h*.25,w*.37,h*.08); }
+  else if(kind==='crown'||kind==='wow'){ g.beginPath();g.moveTo(w*.15,h*.62);g.lineTo(w*.18,h*.25);g.lineTo(w*.37,h*.46);g.lineTo(w*.5,h*.18);g.lineTo(w*.64,h*.46);g.lineTo(w*.84,h*.24);g.lineTo(w*.8,h*.62);g.closePath();g.fill(); }
+  else { g.fillRect(w*.15,h*.25,w*.7,h*.4); }
+  const words={eye:'WATCHING',surau:'SAHUR →',nope:'NOPE!',shark:'FRESH',cup:'LATTE!',crown:'MY NIGHT',wow:'WOW!!!'};
+  g.font=`bold ${Math.max(7,Math.floor(w/7))}px monospace`;g.textAlign='center';g.textBaseline='bottom';g.lineWidth=3;g.strokeText(words[kind]||'TUNG',w/2,h*.97);g.fillText(words[kind]||'TUNG',w/2,h*.97);g.restore();
+}
+function drawCosmeticIcon(canvas, item) {
+  const g=canvas.getContext('2d'), w=canvas.width, h=canvas.height; g.clearRect(0,0,w,h); g.fillStyle='#050507';g.fillRect(0,0,w,h);
+  if(!item) return;
+  const c=item.primary || RARITY_META[item.rarity]?.color || '#c8c0a8', d=item.secondary || '#292932';
+  if(item.slot==='background'){ drawStreetTheme(g,item.street,w,h); }
+  else if(item.slot==='spray'){ drawSprayArt(g,item.id,w*.08,h*.08,w*.84,h*.82); }
+  else if(item.slot==='tung'){
+    const src=getTungSprite({look:{tung:item.id}},true,false), scale=Math.min((w-8)/src.width,(h-8)/src.height);
+    g.imageSmoothingEnabled=false;g.drawImage(src,(w-src.width*scale)/2,h-src.height*scale-4,src.width*scale,src.height*scale);
+  } else if(item.slot==='shirt'||item.slot==='shirtPattern'){
+    g.fillStyle=c;g.fillRect(w*.25,h*.22,w*.5,h*.58);g.fillRect(w*.1,h*.28,w*.2,h*.18);g.fillRect(w*.7,h*.28,w*.2,h*.18);
+    if(item.pattern) drawPattern(g,item.pattern,w*.25,h*.22,w*.5,h*.58,c,d);
+    g.fillStyle='#050507';g.fillRect(w*.43,h*.2,w*.14,h*.12);
+  } else if(item.slot==='pants'||item.slot==='pantsPattern'){
+    g.fillStyle=c;g.fillRect(w*.25,h*.18,w*.5,h*.28);g.fillRect(w*.25,h*.42,w*.2,h*.46);g.fillRect(w*.55,h*.42,w*.2,h*.46);
+    if(item.pattern) { drawPattern(g,item.pattern,w*.25,h*.18,w*.5,h*.3,c,d);drawPattern(g,item.pattern,w*.25,h*.42,w*.2,h*.46,c,d);drawPattern(g,item.pattern,w*.55,h*.42,w*.2,h*.46,c,d); }
+  } else if(item.slot==='hat'){
+    g.fillStyle=c;g.fillRect(w*.22,h*.42,w*.56,h*.22);g.fillRect(w*.12,h*.62,w*.76,h*.08); if(item.id.includes('crown')||item.id.includes('sun')){for(let i=0;i<4;i++)g.fillRect(w*(.24+i*.14),h*(.2+(i%2)*.08),w*.08,h*.26);}
+  } else if(item.slot==='back'){
+    g.fillStyle=c;g.beginPath();g.arc(w*.5,h*.5,w*.3,0,Math.PI*2);g.fill();g.strokeStyle=d;g.lineWidth=5;g.stroke();g.beginPath();g.moveTo(w*.2,h*.2);g.lineTo(w*.8,h*.8);g.stroke();
+  } else if(item.slot==='emote'){
+    g.strokeStyle=c;g.lineWidth=Math.max(3,w/16);g.beginPath();g.arc(w*.5,h*.25,w*.1,0,Math.PI*2);g.moveTo(w*.5,h*.35);g.lineTo(w*.5,h*.65);g.moveTo(w*.5,h*.43);g.lineTo(w*.2,h*.25);g.moveTo(w*.5,h*.43);g.lineTo(w*.82,h*.3);g.moveTo(w*.5,h*.65);g.lineTo(w*.25,h*.88);g.moveTo(w*.5,h*.65);g.lineTo(w*.8,h*.85);g.stroke();
+  } else if(item.slot==='aura'){
+    for(let r=w*.38;r>w*.1;r-=w*.09){g.strokeStyle=c;g.globalAlpha=.25+(w*.4-r)/w;g.lineWidth=5;g.beginPath();g.arc(w*.5,h*.5,r,0,Math.PI*2);g.stroke();}g.globalAlpha=1;
+  } else if(item.slot==='trail'||item.slot==='shoes'){
+    g.fillStyle=c;for(let i=0;i<4;i++){g.save();g.translate(w*(.22+i*.17),h*(.25+i*.16));g.rotate(-.25);g.fillRect(0,0,w*.2,h*.12);g.restore();}
+  } else if(item.slot==='skin'){
+    g.fillStyle=c;g.beginPath();g.arc(w*.5,h*.35,w*.22,0,Math.PI*2);g.fill();g.fillRect(w*.34,h*.55,w*.32,h*.28);
+  }
+  g.strokeStyle=RARITY_META[item.rarity]?.color||'#34343d';g.lineWidth=2;g.strokeRect(1,1,w-2,h-2);
+}
 function renderPass() {
-  const level = profileLevel(profile.xp), list = $('pass-catalog'); list.replaceChildren();
-  $('pass-summary').textContent = `level ${level} - every level rewards you; every fifth level is a cosmetic`;
-  $('b-buy-pass').style.display = profile.pass ? 'none' : '';
-  for (const reward of PASS_REWARDS) {
-    const unlocked = profile.pass && reward.level <= level;
-    list.appendChild(catalogCard(`LEVEL ${reward.level} - ${reward.name}`,
-      unlocked ? 'UNLOCKED' : reward.level <= level ? 'BUY THE PASS TO CLAIM' : 'LOCKED', null, reward.legendary));
+  const level=profileLevel(profile.xp), list=$('pass-catalog'); list.replaceChildren();
+  const next=level<100?xpForLevel(level+1):xpForLevel(100);
+  $('pass-summary').textContent=level<100?`level ${level} · ${Math.max(0,next-profile.xp).toLocaleString()} XP to level ${level+1}`:'level 100 · the procession is complete';
+  $('b-buy-pass').style.display=profile.pass?'none':'';
+  for(const reward of PASS_REWARDS){
+    const unlocked=profile.pass&&reward.level<=level, node=document.createElement('article');
+    node.className=`pass-node rarity-${reward.rarity||'common'}${reward.level>level?' locked':''}${reward.secret&&!unlocked?' secret':''}`;
+    const canvas=document.createElement('canvas');canvas.width=126;canvas.height=126;
+    if(reward.secret&&!unlocked){const g=canvas.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,126,126);g.fillStyle='#e0a040';g.font='bold 72px monospace';g.textAlign='center';g.fillText('?',63,90);}
+    else if(reward.coins){const g=canvas.getContext('2d');g.fillStyle='#050507';g.fillRect(0,0,126,126);g.fillStyle='#e0a040';g.beginPath();g.arc(63,62,34,0,Math.PI*2);g.fill();g.fillStyle='#3a2810';g.font='bold 34px monospace';g.textAlign='center';g.fillText('T',63,74);}
+    else drawCosmeticIcon(canvas,reward);
+    const h=document.createElement('h3');h.textContent=`LEVEL ${reward.level}`;const p=document.createElement('p');p.textContent=reward.secret&&!unlocked?'???':`${reward.name} · ${unlocked?'UNLOCKED':reward.level<=level?'BUY PASS TO CLAIM':'LOCKED'}`;
+    node.append(canvas,h,p);list.appendChild(node);
   }
 }
 function buyItem(item) {
   if (profile.owned.includes(item.id) || !canAfford(item.price)) return;
   spendCoins(item.price); profile.owned.push(item.id); saveProfile(); renderShop();
 }
-function renderShop() {
-  const list = $('shop-catalog'); list.replaceChildren();
-  for (const item of SHOP_ITEMS) {
-    const owned = profile.owned.includes(item.id);
-    list.appendChild(catalogCard(item.name, `${item.slot.toUpperCase()} - ${item.price.toLocaleString()} T-bucks`,
-      actionButton(owned ? 'OWNED' : 'BUY', () => buyItem(item), owned || !canAfford(item.price)), true));
-  }
-  for (const bundle of SHOP_BUNDLES) {
-    const owned = bundle.includes.every(id => profile.owned.includes(id));
-    list.appendChild(catalogCard(bundle.name, `${bundle.includes.length} items - ${bundle.price.toLocaleString()} T-bucks (bundle discount)`,
-      actionButton(owned ? 'OWNED' : 'BUY BUNDLE', () => {
-        if (owned || !canAfford(bundle.price)) return;
-        spendCoins(bundle.price); profile.owned.push(...bundle.includes); profile.owned = [...new Set(profile.owned)];
-        saveProfile(); renderShop();
-      }, owned || !canAfford(bundle.price)), true));
-  }
+const SHOP_SECTIONS=[['player','PLAYER'],['tung','TUNG CHARACTERS'],['spray','SPRAYS'],['emote','EMOTES'],['background','STREETS'],['pass','SAHUR PASS'],['bundle','BUNDLES']];
+let shopSection='player',shopSelected=null,shopPreviewMode='icon';
+function setShopSelected(item){shopSelected=item;renderShopPreview();}
+function renderShopPreview(){
+  const canvas=$('shop-preview'); if(!shopSelected){const g=canvas.getContext('2d');g.fillStyle='#050507';g.fillRect(0,0,canvas.width,canvas.height);$('shop-preview-name').textContent='SELECT AN ITEM';return;}
+  if(shopPreviewMode==='icon')drawCosmeticIcon(canvas,shopSelected);
+  else {const look={...profile.equipped,[shopSelected.slot]:shopSelected.id};drawWardrobeLook(canvas,look,false,shopSelected.slot,shopSelected.slot==='tung'?'tung':'player');}
+  $('shop-preview-name').textContent=`${shopSelected.name.toUpperCase()} · ${RARITY_META[shopSelected.rarity]?.label||''}`;
 }
-function allCosmetics() {
-  return [DEFAULT_COSMETIC, ...SHOP_ITEMS, ...PASS_REWARDS.filter(reward => reward.id)];
+function renderShop(){
+  const tabs=$('shop-tabs');tabs.replaceChildren();for(const [id,label] of SHOP_SECTIONS){const b=actionButton(label,()=>{shopSection=id;renderShop();});const selected=id===shopSection;b.classList.toggle('sel',selected);b.setAttribute('role','tab');b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;tabs.appendChild(b);}
+  const list=$('shop-catalog');list.replaceChildren();let items=[];
+  if(shopSection==='player')items=SHOP_ITEMS.filter(i=>!['tung','spray','emote','background'].includes(i.slot));
+  else if(shopSection==='pass')items=PASS_REWARDS.filter(i=>i.id);
+  else if(shopSection!=='bundle')items=SHOP_ITEMS.filter(i=>i.slot===shopSection);
+  if(shopSection==='bundle'){
+    for(const bundle of SHOP_BUNDLES){const owned=bundle.includes.every(id=>profile.owned.includes(id));const actions=document.createElement('div');actions.className='catalog-actions';actions.append(actionButton(owned?'OWNED':'BUY BUNDLE',()=>{if(owned||!canAfford(bundle.price))return;spendCoins(bundle.price);profile.owned.push(...bundle.includes);profile.owned=[...new Set(profile.owned)];saveProfile();renderShop();},owned||!canAfford(bundle.price)));const card=catalogCard(bundle.name,`${bundle.includes.length} items · ${bundle.price.toLocaleString()} T-bucks`,actions,bundle);list.appendChild(card);}renderShopPreview();return;
+  }
+  let previous='';for(const item of items){if(shopSection==='player'&&item.slot!==previous){previous=item.slot;const head=document.createElement('div');head.className='section-heading';head.textContent=item.slot.replace(/([A-Z])/g,' $1').toUpperCase();list.appendChild(head);}const owned=profile.owned.includes(item.id),actions=document.createElement('div');actions.className='catalog-actions';actions.append(actionButton('PREVIEW',()=>setShopSelected(item)));if(item.pass)actions.append(actionButton(profile.owned.includes(item.id)?'OWNED':'SAHUR PASS',()=>{renderPass();navigateScreen('scr-pass');},profile.owned.includes(item.id)));else actions.append(actionButton(owned?'OWNED':'BUY',()=>buyItem(item),owned||!canAfford(item.price)));const desc=item.pass?`SAHUR PASS · LEVEL ${item.level}`:`${item.slot.toUpperCase()} · ${item.price.toLocaleString()} T-bucks`;const card=catalogCard(item.name,desc,actions,item);card.classList.add('wardrobe-item');const icon=document.createElement('canvas');icon.width=72;icon.height=88;drawCosmeticIcon(icon,item);card.prepend(icon);list.appendChild(card);}
+  if(!shopSelected&&items.length)shopSelected=items[0];renderShopPreview();
 }
+function setShopPreviewMode(mode){shopPreviewMode=mode;$('b-shop-icon').classList.toggle('sel',mode==='icon');$('b-shop-wearer').classList.toggle('sel',mode==='wearer');renderShopPreview();}
+$('b-shop-icon').onclick=()=>setShopPreviewMode('icon');$('b-shop-wearer').onclick=()=>setShopPreviewMode('wearer');
 let wardrobePreviewLook = null;
-function drawWardrobeLook(canvas, look, compact = false, featuredSlot = '') {
+function drawWardrobeLook(canvas, look, compact = false, featuredSlot = '', forceMode = '') {
   const g = canvas.getContext('2d'), background = look.background;
   g.clearRect(0, 0, canvas.width, canvas.height);
-  g.fillStyle = background ? '#17130d' : '#050507'; g.fillRect(0, 0, canvas.width, canvas.height);
-  if (background) {
-    g.fillStyle = '#282015';
-    for (let y = compact ? 8 : 18; y < canvas.height; y += compact ? 14 : 32) g.fillRect(0, y, canvas.width, compact ? 1 : 2);
-    g.fillStyle = 'rgba(224,160,64,.08)';
-    const inset = compact ? 6 : 20; g.fillRect(inset, inset, canvas.width - inset * 2, canvas.height - inset * 2);
-  }
+  if(background)drawStreetTheme(g,streetForLook(look),canvas.width,canvas.height);else{g.fillStyle='#050507';g.fillRect(0,0,canvas.width,canvas.height);}
   const groundY = canvas.height - (compact ? 5 : 42);
   if (compact && featuredSlot === 'trail') {
     g.fillStyle = 'rgba(190,184,174,.55)';
@@ -2735,11 +3219,12 @@ function drawWardrobeLook(canvas, look, compact = false, featuredSlot = '') {
   }
   g.fillStyle = '#111116'; g.fillRect(compact ? 5 : 18, groundY, canvas.width - (compact ? 10 : 36), compact ? 2 : 3);
   const wearer = { color: '#c8c0a8', look };
-  const sprite = look.tung ? getTungSprite(wearer, true, false) : getSurvivorSprite(wearer, false, false);
+  const tungMode=forceMode==='tung'||(!forceMode&&look.tung&&featuredSlot==='tung');
+  const sprite = tungMode ? getTungSprite(wearer, true, false) : getSurvivorSprite(wearer, false, false);
   g.imageSmoothingEnabled = false;
   const scale = compact
     ? Math.min((canvas.width - 12) / sprite.width, (canvas.height - 10) / sprite.height)
-    : (look.tung ? 1.65 : 2.05);
+    : (tungMode ? 1.65 : 2.05);
   const width = Math.round(sprite.width * scale), height = Math.round(sprite.height * scale);
   g.drawImage(sprite, Math.round((canvas.width - width) / 2), groundY - height, width, height);
   if (compact && featuredSlot === 'emote') {
@@ -2748,15 +3233,20 @@ function drawWardrobeLook(canvas, look, compact = false, featuredSlot = '') {
     g.beginPath(); g.arc(canvas.width - 14, 22, 11, -1.1, 1.1); g.stroke();
   }
 }
+let wardrobeMode='player',wardrobeSlot='all';
+const PLAYER_SLOTS=['all','shirt','shirtPattern','pants','pantsPattern','hat','skin','back','shoes','aura','trail','spray','emote','background'];
 function renderWardrobePreview(label = 'CURRENT OUTFIT') {
   const canvas = $('wardrobe-preview');
   const look = wardrobePreviewLook || profile.equipped;
-  drawWardrobeLook(canvas, look);
+  drawWardrobeLook(canvas, look,false,'',wardrobeMode);
   $('wardrobe-preview-name').textContent = label;
 }
 function renderWardrobe() {
+  const modeTabs=$('wardrobe-mode');for(const b of modeTabs.querySelectorAll('button')){const on=b.dataset.wardrobeMode===wardrobeMode;b.classList.toggle('sel',on);b.setAttribute('aria-selected',String(on));b.tabIndex=on?0:-1;}
+  const tabs=$('wardrobe-tabs');tabs.replaceChildren();const slots=wardrobeMode==='tung'?['tung']:PLAYER_SLOTS;if(!slots.includes(wardrobeSlot))wardrobeSlot=slots[0];for(const slot of slots){const label=slot==='all'?'ALL':slot.replace(/([A-Z])/g,' $1').toUpperCase();const b=actionButton(label,()=>{wardrobeSlot=slot;renderWardrobe();});const selected=slot===wardrobeSlot;b.classList.toggle('sel',selected);b.setAttribute('role','tab');b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;tabs.appendChild(b);}
   const list = $('wardrobe-catalog'); list.replaceChildren();
-  const owned = allCosmetics().filter(item => profile.owned.includes(item.id));
+  const owned = allCosmetics().filter(item => profile.owned.includes(item.id)&&
+    (wardrobeMode==='tung'?item.slot==='tung':item.slot!=='tung')&&(wardrobeSlot==='all'||item.slot===wardrobeSlot));
   if (!owned.length) list.appendChild(catalogCard('EMPTY RAIL', 'Earn Sahur Pass rewards or visit the item shop.'));
   for (const item of owned) {
     const equipped = profile.equipped[item.slot] === item.id;
@@ -2770,16 +3260,27 @@ function renderWardrobe() {
       else profile.equipped[item.slot] = item.id;
       wardrobePreviewLook = null; saveProfile(); renderWardrobe();
     }));
-    const card = catalogCard(item.name, item.slot.toUpperCase(), actions, !!item.legendary);
+    const card = catalogCard(item.name, item.slot.toUpperCase(), actions, item);
     card.classList.add('wardrobe-item');
     const preview = document.createElement('canvas'); preview.width = 72; preview.height = 88;
     preview.setAttribute('role', 'img'); preview.setAttribute('aria-label', `${item.name} cosmetic preview`);
-    drawWardrobeLook(preview, { ...profile.equipped, [item.slot]: item.id }, true, item.slot);
+    drawCosmeticIcon(preview,item);
     card.prepend(preview); list.appendChild(card);
   }
   renderWardrobePreview();
 }
 $('b-preview-current').onclick = () => { wardrobePreviewLook = null; renderWardrobePreview(); };
+for(const button of $('wardrobe-mode').querySelectorAll('button'))button.onclick=()=>{wardrobeMode=button.dataset.wardrobeMode;wardrobeSlot=wardrobeMode==='tung'?'tung':'all';wardrobePreviewLook=null;renderWardrobe();};
+const LOOTBOXES=[
+  {id:'common',name:'COMMON BOX',price:250,rarity:'common',odds:'65% T-bucks · 20% XP · 15% cosmetic'},
+  {id:'rare',name:'RARE BOX',price:800,rarity:'rare',odds:'20% currency · 80% Uncommon–Epic cosmetic'},
+  {id:'legendary',name:'LEGENDARY BOX',price:2500,rarity:'legendary',odds:'Rare+ cosmetic · 18% Legendary · 4% Mythic'},
+  {id:'mythic',name:'MYTHIC BOX',price:6000,rarity:'mythic',odds:'100% Mythic cosmetic'},
+];
+function weightedCosmetic(allowed){const pool=SHOP_ITEMS.filter(i=>allowed.includes(i.rarity));return pool[Math.floor(Math.random()*pool.length)]||SHOP_ITEMS[0];}
+function grantLootCosmetic(item){if(profile.owned.includes(item.id)){const refund=Math.max(100,Math.floor(item.price*.35));profile.coins+=refund;return `Duplicate ${item.name}: +${refund.toLocaleString()} T-bucks`;}profile.owned.push(item.id);return `${RARITY_META[item.rarity].label} COSMETIC: ${item.name}`;}
+function openLootbox(box){if(!canAfford(box.price)){$('lootbox-result').textContent='Not enough T-bucks.';return;}spendCoins(box.price);profile.stats.lootboxes++;let result='';const roll=Math.random();if(box.id==='common'){if(roll<.65){const coins=80+Math.floor(Math.random()*121);profile.coins+=coins;result=`+${coins} T-bucks`;}else if(roll<.85){const xp=100+Math.floor(Math.random()*201);profile.xp+=xp;result=`+${xp} XP`;}else result=grantLootCosmetic(weightedCosmetic(['uncommon']));}else if(box.id==='rare'){if(roll<.2){const coins=350+Math.floor(Math.random()*301);profile.coins+=coins;result=`+${coins} T-bucks`;}else result=grantLootCosmetic(weightedCosmetic(roll>.9?['epic']:['uncommon','rare']));}else if(box.id==='legendary'){result=grantLootCosmetic(weightedCosmetic(roll<.04?['mythic']:roll<.22?['legendary']:['rare','epic']));}else result=grantLootCosmetic(weightedCosmetic(['mythic']));unlockAchievements({});saveProfile();$('lootbox-result').textContent=`${box.name} OPENED — ${result}`;renderLootboxes();}
+function renderLootboxes(){const list=$('lootbox-catalog');list.replaceChildren();for(const box of LOOTBOXES){const article=document.createElement('article');article.className=`lootbox rarity-${box.rarity}`;const art=document.createElement('div');art.className='lootbox-art';const h=document.createElement('h3');h.textContent=box.name;const p=document.createElement('p');p.textContent=box.odds;const buy=actionButton(`OPEN · ${box.price.toLocaleString()} T-BUCKS`,()=>openLootbox(box),!canAfford(box.price));article.append(art,h,p,buy);list.appendChild(article);}}
 function renderAchievements() {
   const list = $('achievement-catalog'); list.replaceChildren();
   for (const achievement of ACHIEVEMENTS) {
@@ -2801,11 +3302,12 @@ for (const button of document.querySelectorAll('[data-profile-screen]')) {
     if (screen === 'scr-pass') renderPass();
     if (screen === 'scr-shop') renderShop();
     if (screen === 'scr-wardrobe') renderWardrobe();
+    if (screen === 'scr-lootboxes') renderLootboxes();
     if (screen === 'scr-achievements') renderAchievements();
-    showScreen(screen);
+    navigateScreen(screen);
   };
 }
-for (const button of document.querySelectorAll('.profile-back')) button.onclick = () => showScreen('scr-main');
+for (const button of document.querySelectorAll('.profile-back')) button.onclick = () => navigateBack('scr-cosmetics');
 $('b-buy-pass').onclick = () => {
   if (profile.pass || !canAfford(1000)) return;
   spendCoins(1000); profile.pass = true; grantPassRewards(); saveProfile(); renderPass();
@@ -2821,8 +3323,10 @@ const SETTING_DEFS = [
   ['torch', 'TORCH', [[30, '30 seconds'], [60, '1 minute'], [90, '1.5 minutes'], [125, '2 minutes'], [180, '3 minutes'], [300, '5 minutes'], [600, '10 minutes'], [900, '15 minutes'], [1800, '30 minutes'], [0, 'infinite - no battery bar']]],
   ['stamina', 'STAMINA', [['veryLow', 'very low'], ['low', 'low'], ['medium', 'medium'], ['high', 'high'], ['veryHigh', 'very high'], ['infinite', 'infinite - no stamina bar']]],
   ['tungIntel', 'TUNG OBJECTIVES', [[false, 'hidden (balanced)'], [true, 'visible']]],
-  ['tungs', 'PLAYER TUNGS', [[1, '1'], [2, 'up to 2'], [3, 'up to 3']]],
+  ['tungs', 'PLAYER TUNGS', [[0, '0 - use bot Tungs'], [1, '1'], [2, 'up to 2'], [3, 'up to 3']]],
+  ['botTungs', 'BOT TUNGS', [[1, '1 bot'], [2, '2 bots'], [3, '3 bots']]],
   ['tracks', 'TUNG TRACKS', [['off', 'off'], ['faint', 'faint / delayed'], ['normal', 'balanced'], ['strong', 'strong / recent']]],
+  ['speedrun', 'SPEEDRUN TIMER', [[false, 'off'], [true, 'on - milliseconds']]],
 ];
 
 function renderSettings(el, settings, editable, changed) {
@@ -2871,7 +3375,9 @@ function showScreen(id, thin = false) {
   }
   ui.classList.toggle('on', !!id);
   ui.classList.toggle('thin', thin);
-  if (active) requestAnimationFrame(() => active.querySelector('input, button, select')?.focus());
+  ui.classList.toggle('solo-end',id==='scr-solo-over');
+  ui.scrollTop=0;
+  if (active) requestAnimationFrame(() => active.querySelector('input, button, select')?.focus({preventScroll:true}));
 }
 
 function defaultRelayUrl() {
@@ -3006,25 +3512,28 @@ function goMain() {
   chatOpen = false;
   $('team-chat').classList.remove('on', 'typing');
   game.state = 'menu';
+  screenHistory.length=0;
   showScreen('scr-main');
   ctx.fillStyle = 'black'; ctx.fillRect(0, 0, WIN_W, WIN_H);
 }
-
-$('b-solo').onclick = () => beginSolo();
-$('b-solo-settings').onclick = () => {
+const screenHistory=[];
+function activeScreenId(){return document.querySelector('.scr.on')?.id||null;}
+function navigateScreen(id){const current=activeScreenId();if(current&&current!==id)screenHistory.push(current);showScreen(id);}
+function navigateBack(fallback='scr-main'){showScreen(screenHistory.pop()||fallback);}
+$('b-play-menu').onclick=()=>navigateScreen('scr-play');
+$('b-cosmetics-menu').onclick=()=>navigateScreen('scr-cosmetics');
+$('b-howto').onclick=()=>navigateScreen('scr-howto');
+for(const b of document.querySelectorAll('.menu-back'))b.onclick=()=>navigateBack();
+for(const b of document.querySelectorAll('[data-how]'))b.onclick=()=>{for(const tab of document.querySelectorAll('[data-how]')){const on=tab===b;tab.classList.toggle('sel',on);tab.setAttribute('aria-selected',String(on));tab.tabIndex=on?0:-1;}for(const section of document.querySelectorAll('.how-section')){const on=section.id===b.dataset.how;section.classList.toggle('on',on);section.setAttribute('aria-hidden',String(!on));}};
+for(const tabs of [document.querySelector('.how-nav'),$('shop-tabs'),$('wardrobe-mode'),$('wardrobe-tabs')])tabs.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key))return;const buttons=[...tabs.querySelectorAll('[role="tab"]')];if(!buttons.length)return;let index=buttons.indexOf(document.activeElement);if(event.key==='Home')index=0;else if(event.key==='End')index=buttons.length-1;else index=(Math.max(0,index)+(event.key==='ArrowLeft'||event.key==='ArrowUp'?-1:1)+buttons.length)%buttons.length;buttons[index].click();requestAnimationFrame(()=>tabs.querySelector('[aria-selected="true"]')?.focus({preventScroll:true}));event.preventDefault();});
+$('b-solo').onclick = () => {
   renderSettings($('solo-settings'), soloSettings, true, (s) => store('tung-solo-settings', s));
-  showScreen('scr-solo');
-};
-$('b-howto').onclick = () => {
-  const h = $('howto');
-  const open = h.style.display === 'none';
-  h.style.display = open ? 'block' : 'none';
-  $('b-howto').setAttribute('aria-expanded', String(open));
+  navigateScreen('scr-solo');
 };
 $('b-solo-start').onclick = () => beginSolo();
-$('b-solo-back').onclick = () => showScreen('scr-main');
-$('b-mp').onclick = () => { $('mp-err').textContent = ''; showScreen('scr-mp'); startLobbyBrowser(); };
-$('b-mp-back').onclick = () => { stopLobbyBrowser(); showScreen('scr-main'); };
+$('b-solo-back').onclick = () => navigateBack('scr-play');
+$('b-mp').onclick = () => { $('mp-err').textContent = ''; navigateScreen('scr-mp'); startLobbyBrowser(); };
+$('b-mp-back').onclick = () => { stopLobbyBrowser(); navigateBack('scr-play'); };
 $('b-refresh-lobbies').onclick = () => refreshAvailableLobbies(true);
 
 function beginSolo() {
@@ -3034,6 +3543,8 @@ function beginSolo() {
   showScreen(null);
   startGesture();
 }
+$('b-solo-again').onclick=()=>beginSolo();
+$('b-solo-lobby').onclick=()=>{game.state='menu';renderSettings($('solo-settings'),soloSettings,true,(s)=>store('tung-solo-settings',s));showScreen('scr-solo');ctx.fillStyle='black';ctx.fillRect(0,0,WIN_W,WIN_H);};
 
 // ---------------------------------------------------------------------------
 // relay client
@@ -3057,6 +3568,8 @@ class Net {
     this.manifestBase = null;
     this.intentional = false;
     this.lastError = '';
+    this.kickVotes=new Map();
+    this.myKickVotes=new Set();
   }
 
   connect(request) {
@@ -3132,6 +3645,7 @@ class Net {
     stopLobbyBrowser();
     this.phase = 'lobby'; this.host = msg.host; this.code = msg.code;
     this.settings = clampGameSettings(msg.settings);
+    this.kickVotes.clear();this.myKickVotes.clear();
     const old = this.players;
     this.players = new Map(msg.players.map(p => [p.id, Object.assign(old.get(p.id) || {}, p)]));
     renderLobby(this, msg.max, msg.min);
@@ -3141,6 +3655,7 @@ class Net {
   onBegin(msg) {
     this.phase = 'play'; this.settings = clampGameSettings(msg.settings);
     $('chat-log').replaceChildren();
+    this.kickVotes.clear();this.myKickVotes.clear();
     const old = this.players;
     this.players = new Map();
     for (const p of msg.players) {
@@ -3163,7 +3678,7 @@ class Net {
     const ownSpawn = this.players.get(this.you).pos;
     game.px = ownSpawn[0]; game.py = ownSpawn[1];
 
-    this.manifestBase = { items: game.items, hides: game.hides, pairs: game.hidePairs, surau: game.surau };
+    this.manifestBase = { items: game.items, hides: game.hides, pairs: game.hidePairs, surau: game.surau, grid:game.grid };
     if (this.you === this.host) this.sendManifest();
 
     game.itemState = game.items.map(it => [0, -1, it[0], it[1]]);
@@ -3186,6 +3701,7 @@ class Net {
     if (this.phase !== 'play' || game.mode !== 'mp') return;
     game.timeLeft = msg.tl;
     game.itemState = msg.it || game.itemState;
+    if(Array.isArray(msg.sp))game.sprays=msg.sp.filter(mark=>mark&&Number.isFinite(mark.x)&&Number.isFinite(mark.y)).slice(-64);
     for (const row of msg.p || []) {
       const id = row[0], flags = row[1], alive = !!row[2], carrying = row[3];
       const p = this.players.get(id);
@@ -3222,10 +3738,17 @@ class Net {
     } else if (msg.e === 'caught') {
       const p = this.players.get(msg.who); if (p) p.alive = false;
       showEventBanner(`${playerName(p)} was caught`);
-      if (msg.who === this.you) { game.alive = false; audio.playSimple('scare', 1.0); }
+      if (msg.who === this.you) { game.alive = false; game.cycleSpectate(1); audio.playSimple('scare', 1.0); }
       else audio.playSimple('stinger', 0.45);
     } else if (msg.e === 'dev-joined') {
       showEventBanner(`${this.players.get(msg.who)?.name || 'A developer'} has joined`, 4000);
+    } else if(msg.e==='spray'){
+      if(msg.by!==this.you){game.receiveSpray(msg);audio.playSimple('spray',.28);}
+    } else if(msg.e==='votekick'){
+      this.kickVotes.set(Number(msg.who),{votes:Number(msg.votes)||0,needed:Number(msg.needed)||0});
+      if(msg.by===this.you)this.myKickVotes.add(Number(msg.who));
+      renderVotekickPanel();
+      if(msg.passed)showEventBanner(`${playerName(this.players.get(msg.who))} was voted out`,2600);
     } else if (msg.e === 'kicked') {
       this.lastError = msg.m || 'removed by Dev Andre';
     } else if (msg.e === 'swap') {
@@ -3244,7 +3767,8 @@ class Net {
     const line = document.createElement('div'); line.className = 'chat-line';
     const name = document.createElement('span'); name.className = 'chat-name';
     const symbol = sigilSymbol(msg.sigil);
-    name.textContent = `${symbol ? `[${symbol}] ` : ''}${String(msg.name || 'runner').slice(0, 14)}: `;
+    if(symbol){const badge=document.createElement('span');badge.className='sigil';const inner=document.createElement('span');inner.textContent=symbol;badge.appendChild(inner);name.appendChild(badge);}
+    name.append(document.createTextNode(`${String(msg.name || 'runner').slice(0, 14)}: `));
     line.append(name, document.createTextNode(String(msg.m || '').slice(0, 160)));
     log.appendChild(line);
     while (log.children.length > 6) log.firstElementChild.remove();
@@ -3260,7 +3784,7 @@ class Net {
     const tungWin = msg.result === 'hunted' || msg.result === 'dawn';
     const won = me && (me.role === 'tung' ? tungWin : msg.result === 'escaped');
     msg.reward = msg.result === 'abandoned' ? null : grantMatchRewards({
-      role: me?.role || 'survivor', won: !!won, alive: !!score.alive,
+      role: me?.role || 'survivor', won: !!won, alive: !!score.alive, botMode:this.settings.tungs===0,
       offerings: Number(score.delivered) || 0, caught: Number(score.caught) || 0,
       teamOfferings: Number(msg.delivered) || 0, seconds: this.settings.night - (Number(msg.timeLeft) || 0),
       distance: game.runStats.distance, hides: game.runStats.hides, sprinted: game.runStats.sprinted,
@@ -3282,6 +3806,7 @@ class Net {
       }, player));
     }
     if (this.phase === 'play' && this.you === this.host) this.sendManifest();
+    if(paused)renderVotekickPanel();
     if (this.phase === 'over') $('b-again').style.display = this.you === this.host ? '' : 'none';
   }
 
@@ -3305,6 +3830,7 @@ class Net {
     if (this.phase !== 'play' || game.mode !== 'mp' || !game.alive) return;
     let flags = (game.isMoving ? 1 : 0) | (game.isSprinting ? 2 : 0) | (game.hidden ? 4 : 0);
     if (game.surge > 0) flags |= 32;
+    if(game.emoteTime>0)flags|=game.performanceKind==='taunt'?128:64;
     this.send({ t: 'in', x: game.px, y: game.py, a: game.angle, f: flags });
   }
 
@@ -3330,7 +3856,7 @@ class Net {
 }
 
 function connectMultiplayer(kind, codeOverride) {
-  const name = profileAdmin ? ADMIN_NAMES[profileUsername.toLowerCase()] : ($('i-name').value.trim() || 'guest');
+  const name = $('i-name').value.trim() || (profileAccount?profileUsername:'guest');
   const relay = $('i-relay').value.trim() || defaultRelayUrl();
   const code = String(codeOverride || $('i-code').value).trim().toUpperCase();
   const password = $('i-password').value.slice(0, 64);
@@ -3339,7 +3865,7 @@ function connectMultiplayer(kind, codeOverride) {
   store('tung-identity', { name, relay });
   if (net) net.close();
   net = new Net(relay);
-  const identity = { name, sigil: profile.sigil, look: profile.equipped };
+  const identity = { name, sigil: profile.sigil, look: profile.equipped, level:profileLevel(profile.xp) };
   net.connect(kind === 'create'
     ? { t: 'create', ...identity, password, settings: DEFAULT_SETTINGS }
     : { t: 'join', ...identity, code, password });
@@ -3358,25 +3884,29 @@ function renderLobby(n, max = 10, min = 2) {
   const votes = new Map();
   for (const p of n.players.values()) if (typeof p.vote === 'number') votes.set(p.vote, (votes.get(p.vote) || 0) + 1);
   for (const p of n.players.values()) {
-    const li = document.createElement('li');
+    const li = document.createElement('li');li.classList.add('nameplate');li.style.setProperty('--street-bg',streetCss(streetForLook(p.look)));
     const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = p.color;
-    const name = document.createElement('span'); name.className = 'pname'; name.textContent = playerName(p);
+    const name = document.createElement('span'); name.className = 'pname';
+    const symbol=sigilSymbol(p.sigil);if(symbol){const badge=document.createElement('span');badge.className='sigil';const inner=document.createElement('span');inner.textContent=symbol;badge.appendChild(inner);name.appendChild(badge);}name.append(document.createTextNode(playerName(p)));
+    const level=document.createElement('span');level.className='level-badge';level.textContent=`LV ${Math.max(1,Math.min(100,Number(p.level)||1))}`;
     const tags = [];
     if (p.id === n.host) tags.push('HOST');
     if (p.id === n.you) tags.push('YOU');
-    if (p.admin) tags.push('DEV');
+    if (p.admin) tags.push('ADMIN');
     const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = tags.join(' / ');
     const tally = document.createElement('span'); tally.className = 'tally';
     tally.textContent = votes.get(p.id) ? `${votes.get(p.id)} vote${votes.get(p.id) === 1 ? '' : 's'}` : '';
     const vote = document.createElement('button'); vote.className = 'ghost small';
     vote.textContent = me && me.vote === p.id ? 'VOTED' : 'VOTE';
+    vote.style.display=n.settings.tungs===0?'none':'';
     if (me && me.vote === p.id) vote.classList.add('sel');
     vote.onclick = () => n.send({ t: 'vote', v: p.id });
-    li.append(dot, name, tag, tally, vote); list.appendChild(li);
+    li.append(dot, name, level,tag, tally, vote); list.appendChild(li);
   }
   const random = $('b-vote-random');
   random.classList.toggle('sel', !!me && me.vote === 'random');
-  random.textContent = me && me.vote === 'random' ? 'VOTED: LET IT BE RANDOM' : 'VOTE: LET IT BE RANDOM';
+  random.textContent = n.settings.tungs===0?`${n.settings.botTungs} BOT TUNG${n.settings.botTungs===1?'':'S'} SELECTED`:(me && me.vote === 'random' ? 'VOTED: LET IT BE RANDOM' : 'VOTE: LET IT BE RANDOM');
+  random.disabled=n.settings.tungs===0;
   random.onclick = () => n.send({ t: 'vote', v: 'random' });
 
   const isHost = n.you === n.host;
@@ -3387,6 +3917,15 @@ function renderLobby(n, max = 10, min = 2) {
   $('b-start').textContent = n.players.size < min ? `NEED ${min - n.players.size} MORE` : 'START THE NIGHT';
   $('b-start').onclick = () => n.send({ t: 'start' });
   renderAdminPanel(n, 'lobby');
+}
+
+function renderVotekickPanel(){
+  const panel=$('pause-votekick'),list=$('votekick-list');if(!panel||!list)return;
+  const active=game.mode==='mp'&&net?.phase==='play';panel.style.display=active?'block':'none';list.replaceChildren();if(!active)return;
+  const targets=[...net.players.values()].filter(p=>p.id!==net.you&&!p.bot);
+  const humanCount=[...net.players.values()].filter(p=>!p.bot).length;
+  if(!targets.length){const empty=document.createElement('div');empty.className='hint';empty.textContent='No other human player can be voted out.';list.appendChild(empty);return;}
+  for(const p of targets){const state=net.kickVotes.get(p.id)||{votes:0,needed:Math.floor(humanCount/2)+1};const row=document.createElement('div');row.className='vote-row';const name=document.createElement('span');name.textContent=`${playerName(p)} · ${p.role==='tung'?'TUNG':'RUNNER'}`;const tally=document.createElement('span');tally.className='tally';tally.textContent=`${state.votes}/${state.needed}`;const voted=net.myKickVotes.has(p.id),button=actionButton(voted?'VOTED':'VOTE OUT',()=>net.send({t:'votekick',id:p.id}),voted);row.append(name,tally,button);list.appendChild(row);}
 }
 
 function renderAdminPanel(n, place) {
@@ -3403,7 +3942,8 @@ function renderAdminPanel(n, place) {
   }
 }
 
-$('b-leave').onclick = () => goMain();
+function leaveToMultiplayer(){if(net){net.close();net=null;}paused=false;game.state='menu';showScreen('scr-mp');ctx.fillStyle='black';ctx.fillRect(0,0,WIN_W,WIN_H);startLobbyBrowser();}
+$('b-leave').onclick = () => leaveToMultiplayer();
 
 function renderResult(n, msg) {
   const me = n.players.get(n.you);
@@ -3421,7 +3961,7 @@ function renderResult(n, msg) {
     const dot = document.createElement('span'); dot.className = 'dot';
     dot.style.display = 'inline-block'; dot.style.background = String(s.color || '#85858d');
     dotCell.appendChild(dot);
-    const name = document.createElement('td'); name.textContent = playerName(s);
+    const name = document.createElement('td');const symbol=sigilSymbol(s.sigil);if(symbol){const badge=document.createElement('span');badge.className='sigil';const inner=document.createElement('span');inner.textContent=symbol;badge.appendChild(inner);name.appendChild(badge);}name.append(document.createTextNode(playerName(s)));
     const status = document.createElement('td');
     status.textContent = s.role === 'tung' ? 'THE TUNG' : (s.alive ? 'SURVIVED' : 'CAUGHT');
     const delivered = document.createElement('td');
@@ -3434,7 +3974,7 @@ function renderResult(n, msg) {
   again.onclick = () => n.send({ t: 'again' });
 }
 
-$('b-over-leave').onclick = () => goMain();
+$('b-over-leave').onclick = () => leaveToMultiplayer();
 
 function showDisconnected(message) {
   game.state = 'mpover';
@@ -3489,7 +4029,7 @@ function pauseGame() {
   if (document.exitPointerLock) document.exitPointerLock();
   $('pause-title').textContent = game.mode === 'mp' ? 'THE NIGHT CONTINUES' : 'PAUSED';
   $('pause-sub').textContent = game.mode === 'mp' ? 'the other players are still moving' : 'the street holds its breath';
-  $('k-shift').textContent = game.role === 'tung' ? 'surge' : 'sprint';
+  renderVotekickPanel();
   renderAdminPanel(net, 'pause');
   showScreen('scr-pause', true);
   if (whisperHandle) whisperHandle.gain.gain.value = 0;
@@ -3507,8 +4047,7 @@ function resumeGame() {
 $('b-resume').onclick = () => resumeGame();
 $('b-quit').onclick = () => {
   paused = false;
-  if (game.mode === 'mp') goMain();
-  else { game.state = 'menu'; showScreen('scr-main'); }
+  goMain();
 };
 
 function restartSolo() {
@@ -3536,6 +4075,7 @@ window.addEventListener('keydown', (e) => {
   if (code === 'Escape') { pauseGame(); e.preventDefault(); return; }
   if (!e.repeat && code === 'KeyT') { openChat(); e.preventDefault(); return; }
   if (!game.alive && game.mode === 'mp') {
+    if(!e.repeat&&(code==='ArrowLeft'||code==='ArrowRight'))game.cycleSpectate(code==='ArrowLeft'?-1:1);
     e.preventDefault(); return;
   }
   if (code === 'ArrowLeft') keys.left = true;
@@ -3548,6 +4088,9 @@ window.addEventListener('keydown', (e) => {
   if (!e.repeat && code === 'KeyE') game.toggleHide();
   else if (!e.repeat && code === 'KeyQ') game.requestSwap();
   else if (!e.repeat && code === 'KeyF' && !game.hidden && game.role !== 'tung') game.flashlight = !game.flashlight;
+  else if(!e.repeat&&code==='KeyG')game.placeSpray();
+  else if(!e.repeat&&code==='KeyV')game.triggerPerformance('emote');
+  else if(!e.repeat&&code==='KeyB')game.triggerPerformance('taunt');
 });
 
 window.addEventListener('keyup', (e) => {
@@ -3580,15 +4123,13 @@ canvas.addEventListener('click', () => {
 function drawRoleReveal(now) {
   if (now >= roleRevealUntil || game.mode !== 'mp') return;
   const left = Math.min(1, (roleRevealUntil - now) / 500);
-  ctx.fillStyle = `rgba(0,0,0,${0.68 * left})`; ctx.fillRect(0, 180, WIN_W, 180);
-  if (profile.equipped.background) {
-    ctx.strokeStyle = `rgba(224,160,64,${0.7 * left})`; ctx.lineWidth = 3;
-    ctx.strokeRect(38, 192, WIN_W - 76, 156);
-  }
+  const street=streetForLook(profile.equipped);if(street){ctx.save();ctx.globalAlpha=.76*left;ctx.translate(38,192);drawStreetTheme(ctx,street,WIN_W-76,156);ctx.restore();}
+  ctx.fillStyle = `rgba(0,0,0,${(street ? 0.38 : 0.68) * left})`; ctx.fillRect(0, 180, WIN_W, 180);
+  if (street) {ctx.strokeStyle = `rgba(224,160,64,${0.7 * left})`; ctx.lineWidth = 3;ctx.strokeRect(38, 192, WIN_W - 76, 156);}
   const tung = game.role === 'tung';
   drawText(ctx, tung ? 'YOU ARE THE TUNG' : 'YOU ARE NOT THE TUNG', WIN_W / 2, 238,
            tung ? 'rgb(220,80,60)' : AMBER, { center: true, font: 'bold 34px monospace' });
-  drawText(ctx, tung ? 'read their old footsteps - SHIFT to surge' : 'bring the offerings home - do not leave a trail',
+  drawText(ctx, tung ? 'read their old footsteps - unleash your surge' : 'bring the offerings home - do not leave a trail',
            WIN_W / 2, 296, INK, { center: true, font: '15px monospace' });
 }
 
@@ -3653,6 +4194,7 @@ function frame(now) {
     else if (game.state === 'win') screenWin(ctx, game);
     if (['caught', 'dawn', 'win'].includes(game.state) && game.reward) drawText(ctx, `+${game.reward.coins} T-BUCKS   +${game.reward.xp} XP`, WIN_W / 2, WIN_H - 104, AMBER,
       { center: true, font: 'bold 16px monospace' });
+    if(['caught','dawn','win'].includes(game.state)&&!game.endOverlayShown){game.endOverlayShown=true;showScreen('scr-solo-over');}
   }
 }
 

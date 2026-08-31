@@ -62,6 +62,8 @@ const MAX_SPEED = 3.85;       // index.html: TUNG_SURGE_SPEED
 const WALK_SPEED = 2.2;       // index.html: WALK_SPEED
 const MOVE_BURST = 1.0;       // one small latency/reconciliation burst
 const SWAP_COOLDOWN_MS = 12000;
+const BOT_WANDER_SPEED = 2.34;
+const BOT_HUNT_SPEED = 2.72;
 
 const TICK_HZ = 20;
 const MAX_PLAYERS = 10;
@@ -86,7 +88,9 @@ const DEFAULT_SETTINGS = {
   stamina: 'medium',
   tungIntel: false,
   tungs: 1,
+  botTungs: 1,
   tracks: 'normal',// footprint visibility for the tung: off|faint|normal|strong
+  speedrun: false,
 };
 
 function clampSettings(raw) {
@@ -102,8 +106,10 @@ function clampSettings(raw) {
   if (Number.isFinite(raw.torch)) s.torch = raw.torch === 0 ? 0 : Math.max(20, Math.min(1800, Math.round(raw.torch)));
   if (['veryLow', 'low', 'medium', 'high', 'veryHigh', 'infinite'].includes(raw.stamina)) s.stamina = raw.stamina;
   if (typeof raw.tungIntel === 'boolean') s.tungIntel = raw.tungIntel;
-  if (Number.isFinite(raw.tungs)) s.tungs = Math.max(1, Math.min(3, Math.round(raw.tungs)));
+  if (Number.isFinite(raw.tungs)) s.tungs = Math.max(0, Math.min(3, Math.round(raw.tungs)));
+  if (Number.isFinite(raw.botTungs)) s.botTungs = Math.max(1, Math.min(3, Math.round(raw.botTungs)));
   if (['off', 'faint', 'normal', 'strong'].includes(raw.tracks)) s.tracks = raw.tracks;
+  if (typeof raw.speedrun === 'boolean') s.speedrun = raw.speedrun;
   return s;
 }
 
@@ -316,7 +322,7 @@ function sanitizeCosmetics(message) {
   if (message.look && typeof message.look === 'object') {
     for (const [slot, value] of Object.entries(message.look).slice(0, 16)) look[clean(slot)] = clean(value);
   }
-  return { sigil: clean(message.sigil), look };
+  return { sigil: clean(message.sigil), look, level:Math.max(1,Math.min(100,Math.round(Number(message.level)||1))) };
 }
 
 class Player {
@@ -326,6 +332,7 @@ class Player {
     this.name = sanitizeName(name);
     this.sigil = cosmetics.sigil || '';
     this.look = cosmetics.look || {};
+    this.level = cosmetics.level || 1;
     this.vote = null;          // player id, 'random', or null
     this.role = 'survivor';
     this.x = 1.5; this.y = 1.5; this.a = 0;
@@ -346,11 +353,11 @@ class Player {
     this.chatTimes = [];
   }
   publicLobby() {
-    return { id: this.id, name: this.name, sigil: this.sigil, look: this.look, vote: this.vote, color: PLAYER_COLORS[this.colorIdx] };
+    return { id: this.id, name: this.name, sigil: this.sigil, look: this.look, level:this.level, vote: this.vote, color: PLAYER_COLORS[this.colorIdx],role:this.role };
   }
 }
 
-const FLAG_MOVING = 1, FLAG_SPRINT = 2, FLAG_HIDDEN = 4, FLAG_SURGE = 32;
+const FLAG_MOVING = 1, FLAG_SPRINT = 2, FLAG_HIDDEN = 4, FLAG_SURGE = 32, FLAG_EMOTE=64,FLAG_TAUNT=128;
 
 class Room {
   constructor(code) {
@@ -371,6 +378,9 @@ class Room {
     this.manifestWaitSince = 0;
     this.manifestRequestedAt = 0;
     this.passwordHash = null;
+    this.bots=[];
+    this.sprays=[];
+    this.kickVotes=new Map();
   }
 
   broadcast(msg, exceptId) {
@@ -380,6 +390,10 @@ class Room {
       p.conn.sendRaw(0x1, Buffer.from(s, 'utf8'));
     }
   }
+
+  botPublic(bot){return{id:bot.id,name:bot.name,sigil:'',look:bot.look,level:100,vote:null,color:bot.color,role:'tung',bot:true};}
+  allActors(){return[...this.players.values(),...this.bots];}
+  publicRoster(){return[...this.players.values()].map(p=>p.publicLobby()).concat(this.bots.map(bot=>this.botPublic(bot)));}
 
   add(player) {
     if (this.players.size >= MAX_PLAYERS) return false;
@@ -397,6 +411,8 @@ class Room {
     const p = this.players.get(id);
     if (!p) return;
     this.players.delete(id);
+    this.kickVotes.delete(id);
+    for(const votes of this.kickVotes.values())votes.delete(id);
     for (const other of this.players.values()) {
       if (other.vote === id) other.vote = null;
     }
@@ -423,7 +439,7 @@ class Room {
     } else if (this.phase === 'lobby') {
       this.sendLobby();
     } else {
-      this.broadcast({ t: 'roster', players: [...this.players.values()].map(q => q.publicLobby()), host: this.hostId });
+      this.broadcast({ t: 'roster', players: this.publicRoster(), host: this.hostId });
     }
   }
 
@@ -435,7 +451,7 @@ class Room {
       phase: this.phase,
       settings: this.settings,
       max: MAX_PLAYERS,
-      min: MIN_PLAYERS,
+      min: this.settings.tungs===0?1:MIN_PLAYERS,
       players: [...this.players.values()].map(p => p.publicLobby()),
     });
   }
@@ -483,16 +499,13 @@ class Room {
 
   start() {
     if (this.phase === 'play') return;
-    if (this.players.size < MIN_PLAYERS) {
-      this.toHost({ t: 'err', m: `need at least ${MIN_PLAYERS} players` });
+    const minimum=this.settings.tungs===0?1:MIN_PLAYERS;
+    if (this.players.size < minimum) {
+      this.toHost({ t: 'err', m: `need at least ${minimum} player${minimum===1?'':'s'}` });
       return;
     }
-    const { id: firstTungId, how } = this.pickTung();
-    const tungIds = [firstTungId];
-    const candidates = [...this.players.keys()].filter(id => id !== firstTungId);
-    const wanted = Math.min(this.settings.tungs, this.players.size - 1);
-    while (tungIds.length < wanted && candidates.length) {
-      tungIds.push(candidates.splice(crypto.randomInt(candidates.length), 1)[0]);
+    let firstTungId=null,how='bot',tungIds=[];
+    if(this.settings.tungs>0){const picked=this.pickTung();firstTungId=picked.id;how=picked.how;tungIds=[firstTungId];const candidates=[...this.players.keys()].filter(id=>id!==firstTungId);const wanted=Math.min(this.settings.tungs,this.players.size-1);while(tungIds.length<wanted&&candidates.length)tungIds.push(candidates.splice(crypto.randomInt(candidates.length),1)[0]);
     }
     this.seed = crypto.randomInt(0x7fffffff);
     this.phase = 'play';
@@ -501,6 +514,7 @@ class Room {
     this.timeLeft = this.settings.night;
     this.tick = 0;
     this.result = null;
+    this.sprays=[];this.kickVotes.clear();this.bots=[];
     this.manifestWaitSince = Date.now();
     this.manifestRequestedAt = 0;
 
@@ -521,6 +535,8 @@ class Room {
       p.motionSpeed = 0;
       p.swapCooldownUntil = 0;
     });
+    if(this.settings.tungs===0){const looks=['','tung-tralalero','tung-bombardiro'];for(let i=0;i<this.settings.botTungs;i++)this.bots.push({id:-1-i,name:`BOT TUNG ${i+1}`,look:{tung:looks[i%looks.length]},role:'tung',bot:true,color:PLAYER_COLORS[(order.length+i)%PLAYER_COLORS.length],x:1.5,y:1.5,a:0,flags:0,hidden:false,alive:true,carrying:-1,delivered:0,caught:0,spawnIdx:order.length+i,pathAt:0,targetCell:null,nextCell:null});}
+    const actors=this.publicRoster();
 
     this.broadcast({
       t: 'begin',
@@ -529,10 +545,7 @@ class Room {
       tung: firstTungId,
       tungs: tungIds,
       how,
-      players: order.map(p => ({
-        id: p.id, name: p.name, sigil: p.sigil, look: p.look, role: p.role,
-        color: PLAYER_COLORS[p.colorIdx], spawnIdx: p.spawnIdx,
-      })),
+      players: actors.map(p => ({...p,spawnIdx:this.players.get(p.id)?.spawnIdx??this.bots.find(b=>b.id===p.id)?.spawnIdx??0})),
     });
 
     this.lastTickAt = Date.now();
@@ -556,6 +569,8 @@ class Room {
       p[0] >= 0 && p[1] >= 0 && p[0] < m.hides.length && p[1] < m.hides.length);
     const paired = new Set(cleanPairs.flat());
     if (cleanPairs.length * 2 !== m.hides.length || paired.size !== m.hides.length) return reject();
+    const grid=Array.isArray(m.grid)&&m.grid.length===this.settings.mapN&&m.grid.every(row=>Array.isArray(row)&&row.length===this.settings.mapN&&row.every(cell=>cell===0||cell===1))?m.grid.map(row=>row.slice()):null;
+    if(this.bots.length&&!grid)return reject();
     const spawns = Array.isArray(m.spawns) ? m.spawns : [];
     const spawnById = new Map(spawns.filter(s => s && Number.isInteger(s.id)).map(s => [s.id, s]));
     if ([...this.players.keys()].some(id => !spawnById.has(id))) return reject();
@@ -568,9 +583,10 @@ class Room {
       hides: m.hides.map(p => [p[0], p[1]]),
       pairs: cleanPairs,
       surau: [m.surau[0], m.surau[1]],
+      grid,
     };
     for (const s of spawns) {
-      const p = this.players.get(s.id);
+      const p = this.players.get(s.id)||this.bots.find(bot=>bot.id===s.id);
       if (!p) continue; // disconnected between begin and manifest
       p.x = s.x; p.y = s.y; p.a = Number.isFinite(s.a) ? s.a : 0;
       p.lastMoveAt = Date.now();
@@ -618,6 +634,7 @@ class Room {
     this.tick++;
     this.timeLeft -= dt;
 
+    this.updateBots(dt);
     this.resolvePickups();
     this.resolveDeliveries();
     this.resolveCatches();
@@ -633,8 +650,13 @@ class Room {
     return [...this.players.values()].filter(p => p.role === 'survivor');
   }
   tungs() {
-    return [...this.players.values()].filter(p => p.role === 'tung');
+    return [...this.players.values()].filter(p => p.role === 'tung').concat(this.bots);
   }
+
+  botLos(bot,player){const grid=this.manifest?.grid;if(!grid)return false;const dx=player.x-bot.x,dy=player.y-bot.y,dist=Math.hypot(dx,dy);if(dist>9||Math.abs(((Math.atan2(dy,dx)-bot.a+Math.PI*3)%(Math.PI*2))-Math.PI)>Math.PI/3)return false;for(let d=.12;d<dist;d+=.12)if(grid[Math.floor(bot.y+dy*d/dist)]?.[Math.floor(bot.x+dx*d/dist)])return false;return true;}
+  randomOpenCell(){const grid=this.manifest?.grid;if(!grid)return[1,1];for(let tries=0;tries<100;tries++){const x=crypto.randomInt(grid.length),y=crypto.randomInt(grid.length);if(grid[y][x]===0)return[x,y];}return[1,1];}
+  nextPathCell(start,target){const grid=this.manifest?.grid;if(!grid)return null;const n=grid.length,key=(x,y)=>y*n+x,skey=key(start[0],start[1]),tkey=key(target[0],target[1]);if(skey===tkey)return target;const queue=[start],parent=new Map([[skey,-1]]),dirs=[[1,0],[-1,0],[0,1],[0,-1]];let qi=0;while(qi<queue.length){const [x,y]=queue[qi++];if(key(x,y)===tkey)break;for(const[dX,dY]of dirs){const nx=x+dX,ny=y+dY,k=key(nx,ny);if(nx<0||ny<0||nx>=n||ny>=n||grid[ny][nx]!==0||parent.has(k))continue;parent.set(k,key(x,y));queue.push([nx,ny]);}}if(!parent.has(tkey))return null;let walk=tkey,prev=parent.get(walk);while(prev!==skey&&prev!==-1){walk=prev;prev=parent.get(walk);}return[walk%n,Math.floor(walk/n)];}
+  updateBots(dt){if(!this.bots.length||!this.manifest?.grid)return;const now=Date.now(),survivors=this.survivors().filter(p=>p.alive);for(const bot of this.bots){if(!survivors.length)continue;const visible=survivors.filter(p=>!p.hidden&&this.botLos(bot,p)).sort((a,b)=>Math.hypot(a.x-bot.x,a.y-bot.y)-Math.hypot(b.x-bot.x,b.y-bot.y))[0];const heard=visible?null:survivors.filter(p=>!p.hidden&&((p.flags&FLAG_SPRINT)?Math.hypot(p.x-bot.x,p.y-bot.y)<7:(p.flags&FLAG_MOVING)&&Math.hypot(p.x-bot.x,p.y-bot.y)<3.2)).sort((a,b)=>Math.hypot(a.x-bot.x,a.y-bot.y)-Math.hypot(b.x-bot.x,b.y-bot.y))[0];const sensed=visible||heard;if(sensed)bot.targetCell=[Math.floor(sensed.x),Math.floor(sensed.y)];const current=[Math.floor(bot.x),Math.floor(bot.y)];if(!bot.targetCell||current[0]===bot.targetCell[0]&&current[1]===bot.targetCell[1])bot.targetCell=this.randomOpenCell();if(now>=bot.pathAt||!bot.nextCell){bot.nextCell=this.nextPathCell(current,bot.targetCell);bot.pathAt=now+350;}if(!bot.nextCell)continue;const tx=bot.nextCell[0]+.5,ty=bot.nextCell[1]+.5,dx=tx-bot.x,dy=ty-bot.y,dist=Math.hypot(dx,dy);if(dist<.08){bot.nextCell=null;continue;}const speed=visible?BOT_HUNT_SPEED:BOT_WANDER_SPEED,step=Math.min(dist,speed*dt);bot.x+=dx/dist*step;bot.y+=dy/dist*step;bot.a=Math.atan2(dy,dx);bot.flags=FLAG_MOVING|(visible?FLAG_SURGE:0);}}
 
   resolvePickups() {
     for (const p of this.survivors()) {
@@ -697,9 +719,8 @@ class Room {
   // not be able to read -- it is the whole point of the paired alcoves.
   snapshot(viewer) {
     const ps = [];
-    for (const p of this.players.values()) {
-      const concealed = p.hidden || !p.alive ||
-        (viewer && viewer.role === 'survivor' && !viewer.alive && p.id !== viewer.id);
+    for (const p of this.allActors()) {
+      const concealed = p.hidden || !p.alive;
       const carrying = !viewer || p.id === viewer.id || !p.hidden ? p.carrying : -1;
       const row = [p.id, p.flags | (p.hidden ? FLAG_HIDDEN : 0), p.alive ? 1 : 0, carrying];
       if (concealed) ps.push(row);
@@ -712,6 +733,7 @@ class Room {
       p: ps,
       it: this.items.map(it => viewer?.role === 'tung' && !this.settings.tungIntel
         ? [it.state, -1, 0, 0] : [it.state, it.carrier, round2(it.x), round2(it.y)]),
+      sp:this.sprays.map(mark=>({id:mark.id,x:round2(mark.x),y:round2(mark.y),a:round3(mark.a),by:mark.by})),
     };
   }
 
@@ -744,9 +766,9 @@ class Room {
       delivered,
       total: this.items.length,
       timeLeft: Math.max(0, round2(this.timeLeft)),
-      scores: [...this.players.values()].map(p => ({
+      scores: this.allActors().map(p => ({
         id: p.id, name: p.name, sigil: p.sigil, look: p.look, role: p.role, alive: p.alive,
-        delivered: p.delivered, caught: p.caught, color: PLAYER_COLORS[p.colorIdx],
+        delivered: p.delivered, caught: p.caught, color: p.color||PLAYER_COLORS[p.colorIdx],
       })),
     });
   }
@@ -756,6 +778,7 @@ class Room {
     this.stopTick();
     this.manifest = null;
     this.items = [];
+    this.bots=[];this.sprays=[];this.kickVotes.clear();
     for (const p of this.players.values()) {
       p.role = 'survivor'; p.alive = true; p.hidden = false;
       p.carrying = -1; p.vote = null;
@@ -885,7 +908,8 @@ function handle(session, msg) {
       const sprinting = wasSprinting ? me.motionSpeed > WALK_SPEED + 0.25 : me.motionSpeed > WALK_SPEED + 0.65;
       me.flags = (me.motionSpeed > 0.15 ? FLAG_MOVING : 0) |
         (sprinting ? FLAG_SPRINT : 0) |
-        (me.role === 'tung' && (msg.f & FLAG_SURGE) ? FLAG_SURGE : 0);
+        (me.role === 'tung' && (msg.f & FLAG_SURGE) ? FLAG_SURGE : 0) |
+        (msg.f&FLAG_EMOTE?FLAG_EMOTE:0)|(msg.f&FLAG_TAUNT?FLAG_TAUNT:0);
       // A hidden flag is only honoured next to an actual alcove. Everything
       // else about the position is trusted; this one is not, because "hidden"
       // means the relay stops telling anyone where you are.
@@ -930,6 +954,14 @@ function handle(session, msg) {
       // very information the paired alcoves exist to deny it.
       me.conn.send({ t: 'ev', e: 'swap', from, to, x: me.x, y: me.y });
       break;
+    }
+
+    case 'spray':{
+      if(room.phase!=='play'||!me.alive||me.hidden)break;const now=Date.now(),id=String(msg.id||'').replace(/[^a-z0-9-]/gi,'').slice(0,40);if(!/^(spray-|pass-\d+-spray)/.test(id)||now-(me.lastSprayAt||0)<1000||!Number.isFinite(msg.x)||!Number.isFinite(msg.y)||Math.hypot(msg.x-me.x,msg.y-me.y)>3.5)break;me.lastSprayAt=now;const mark={id,x:msg.x,y:msg.y,a:Number(msg.a)||0,by:me.id};room.sprays.push(mark);if(room.sprays.length>64)room.sprays.shift();room.broadcast({t:'ev',e:'spray',...mark});break;
+    }
+
+    case 'votekick':{
+      if(room.phase!=='play')break;const target=room.players.get(Number(msg.id));if(!target||target.id===me.id)break;let votes=room.kickVotes.get(target.id);if(!votes){votes=new Set();room.kickVotes.set(target.id,votes);}votes.add(me.id);const needed=Math.floor(room.players.size/2)+1,passed=votes.size>=needed;room.broadcast({t:'ev',e:'votekick',who:target.id,by:me.id,votes:votes.size,needed,passed});if(passed){target.conn.send({t:'ev',e:'kicked',m:'removed by lobby vote'});if(target.role==='tung')room.backToLobby();target.conn.close(1008);}break;
     }
 
     case 'chat': {
