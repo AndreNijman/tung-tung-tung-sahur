@@ -18,6 +18,10 @@ const relayArgIndex = process.argv.indexOf('--relay');
 const relayOverride = relayArgIndex >= 0 ? process.argv[relayArgIndex + 1] : null;
 const LIVE = !!urlArg;
 const URL = urlArg || `http://127.0.0.1:${PORT}/`;
+// Production serves an indexable SEO shell with the actual game in a
+// same-origin frame. Drive the inner document so the rest of this harness can
+// use the same Page-based input helpers as local testing.
+const GAME_URL = LIVE ? new URL('?_games_frame=1', URL).href : URL;
 
 async function waitForRelay() {
   for (let i = 0; i < 80; i++) {
@@ -75,7 +79,7 @@ async function moveTo(page, x, y, movingFlags = 1) {
       page.on('pageerror', e => problems.push(`${name} page error: ${e.message}`));
       page.on('console', m => { if (m.type() === 'error') problems.push(`${name} console: ${m.text()}`); });
       page.on('requestfailed', r => problems.push(`${name} request failed: ${r.url()}`));
-      await page.goto(URL);
+      await page.goto(GAME_URL);
       await page.click('#b-play-menu');
       await page.click('#b-mp');
       await page.fill('#i-name', name);
