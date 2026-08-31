@@ -93,6 +93,32 @@ async function play(page, seconds, keys = ['KeyW']) {
       catalogIntegrity.mythicShowpieces < 3 || !(catalogIntegrity.xp[1] - catalogIntegrity.xp[0] < catalogIntegrity.xp[2] - catalogIntegrity.xp[1])) {
     problems.push(`catalog/progression integrity failed: ${JSON.stringify(catalogIntegrity)}`);
   }
+  await page.getByRole('tab', { name: 'SAHUR PASS' }).click();
+  const passShopText = await page.locator('#shop-catalog').textContent();
+  if (passShopText.includes('Sahur Sovereign') || !passShopText.includes('???')) {
+    problems.push('locked level-100 Sahur reward was revealed in the item shop');
+  }
+  if (await page.locator('#shop-catalog button').filter({ hasText: /^BUY$/ }).count()) {
+    problems.push('Sahur Pass reward exposed a direct BUY action in the item shop');
+  }
+  const passEconomy = await page.evaluate(() => {
+    const sovereign = PASS_REWARDS.find(reward => reward.level === 100);
+    const beforeCoins = profile.coins;
+    const beforeOwned = profile.owned.includes(sovereign.id);
+    const directBuy = buyItem(sovereign);
+    const blocked = !directBuy && profile.coins === beforeCoins && profile.owned.includes(sovereign.id) === beforeOwned;
+    const strippedBeforeLevel100 = !normalizeProfile({...profile,pass:true,xp:xpForLevel(100)-1,owned:[...profile.owned,sovereign.id]}).owned.includes(sovereign.id);
+    const strippedWithoutPass = !normalizeProfile({...profile,pass:false,xp:xpForLevel(100),owned:[...profile.owned,sovereign.id]}).owned.includes(sovereign.id);
+    const snapshot = { pass:profile.pass, xp:profile.xp, passClaimed:profile.passClaimed, owned:[...profile.owned] };
+    profile.pass=true;profile.xp=xpForLevel(100);profile.passClaimed=99;grantPassRewards();
+    const progressionGrant=profile.owned.includes(sovereign.id);
+    profile.pass=snapshot.pass;profile.xp=snapshot.xp;profile.passClaimed=snapshot.passClaimed;profile.owned=snapshot.owned;
+    return { marked:sovereign.pass===true, blocked, strippedBeforeLevel100, strippedWithoutPass, progressionGrant };
+  });
+  if (!passEconomy.marked || !passEconomy.blocked || !passEconomy.strippedBeforeLevel100 ||
+      !passEconomy.strippedWithoutPass || !passEconomy.progressionGrant) {
+    problems.push(`Sahur Pass economy guard failed: ${JSON.stringify(passEconomy)}`);
+  }
   await page.click('#scr-shop .profile-back');
 
   await page.evaluate(() => {

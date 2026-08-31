@@ -2862,7 +2862,7 @@ const SHOP_BUNDLES = [
 let passStreetIndex = 0;
 const PASS_REWARDS = Array.from({ length: 100 }, (_, index) => {
   const level = index + 1;
-  if (level === 100) return cosmetic('pass-100-sahur-sovereign','tung','Sahur Sovereign',0,'mythic',{ level, character:'sovereign', secret:true });
+  if (level === 100) return cosmetic('pass-100-sahur-sovereign','tung','Sahur Sovereign',0,'mythic',{ level, character:'sovereign', secret:true, pass:true });
   if (level % 5 === 0) {
     const slots = ['shirt', 'hat', 'spray', 'back', 'emote'];
     const slot = slots[(level / 5 - 1) % slots.length];
@@ -2877,6 +2877,7 @@ const PASS_REWARDS = Array.from({ length: 100 }, (_, index) => {
   const coins = 35 + (level % 5) * 10;
   return { level, coins, name: `${coins} T-bucks`, rarity:level >= 75 ? 'epic' : level >= 30 ? 'rare' : 'common' };
 });
+const PASS_REWARD_LEVELS = new Map(PASS_REWARDS.filter(reward => reward.id).map(reward => [reward.id, reward.level]));
 const ACHIEVEMENTS = [
   ['first-three', 'III', 'Three for the street', 'easy', 'Collect or deliver 3 offerings', (p, c) => p.stats.offerings >= 3],
   ['first-win', 'W', 'First light', 'easy', 'Win a game', (p) => p.stats.wins >= 1],
@@ -2918,12 +2919,14 @@ function normalizeProfile(raw) {
   p.version = DEFAULT_PROFILE.version;
   p.coins = Math.max(0, Math.floor(Number(p.coins) || 0));
   p.xp = Math.max(0, Math.floor(Number(p.xp) || 0));
+  p.pass = p.pass === true;
   p.owned = [...new Set(Array.isArray(p.owned) ? p.owned.map(String).slice(0, 500) : DEFAULT_PROFILE.owned)];
+  const level = profileLevel(p.xp);
+  p.owned = p.owned.filter(id => !PASS_REWARD_LEVELS.has(id) || (p.pass && PASS_REWARD_LEVELS.get(id) <= level));
   p.achievements = [...new Set(Array.isArray(p.achievements) ? p.achievements.map(String) : [])];
   p.equipped = p.equipped && typeof p.equipped === 'object' ? p.equipped : {};
   p.stats = Object.assign({}, DEFAULT_PROFILE.stats, p.stats || {});
   for (const key of Object.keys(DEFAULT_PROFILE.stats)) p.stats[key] = Math.max(0, Number(p.stats[key]) || 0);
-  p.pass = p.pass === true;
   p.unlimited = p.unlimited === true;
   p.passClaimed = Math.max(0, Math.min(100, Math.floor(Number(p.passClaimed) || 0)));
   p.sigil = typeof p.sigil === 'string' ? p.sigil.slice(0, 40) : '';
@@ -3163,6 +3166,11 @@ function drawCosmeticIcon(canvas, item) {
   }
   g.strokeStyle=RARITY_META[item.rarity]?.color||'#34343d';g.lineWidth=2;g.strokeRect(1,1,w-2,h-2);
 }
+function drawMysteryRewardIcon(canvas) {
+  const g=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
+  g.fillStyle='#000';g.fillRect(0,0,w,h);g.fillStyle='#e0a040';
+  g.font=`bold ${Math.floor(Math.min(w,h)*.57)}px monospace`;g.textAlign='center';g.textBaseline='middle';g.fillText('?',w/2,h*.53);
+}
 function renderPass() {
   const level=profileLevel(profile.xp), list=$('pass-catalog'); list.replaceChildren();
   const next=level<100?xpForLevel(level+1):xpForLevel(100);
@@ -3172,7 +3180,7 @@ function renderPass() {
     const unlocked=profile.pass&&reward.level<=level, node=document.createElement('article');
     node.className=`pass-node rarity-${reward.rarity||'common'}${reward.level>level?' locked':''}${reward.secret&&!unlocked?' secret':''}`;
     const canvas=document.createElement('canvas');canvas.width=126;canvas.height=126;
-    if(reward.secret&&!unlocked){const g=canvas.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,126,126);g.fillStyle='#e0a040';g.font='bold 72px monospace';g.textAlign='center';g.fillText('?',63,90);}
+    if(reward.secret&&!unlocked)drawMysteryRewardIcon(canvas);
     else if(reward.coins){const g=canvas.getContext('2d');g.fillStyle='#050507';g.fillRect(0,0,126,126);g.fillStyle='#e0a040';g.beginPath();g.arc(63,62,34,0,Math.PI*2);g.fill();g.fillStyle='#3a2810';g.font='bold 34px monospace';g.textAlign='center';g.fillText('T',63,74);}
     else drawCosmeticIcon(canvas,reward);
     const h=document.createElement('h3');h.textContent=`LEVEL ${reward.level}`;const p=document.createElement('p');p.textContent=reward.secret&&!unlocked?'???':`${reward.name} · ${unlocked?'UNLOCKED':reward.level<=level?'BUY PASS TO CLAIM':'LOCKED'}`;
@@ -3180,8 +3188,12 @@ function renderPass() {
   }
 }
 function buyItem(item) {
-  if (profile.owned.includes(item.id) || !canAfford(item.price)) return;
+  // Pass rewards use a zero price because they are granted by progression, not sold.
+  // Only the explicit shop catalog is ever allowed through the T-bucks purchase path.
+  if (!SHOP_ITEMS.includes(item) || !Number.isFinite(item.price) || item.price <= 0 ||
+      profile.owned.includes(item.id) || !canAfford(item.price)) return false;
   spendCoins(item.price); profile.owned.push(item.id); saveProfile(); renderShop();
+  return true;
 }
 const SHOP_SECTIONS=[['player','PLAYER'],['tung','TUNG CHARACTERS'],['spray','SPRAYS'],['emote','EMOTES'],['background','STREETS'],['pass','SAHUR PASS'],['bundle','BUNDLES']];
 let shopSection='player',shopSelected=null,shopPreviewMode='icon';
@@ -3201,7 +3213,21 @@ function renderShop(){
   if(shopSection==='bundle'){
     for(const bundle of SHOP_BUNDLES){const owned=bundle.includes.every(id=>profile.owned.includes(id));const actions=document.createElement('div');actions.className='catalog-actions';actions.append(actionButton(owned?'OWNED':'BUY BUNDLE',()=>{if(owned||!canAfford(bundle.price))return;spendCoins(bundle.price);profile.owned.push(...bundle.includes);profile.owned=[...new Set(profile.owned)];saveProfile();renderShop();},owned||!canAfford(bundle.price)));const card=catalogCard(bundle.name,`${bundle.includes.length} items · ${bundle.price.toLocaleString()} T-bucks`,actions,bundle);list.appendChild(card);}renderShopPreview();return;
   }
-  let previous='';for(const item of items){if(shopSection==='player'&&item.slot!==previous){previous=item.slot;const head=document.createElement('div');head.className='section-heading';head.textContent=item.slot.replace(/([A-Z])/g,' $1').toUpperCase();list.appendChild(head);}const owned=profile.owned.includes(item.id),actions=document.createElement('div');actions.className='catalog-actions';actions.append(actionButton('PREVIEW',()=>setShopSelected(item)));if(item.pass)actions.append(actionButton(profile.owned.includes(item.id)?'OWNED':'SAHUR PASS',()=>{renderPass();navigateScreen('scr-pass');},profile.owned.includes(item.id)));else actions.append(actionButton(owned?'OWNED':'BUY',()=>buyItem(item),owned||!canAfford(item.price)));const desc=item.pass?`SAHUR PASS · LEVEL ${item.level}`:`${item.slot.toUpperCase()} · ${item.price.toLocaleString()} T-bucks`;const card=catalogCard(item.name,desc,actions,item);card.classList.add('wardrobe-item');const icon=document.createElement('canvas');icon.width=72;icon.height=88;drawCosmeticIcon(icon,item);card.prepend(icon);list.appendChild(card);}
+  let previous='';
+  for(const item of items){
+    if(shopSection==='player'&&item.slot!==previous){previous=item.slot;const head=document.createElement('div');head.className='section-heading';head.textContent=item.slot.replace(/([A-Z])/g,' $1').toUpperCase();list.appendChild(head);}
+    const owned=profile.owned.includes(item.id),passReward=PASS_REWARDS.includes(item);
+    const concealed=passReward&&item.secret&&!(profile.pass&&item.level<=profileLevel(profile.xp));
+    const actions=document.createElement('div');actions.className='catalog-actions';
+    actions.append(actionButton('PREVIEW',()=>setShopSelected(item),concealed));
+    if(passReward)actions.append(actionButton(owned?'OWNED':'SAHUR PASS',()=>{renderPass();navigateScreen('scr-pass');},owned));
+    else actions.append(actionButton(owned?'OWNED':'BUY',()=>buyItem(item),owned||!canAfford(item.price)));
+    const desc=passReward?`SAHUR PASS · LEVEL ${item.level}`:`${item.slot.toUpperCase()} · ${item.price.toLocaleString()} T-bucks`;
+    const card=catalogCard(concealed?'???':item.name,desc,actions,item);card.classList.add('wardrobe-item');
+    const icon=document.createElement('canvas');icon.width=72;icon.height=88;
+    if(concealed)drawMysteryRewardIcon(icon);else drawCosmeticIcon(icon,item);
+    card.prepend(icon);list.appendChild(card);
+  }
   if(!shopSelected&&items.length)shopSelected=items[0];renderShopPreview();
 }
 function setShopPreviewMode(mode){shopPreviewMode=mode;$('b-shop-icon').classList.toggle('sel',mode==='icon');$('b-shop-wearer').classList.toggle('sel',mode==='wearer');renderShopPreview();}
