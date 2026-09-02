@@ -154,7 +154,7 @@ async function play(page, seconds, keys = ['KeyW']) {
   await page.click('#b-play-menu');
   await page.click('#b-solo');
   await page.waitForSelector('#scr-solo.on');
-  await page.locator('#solo-settings select').nth(9).selectOption('true');
+  await page.locator('#solo-settings select').nth(8).selectOption('true');
   await page.click('#b-solo-start');
   await page.waitForTimeout(300);
   if ((await page.evaluate(() => game.state)) !== 'play') problems.push('Play Alone did not start');

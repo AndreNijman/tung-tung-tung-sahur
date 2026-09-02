@@ -2,6 +2,7 @@ const CATCH_DIST = 0.52;
 const PICKUP_DIST = 0.62;
 const SURAU_DIST = 0.9;
 const HIDE_DIST = 0.85;
+const HIDE_REQUEST_DIST = 1.05;
 const MAX_SPEED = 3.85;
 const WALK_SPEED = 2.2;
 const MOVE_BURST = 1.0;
@@ -32,7 +33,6 @@ const DEFAULT_SETTINGS = {
   night: 300,
   torch: 125,
   stamina: 'medium',
-  tungIntel: false,
   tungs: 1,
   botTungs: 1,
   tracks: 'normal',
@@ -66,7 +66,6 @@ function clampSettings(raw) {
   if (['veryLow', 'low', 'medium', 'high', 'veryHigh', 'infinite'].includes(raw.stamina)) {
     settings.stamina = raw.stamina;
   }
-  if (typeof raw.tungIntel === 'boolean') settings.tungIntel = raw.tungIntel;
   if (Number.isFinite(raw.tungs)) settings.tungs = Math.max(0, Math.min(3, Math.round(raw.tungs)));
   if (Number.isFinite(raw.botTungs)) settings.botTungs = Math.max(1, Math.min(3, Math.round(raw.botTungs)));
   if (['off', 'faint', 'normal', 'strong'].includes(raw.tracks)) {
@@ -648,6 +647,10 @@ export class Room {
         this.handleInput(me, message);
         break;
 
+      case 'hide':
+        this.handleHide(me, message);
+        break;
+
       case 'swap':
         this.handleSwap(me);
         break;
@@ -1184,7 +1187,8 @@ export class Room {
     const players = [];
     for (const player of this.allActors()) {
       const concealed = player.hidden || !player.alive;
-      const carrying = !viewer || player.id === viewer.id || !player.hidden ? player.carrying : -1;
+      const carrying = viewer?.role === 'tung' && player.role === 'survivor'
+        ? -1 : (!viewer || player.id === viewer.id || !player.hidden ? player.carrying : -1);
       const row = [
         player.id,
         player.flags | (player.hidden ? FLAG_HIDDEN : 0),
@@ -1198,7 +1202,7 @@ export class Room {
       k: this.tick,
       tl: Math.max(0, round2(this.timeLeft)),
       p: players,
-      it: this.items.map(item => viewer?.role === 'tung' && !this.settings.tungIntel
+      it: this.items.map(item => viewer?.role === 'tung'
         ? [item.state, -1, 0, 0] : [item.state, item.carrier, round2(item.x), round2(item.y)]),
       sp:this.sprays.map(mark=>({id:mark.id,x:round2(mark.x),y:round2(mark.y),a:round3(mark.a),by:mark.by})),
     };
@@ -1303,13 +1307,48 @@ export class Room {
       (player.role === 'tung' && (message.f & FLAG_SURGE) ? FLAG_SURGE : 0) |
       (message.f&FLAG_EMOTE?FLAG_EMOTE:0)|(message.f&FLAG_TAUNT?FLAG_TAUNT:0);
 
-    let hidden = !!(message.f & FLAG_HIDDEN) && player.role === 'survivor';
-    if (hidden && this.manifest) {
-      hidden = this.manifest.hides.some(hide =>
-        (hide[0] - player.x) ** 2 + (hide[1] - player.y) ** 2 < HIDE_DIST ** 2);
+    // Versioned clients use handleHide() so the relay can acknowledge the
+    // exact moment hiding becomes authoritative. Retain flags for cached
+    // clients that predate the action protocol.
+    if (message.hv !== 1) {
+      let hidden = !!(message.f & FLAG_HIDDEN) && player.role === 'survivor';
+      if (hidden && this.manifest) {
+        hidden = this.manifest.hides.some(hide =>
+          (hide[0] - player.x) ** 2 + (hide[1] - player.y) ** 2 < HIDE_DIST ** 2);
+      }
+      player.hidden = hidden;
     }
-    player.hidden = hidden;
     player.lastInput = now;
+  }
+
+  handleHide(player, message) {
+    if (this.phase !== 'play' || !player.alive || player.role !== 'survivor' || !this.manifest) {
+      this.send(player.socket, { t: 'ev', e: 'hide-no' });
+      return;
+    }
+    if (message.on === false) {
+      player.hidden = false;
+      this.send(player.socket, { t: 'ev', e: 'hide', on: false });
+      return;
+    }
+    const index = Number(message.i);
+    const hide = Number.isInteger(index) ? this.manifest.hides[index] : null;
+    if (!hide || (hide[0] - player.x) ** 2 + (hide[1] - player.y) ** 2 > HIDE_REQUEST_DIST ** 2) {
+      this.send(player.socket, { t: 'ev', e: 'hide-no' });
+      return;
+    }
+    const now = Date.now();
+    player.x = hide[0];
+    player.y = hide[1];
+    player.hidden = true;
+    player.flags &= ~(FLAG_MOVING | FLAG_SPRINT);
+    player.motionSpeed = 0;
+    player.moveTokens = 0;
+    player.lastMoveAt = now;
+    player.lastInput = now;
+    this.send(player.socket, {
+      t: 'ev', e: 'hide', on: true, i: index, x: player.x, y: player.y,
+    });
   }
 
   handleSwap(player) {

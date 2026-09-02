@@ -662,7 +662,6 @@ const DEFAULT_SETTINGS = {
   night: NIGHT_SECONDS,
   torch: TORCH_SECONDS,
   stamina: 'medium',
-  tungIntel: false,
   tungs: 1,
   botTungs: 1,
   tracks: 'normal',
@@ -688,7 +687,6 @@ function clampGameSettings(raw) {
   if (Number.isFinite(raw.night)) s.night = Math.max(60, Math.min(900, Math.round(raw.night)));
   if (Number.isFinite(raw.torch)) s.torch = raw.torch === 0 ? 0 : Math.max(20, Math.min(1800, Math.round(raw.torch)));
   if (STAMINA_PRESETS[raw.stamina] !== undefined) s.stamina = raw.stamina;
-  if (typeof raw.tungIntel === 'boolean') s.tungIntel = raw.tungIntel;
   if (Number.isFinite(raw.tungs)) s.tungs = Math.max(0, Math.min(3, Math.round(raw.tungs)));
   if (Number.isFinite(raw.botTungs)) s.botTungs = Math.max(1, Math.min(3, Math.round(raw.botTungs)));
   if (TRACK_PRESETS[raw.tracks]) s.tracks = raw.tracks;
@@ -1452,7 +1450,6 @@ class Game {
     this.batteryDrain = this.infiniteTorch ? 0 : 1 / Math.max(1, o.torch);
     this.staminaDrain = STAMINA_DRAIN * STAMINA_PRESETS[o.stamina];
     this.infiniteStamina = o.stamina === 'infinite';
-    this.tungIntel = o.tungIntel;
     this.speedrun = o.speedrun === true;
     this.mode = o.mode || 'solo';
     this.role = o.role || 'survivor';
@@ -1530,6 +1527,9 @@ class Game {
     this.swapCooldown = 0;
     this.swapTransit = 0;
     this.swapPending = false;
+    this.hidePending = false;
+    this.hidePendingT = 0;
+    this.swapAfterHide = false;
 
     this.cstate = 'wander'; this.prevCstate = 'wander';
     this.alert = 0.0; this.lastKnown = null; this.lostT = 0.0; this.hideT = 0.0;
@@ -1624,13 +1624,23 @@ class Game {
     this.nearHide = bd < HIDE_DIST ** 2;
   }
   toggleHide() {
-    if (this.role === 'tung') return;
+    if (this.role === 'tung' || this.hidePending) return;
     if (this.hidden) {
       if (this.swapTransit > 0) return;   // you are mid-crawl; finish it
       this.hidden = false;
       this.hideIdx = -1;
+      if (this.mode === 'mp' && this.net) this.net.send({ t: 'hide', on: false });
       audio.playSimple('hidefx', 0.5);
     } else if (this.nearHide) {
+      if (this.mode === 'mp') {
+        if (!this.net) return;
+        this.hidePending = true;
+        this.hidePendingT = 1.5;
+        this.isMoving = false;
+        this.isSprinting = false;
+        this.net.send({ t: 'hide', i: this.nearHideIdx });
+        return;
+      }
       this.hidden = true;
       this.runStats.hides++;
       this.hideIdx = this.nearHideIdx;
@@ -1690,6 +1700,10 @@ class Game {
       pairOf(this.hidePairs, this.hideIdx) >= 0;
   }
   requestSwap() {
+    if (this.hidePending) {
+      this.swapAfterHide = true;
+      return true;
+    }
     if (!this.canSwap()) return false;
     this.swapTransit = SWAP_TRANSIT;
     audio.playSimple('hidefx', 0.45);
@@ -1846,6 +1860,18 @@ class Game {
     this.panicking = this.composure < PANIC_THRESHOLD;
     this.updateNearestHide();
     this.updateSwap(dt);
+
+    if (this.hidePending) {
+      this.hidePendingT = Math.max(0, this.hidePendingT - dt);
+      this.isMoving = false; this.isSprinting = false;
+      if (this.hidePendingT === 0) {
+        this.hidePending = false;
+        this.swapAfterHide = false;
+        showEventBanner('The alcove did not answer');
+      }
+      this.mpThreat(dt);
+      return;
+    }
 
     if (this.hidden) {
       this.isMoving = false; this.isSprinting = false;
@@ -2361,7 +2387,8 @@ class Game {
       return out;
     }
     const out = [];
-    if (this.role !== 'tung' || this.tungIntel) {
+    const tungView = this.role === 'tung' || (!this.alive && this.spectateRole === 'tung');
+    if (!tungView) {
       for (let i = 0; i < this.itemState.length; i++) {
         const s = this.itemState[i];
         if (!s || s[0] !== 0) continue;              // carried or already home
@@ -2411,7 +2438,8 @@ class Game {
           : (hunting ? (away ? SPR.creatureHuntBack : SPR.creatureHunt) : (away ? SPR.creatureBack : SPR.creature));
       } else if (s.kind === 'player') {
         const away = Math.abs(angDiff(s.r.a || 0, Math.atan2(this.py - s.y, this.px - s.x))) > VIEW_CONE;
-        src = getSurvivorSprite(s.r, s.r.carrying >= 0, away);
+        const tungView = this.role === 'tung' || (!this.alive && this.spectateRole === 'tung');
+        src = getSurvivorSprite(s.r, !tungView && s.r.carrying >= 0, away);
       } else if(s.kind==='spray')src=getSpraySprite(s.mark.id);
       else if (s.kind === 'hide') src = SPR.hide;
       else if (s.kind === 'surau') src = SPR.surau;
@@ -2425,9 +2453,10 @@ class Game {
 
       // alcoves and the surau stay faintly lit so they can be found in the dark
       let emissive = s.kind === 'hide' ? 0.45 : (s.kind === 'surau' ? 0.7 : (s.kind === 'spray' ? 0.38 : 0.0));
-      // A carried offering is a lamp in someone's fist. It is the cost of
-      // being the one who fetches: the Tung can see you coming.
-      if (s.kind === 'player' && s.r.carrying >= 0) emissive = 0.75;
+      // Teammates can read a carried offering as a lamp in the runner's hand,
+      // but Tung viewpoints never receive that objective cue.
+      const tungView = this.role === 'tung' || (!this.alive && this.spectateRole === 'tung');
+      if (s.kind === 'player' && !tungView && s.r.carrying >= 0) emissive = 0.75;
       let b = Math.max(0, 1.0 - ty / vis.dark) * (0.3 + 0.7 * light);
       b = Math.max(emissive || 0.06, Math.min(1.0, b + emissive * 0.5));
 
@@ -2611,12 +2640,17 @@ function drawHudMp(ctx, game) {
   bar(ctx, WIN_W - bw - 24, 98, bw, 12, game.composure, nerveCol, 'NERVE');
 
   if (game.carrying >= 0) {
-    drawText(ctx, 'CARRYING AN OFFERING — IT CAN SEE THE LIGHT', WIN_W / 2, 46, AMBER,
+    drawText(ctx, 'CARRYING AN OFFERING — GET IT BACK TO THE SURAU', WIN_W / 2, 46, AMBER,
              { center: true, font: 'bold 14px monospace' });
     if (!game.hidden) drawCompass(ctx, game, game.surau[0], game.surau[1], 'SURAU', AMBER, 96);
   }
 
-  if (game.hidden) {
+  if (game.hidePending) {
+    drawText(ctx, 'ENTERING ALCOVE', WIN_W / 2, WIN_H - 96, COOL,
+             { center: true, font: 'bold 24px monospace' });
+    drawText(ctx, 'waiting for the door to close', WIN_W / 2, WIN_H - 62, INK_DIM,
+             { center: true, font: '14px monospace' });
+  } else if (game.hidden) {
     drawText(ctx, game.swapTransit > 0 ? 'SLIPPING THROUGH' : 'HIDDEN', WIN_W / 2, WIN_H - 96, COOL,
              { center: true, font: 'bold 24px monospace' });
     let hint;
@@ -3348,7 +3382,6 @@ const SETTING_DEFS = [
   ['night', 'NIGHT TIMER', [[120, '2 minutes'], [180, '3 minutes'], [240, '4 minutes'], [300, '5 minutes'], [420, '7 minutes'], [600, '10 minutes'], [900, '15 minutes']]],
   ['torch', 'TORCH', [[30, '30 seconds'], [60, '1 minute'], [90, '1.5 minutes'], [125, '2 minutes'], [180, '3 minutes'], [300, '5 minutes'], [600, '10 minutes'], [900, '15 minutes'], [1800, '30 minutes'], [0, 'infinite - no battery bar']]],
   ['stamina', 'STAMINA', [['veryLow', 'very low'], ['low', 'low'], ['medium', 'medium'], ['high', 'high'], ['veryHigh', 'very high'], ['infinite', 'infinite - no stamina bar']]],
-  ['tungIntel', 'TUNG OBJECTIVES', [[false, 'hidden (balanced)'], [true, 'visible']]],
   ['tungs', 'PLAYER TUNGS', [[0, '0 - use bot Tungs'], [1, '1'], [2, 'up to 2'], [3, 'up to 3']]],
   ['botTungs', 'BOT TUNGS', [[1, '1 bot'], [2, '2 bots'], [3, '3 bots']]],
   ['tracks', 'TUNG TRACKS', [['off', 'off'], ['faint', 'faint / delayed'], ['normal', 'balanced'], ['strong', 'strong / recent']]],
@@ -3743,7 +3776,13 @@ class Net {
       }
       if (id === this.you) {
         game.carrying = carrying; game.alive = alive;
+        if (!game.hidePending && game.hidden !== p.hidden) {
+          game.hidden = p.hidden;
+          if (!p.hidden) game.hideIdx = -1;
+        }
         if (wasAlive && !alive) {
+          game.hidePending = false;
+          game.swapAfterHide = false;
           caughtTimer = 0;
           audio.playSimple('scare', 1.0);
         }
@@ -3777,6 +3816,37 @@ class Net {
       if(msg.passed)showEventBanner(`${playerName(this.players.get(msg.who))} was voted out`,2600);
     } else if (msg.e === 'kicked') {
       this.lastError = msg.m || 'removed by Dev Andre';
+    } else if (msg.e === 'hide') {
+      game.hidePending = false;
+      game.hidePendingT = 0;
+      if (msg.on) {
+        game.hidden = true;
+        game.hideIdx = Number.isInteger(msg.i) ? msg.i : game.nearHideIdx;
+        if (Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
+          game.px = msg.x; game.py = msg.y;
+        } else if (game.hides[game.hideIdx]) {
+          game.px = game.hides[game.hideIdx][0]; game.py = game.hides[game.hideIdx][1];
+        }
+        game.hideT = 0;
+        game.runStats.hides++;
+        game.updateNearestHide();
+        audio.playSimple('hidefx', 0.6);
+        if (game.swapAfterHide) {
+          game.swapAfterHide = false;
+          game.requestSwap();
+        }
+      } else {
+        game.hidden = false;
+        game.hideIdx = -1;
+        game.swapAfterHide = false;
+      }
+    } else if (msg.e === 'hide-no') {
+      game.hidePending = false;
+      game.hidePendingT = 0;
+      game.swapAfterHide = false;
+      game.hidden = false;
+      game.hideIdx = -1;
+      showEventBanner('Too far from the alcove');
     } else if (msg.e === 'swap') {
       game.swapPending = false;
       game.swapCooldown = SWAP_COOLDOWN;
@@ -3857,7 +3927,7 @@ class Net {
     let flags = (game.isMoving ? 1 : 0) | (game.isSprinting ? 2 : 0) | (game.hidden ? 4 : 0);
     if (game.surge > 0) flags |= 32;
     if(game.emoteTime>0)flags|=game.performanceKind==='taunt'?128:64;
-    this.send({ t: 'in', x: game.px, y: game.py, a: game.angle, f: flags });
+    this.send({ t: 'in', x: game.px, y: game.py, a: game.angle, f: flags, hv: 1 });
   }
 
   get(id) { return this.players.get(id) || null; }

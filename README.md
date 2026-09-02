@@ -76,9 +76,10 @@ player Tungs to zero makes every human a runner and adds one to three
 authoritative relay-controlled Tungs.
 
 The host controls the map size, number of lanterns, night timer, torch duration
-(including infinite), runner stamina, whether Tungs can see objectives, the
-number of player and bot Tungs, how clearly Tungs can read tracks, and the
-optional speedrun timer. During a running match, the pause window exposes a
+(including infinite), runner stamina, the number of player and bot Tungs, how
+clearly Tungs can read tracks, and the optional speedrun timer. Lanterns, their
+carriers, and the surau are always hidden from Tung viewpoints. During a running
+match, the pause window exposes a
 vote-kick ballot. A strict majority of all human players is required; removing
 the player Tung resets the night to the lobby.
 

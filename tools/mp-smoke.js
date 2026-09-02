@@ -169,19 +169,19 @@ async function moveTo(page, x, y, movingFlags = 1) {
     // Host-controlled settings, including the three requested lobby dials.
     for (const [index, value, key] of [
       [0, '15', 'mapN'], [1, '2', 'lanterns'], [2, '120', 'night'],
-      [3, '0', 'torch'], [4, 'high', 'stamina'], [5, 'false', 'tungIntel'], [6, '1', 'tungs'], [7, '1', 'botTungs'],
-      [8, 'normal', 'tracks'], [9, 'true', 'speedrun'],
+      [3, '0', 'torch'], [4, 'high', 'stamina'], [5, '1', 'tungs'], [6, '1', 'botTungs'],
+      [7, 'normal', 'tracks'], [8, 'true', 'speedrun'],
     ]) {
       await host.locator('#lobby-settings select').nth(index).selectOption(value);
       await host.waitForFunction(([key, value]) => String(net.settings[key]) === value, [key, value]);
     }
     await guests[0].waitForFunction(() => net.settings.mapN === 15 && net.settings.lanterns === 2 &&
-      net.settings.night === 120 && net.settings.torch === 0 && net.settings.stamina === 'high' && !net.settings.tungIntel);
-    await host.locator('#lobby-settings select').nth(6).selectOption('3');
+      net.settings.night === 120 && net.settings.torch === 0 && net.settings.stamina === 'high');
+    await host.locator('#lobby-settings select').nth(5).selectOption('3');
     await guests[0].waitForFunction(() => net.settings.tungs === 3);
-    await host.locator('#lobby-settings select').nth(6).selectOption('1');
+    await host.locator('#lobby-settings select').nth(5).selectOption('1');
     await guests[0].waitForFunction(() => net.settings.tungs === 1);
-    console.log('  settings: 15x15, 2 lanterns, 2:00, infinite torch, high stamina, hidden objectives, speedrun timer');
+    console.log('  settings: 15x15, 2 lanterns, 2:00, infinite torch, high stamina, speedrun timer');
 
     // Everyone votes for the host, making role selection deterministic while
     // exercising the normal vote buttons in all five pages.
@@ -220,6 +220,15 @@ async function moveTo(page, x, y, movingFlags = 1) {
     if (!initial.alive || initial.count !== 2 || initial.time > 120 || initial.time < 115) {
       problems.push(`match did not start cleanly: ${JSON.stringify(initial)}`);
     }
+    const tungObjectives = await host.evaluate(() => ({
+      kinds: game.spriteList().map(sprite => sprite.kind),
+      items: game.itemState.map(item => item && item.slice()),
+      hasSetting: Object.prototype.hasOwnProperty.call(net.settings, 'tungIntel'),
+    }));
+    if (tungObjectives.hasSetting || tungObjectives.kinds.includes('item') || tungObjectives.kinds.includes('surau') ||
+        tungObjectives.items.some(item => item && (item[1] !== -1 || item[2] !== 0 || item[3] !== 0))) {
+      problems.push(`Tung received objective visibility: ${JSON.stringify(tungObjectives)}`);
+    }
     console.log(`  roles: ${roles.join(', ')}`);
 
     const survivor = guests[0];
@@ -238,6 +247,15 @@ async function moveTo(page, x, y, movingFlags = 1) {
     });
     await moveTo(survivor, item.x, item.y, 3);
     await survivor.waitForFunction((i) => game.carrying === i, item.i);
+    await host.waitForTimeout(150);
+    const tungCarryIntel = await host.evaluate((id) => ({
+      carrying: net.get(id)?.carrying,
+      item: game.itemState.find(state => state && state[0] === 1),
+    }), survivorId);
+    if (tungCarryIntel.carrying !== -1 || !tungCarryIntel.item || tungCarryIntel.item[1] !== -1 ||
+        tungCarryIntel.item[2] !== 0 || tungCarryIntel.item[3] !== 0) {
+      problems.push(`Tung saw a carried lantern: ${JSON.stringify(tungCarryIntel)}`);
+    }
     const surau = await survivor.evaluate(() => [...game.surau]);
     await moveTo(survivor, surau[0], surau[1], 3);
     await survivor.waitForFunction((i) => game.carrying === -1 && game.itemState[i][0] === 2, item.i);
@@ -257,8 +275,8 @@ async function moveTo(page, x, y, movingFlags = 1) {
     // the only client that learns the destination.
     const hide = await survivor.evaluate(() => ({ p: [...game.hides[0]], to: pairOf(game.hidePairs, 0) }));
     await moveTo(survivor, hide.p[0], hide.p[1], 1);
-    // Press the panic sequence back-to-back. The client must send FLAG_HIDDEN
-    // before the swap request rather than relying on the next 20 Hz input tick.
+    // Press the panic sequence back-to-back. The client queues the swap until
+    // the relay has acknowledged that the alcove door is closed.
     await survivor.keyboard.press('KeyE');
     await survivor.keyboard.press('KeyQ');
     await host.waitForFunction((id) => net.get(id).hidden, survivorId);
@@ -374,8 +392,8 @@ async function moveTo(page, x, y, movingFlags = 1) {
       }));
       throw new Error(`BotGuest failed to join ${botCode}: ${JSON.stringify(state)}; relay=${relayErr.trim() || 'no stderr'}; ${error.message}`);
     }
-    await botHost.locator('#lobby-settings select').nth(6).selectOption('0');
-    await botHost.locator('#lobby-settings select').nth(7).selectOption('2');
+    await botHost.locator('#lobby-settings select').nth(5).selectOption('0');
+    await botHost.locator('#lobby-settings select').nth(6).selectOption('2');
     await botGuest.waitForFunction(() => net.settings.tungs === 0 && net.settings.botTungs === 2);
     await botHost.click('#b-start');
     await Promise.all([botHost, botGuest].map(page => page.waitForFunction(() => game.state === 'play' && [...net.players.values()].filter(p => p.bot).length === 2)));

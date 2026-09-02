@@ -50,7 +50,7 @@ const path = require('path');
 // ---------------------------------------------------------------------------
 // constants shared with index.html
 //
-// These five have to agree with the client or the relay will resolve pickups
+// These values have to agree with the client or the relay will resolve pickups
 // and catches at distances that do not match what the player sees. They are
 // intentionally the *only* game numbers on this side of the wire.
 // ---------------------------------------------------------------------------
@@ -58,6 +58,7 @@ const CATCH_DIST = 0.52;      // index.html: CATCH_DIST_MP
 const PICKUP_DIST = 0.62;     // index.html: PICKUP_DIST
 const SURAU_DIST = 0.9;       // index.html: SURAU_DIST_MP
 const HIDE_DIST = 0.85;       // index.html: HIDE_DIST (+ slack for latency)
+const HIDE_REQUEST_DIST = 1.05; // entry slack for the relay's last accepted position
 const MAX_SPEED = 3.85;       // index.html: TUNG_SURGE_SPEED
 const WALK_SPEED = 2.2;       // index.html: WALK_SPEED
 const MOVE_BURST = 1.0;       // one small latency/reconciliation burst
@@ -86,7 +87,6 @@ const DEFAULT_SETTINGS = {
   night: 300,      // seconds on the clock
   torch: 125,      // seconds of torch battery; 0 is infinite
   stamina: 'medium',
-  tungIntel: false,
   tungs: 1,
   botTungs: 1,
   tracks: 'normal',// footprint visibility for the tung: off|faint|normal|strong
@@ -105,7 +105,6 @@ function clampSettings(raw) {
   if (Number.isFinite(raw.night)) s.night = Math.max(60, Math.min(900, Math.round(raw.night)));
   if (Number.isFinite(raw.torch)) s.torch = raw.torch === 0 ? 0 : Math.max(20, Math.min(1800, Math.round(raw.torch)));
   if (['veryLow', 'low', 'medium', 'high', 'veryHigh', 'infinite'].includes(raw.stamina)) s.stamina = raw.stamina;
-  if (typeof raw.tungIntel === 'boolean') s.tungIntel = raw.tungIntel;
   if (Number.isFinite(raw.tungs)) s.tungs = Math.max(0, Math.min(3, Math.round(raw.tungs)));
   if (Number.isFinite(raw.botTungs)) s.botTungs = Math.max(1, Math.min(3, Math.round(raw.botTungs)));
   if (['off', 'faint', 'normal', 'strong'].includes(raw.tracks)) s.tracks = raw.tracks;
@@ -714,6 +713,33 @@ class Room {
     p.carrying = -1;
   }
 
+  requestHide(p, msg) {
+    if (this.phase !== 'play' || !p.alive || p.role !== 'survivor' || !this.manifest) {
+      p.conn.send({ t: 'ev', e: 'hide-no' });
+      return;
+    }
+    if (msg.on === false) {
+      p.hidden = false;
+      p.conn.send({ t: 'ev', e: 'hide', on: false });
+      return;
+    }
+    const idx = Number(msg.i);
+    const hide = Number.isInteger(idx) ? this.manifest.hides[idx] : null;
+    if (!hide || (hide[0] - p.x) ** 2 + (hide[1] - p.y) ** 2 > HIDE_REQUEST_DIST ** 2) {
+      p.conn.send({ t: 'ev', e: 'hide-no' });
+      return;
+    }
+    const now = Date.now();
+    p.x = hide[0]; p.y = hide[1];
+    p.hidden = true;
+    p.flags &= ~(FLAG_MOVING | FLAG_SPRINT);
+    p.motionSpeed = 0;
+    p.moveTokens = 0;
+    p.lastMoveAt = now;
+    p.lastInput = now;
+    p.conn.send({ t: 'ev', e: 'hide', on: true, i: idx, x: p.x, y: p.y });
+  }
+
   // The snapshot deliberately omits x/y/a for a hidden player. Which alcove
   // someone is inside is the one piece of state a modified tung client must
   // not be able to read -- it is the whole point of the paired alcoves.
@@ -721,7 +747,8 @@ class Room {
     const ps = [];
     for (const p of this.allActors()) {
       const concealed = p.hidden || !p.alive;
-      const carrying = !viewer || p.id === viewer.id || !p.hidden ? p.carrying : -1;
+      const carrying = viewer?.role === 'tung' && p.role === 'survivor'
+        ? -1 : (!viewer || p.id === viewer.id || !p.hidden ? p.carrying : -1);
       const row = [p.id, p.flags | (p.hidden ? FLAG_HIDDEN : 0), p.alive ? 1 : 0, carrying];
       if (concealed) ps.push(row);
       else ps.push(row.concat([round2(p.x), round2(p.y), round3(p.a)]));
@@ -731,7 +758,7 @@ class Room {
       k: this.tick,
       tl: Math.max(0, round2(this.timeLeft)),
       p: ps,
-      it: this.items.map(it => viewer?.role === 'tung' && !this.settings.tungIntel
+      it: this.items.map(it => viewer?.role === 'tung'
         ? [it.state, -1, 0, 0] : [it.state, it.carrier, round2(it.x), round2(it.y)]),
       sp:this.sprays.map(mark=>({id:mark.id,x:round2(mark.x),y:round2(mark.y),a:round3(mark.a),by:mark.by})),
     };
@@ -910,16 +937,23 @@ function handle(session, msg) {
         (sprinting ? FLAG_SPRINT : 0) |
         (me.role === 'tung' && (msg.f & FLAG_SURGE) ? FLAG_SURGE : 0) |
         (msg.f&FLAG_EMOTE?FLAG_EMOTE:0)|(msg.f&FLAG_TAUNT?FLAG_TAUNT:0);
-      // A hidden flag is only honoured next to an actual alcove. Everything
-      // else about the position is trusted; this one is not, because "hidden"
-      // means the relay stops telling anyone where you are.
-      let hidden = !!(msg.f & FLAG_HIDDEN) && me.role === 'survivor';
-      if (hidden && room.manifest) {
-        hidden = room.manifest.hides.some(h =>
-          (h[0] - me.x) ** 2 + (h[1] - me.y) ** 2 < HIDE_DIST ** 2);
+      // New clients enter and leave alcoves through an acknowledged action so
+      // the relay and player's screen cannot disagree. Keep flag handling for
+      // cached legacy clients until they have refreshed.
+      if (msg.hv !== 1) {
+        let hidden = !!(msg.f & FLAG_HIDDEN) && me.role === 'survivor';
+        if (hidden && room.manifest) {
+          hidden = room.manifest.hides.some(h =>
+            (h[0] - me.x) ** 2 + (h[1] - me.y) ** 2 < HIDE_DIST ** 2);
+        }
+        me.hidden = hidden;
       }
-      me.hidden = hidden;
       me.lastInput = now;
+      break;
+    }
+
+    case 'hide': {
+      room.requestHide(me, msg);
       break;
     }
 
