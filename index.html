@@ -1255,6 +1255,10 @@ function createSurvivorSprite(player, carrying, away) {
   const g = c.getContext('2d');
   const look = player?.look || {};
   const shirtItem=cosmeticById(look.shirt),shirtPattern=cosmeticById(look.shirtPattern);
+  // The Blackie shirt is intentionally not clothing: it turns its wearer into
+  // a huge photograph. Keep the special case here so it works everywhere a
+  // survivor sprite is shown (the game world, lobby, and wardrobe previews).
+  if (shirtItem?.id === 'shirt-blackie') return createEliSprite();
   const pantsItem=cosmeticById(look.pants),pantsPattern=cosmeticById(look.pantsPattern);
   const hatItem=cosmeticById(look.hat);
   const skin = look.skin === 'skin-moon' ? 'rgb(150,158,184)'
@@ -1338,6 +1342,25 @@ function createSurvivorSprite(player, carrying, away) {
   }
   return c;
 }
+const ELI_IMAGE = typeof Image === 'undefined' ? null : new Image();
+// The thumbnail is embedded so the one-file
+// game works from GitHub Pages, the relay, and direct file:// smoke tests.
+if (ELI_IMAGE) {
+ELI_IMAGE.src = 'data:image/jpeg;base64,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';
+}
+function createEliSprite() {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+  const g = c.getContext('2d');
+  if (ELI_IMAGE?.complete && ELI_IMAGE.naturalWidth) {
+    g.drawImage(ELI_IMAGE, 0, 0, c.width, c.height);
+  } else {
+    // This only appears for the instant before the embedded image has loaded.
+    g.fillStyle = '#050507'; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = '#e8e4da'; g.font = 'bold 24px monospace'; g.textAlign = 'center';
+    g.fillText('ELI', c.width / 2, 72);
+  }
+  return c;
+}
 const survivorSprites = new Map();
 function getSurvivorSprite(player, carrying, away) {
   const lookKey = Object.entries(player?.look || {}).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}:${v}`).join(',');
@@ -1402,6 +1425,12 @@ let vignetteCanvas;
 const SPRITE_CACHE_MAX = 600;
 const spriteCache = new Map();
 let spriteIdSeq = 0;
+ELI_IMAGE?.addEventListener('load', () => {
+  // The first sprite request can happen before the image resolves. Rebuild it
+  // once the embedded image is ready instead of retaining the temporary label.
+  survivorSprites.clear();
+  spriteCache.clear();
+});
 function spriteId(src) {
   if (src.__id === undefined) src.__id = ++spriteIdSeq;
   return src.__id;
@@ -2448,6 +2477,7 @@ class Game {
       let sh = Math.abs(Math.floor(RENDER_H / ty));
       if (s.kind === 'creature') sh = Math.floor(sh * 1.15);
       if (s.kind === 'player') sh = Math.floor(sh * 0.94);
+      if (s.kind === 'player' && s.r?.look?.shirt === 'shirt-blackie') sh = Math.floor(sh * 1.4);
       if(s.kind==='spray')sh=Math.floor(sh*.62);
       if (sh < 2 || sh > RENDER_H * 6) continue;
 
@@ -2837,6 +2867,7 @@ const STREET_THEMES = [
 ].map(([id,name,a,b,pattern]) => ({ id:`street-${id}`, name, a, b, pattern }));
 
 const SHOP_ITEMS = [
+  cosmetic('shirt-blackie','shirt','Blackie Shirt',0,'common',{primary:'#0a0a0c',secondary:'#272730'}),
   cosmetic('shirt-eclipse','shirt','Eclipse Shirt',900,'uncommon',{primary:'#5d6688',secondary:'#25283a'}),
   cosmetic('shirt-sunrise','shirt','Sunrise Shirt',850,'uncommon',{primary:'#d07848',secondary:'#59291d'}),
   cosmetic('shirt-confetti','shirt','Midnight Confetti Shirt',1750,'rare',{primary:'#25283e',secondary:'#e2b447',pattern:'confetti'}),
@@ -2944,7 +2975,7 @@ const ACHIEVEMENTS = [
 
 const DEFAULT_PROFILE = {
   version: 2, coins: 0, xp: 0, unlimited: false, pass: false, passClaimed: 0,
-  owned: ['default-shirt'], equipped: {}, achievements: [], sigil: '',
+  owned: ['default-shirt', 'shirt-blackie'], equipped: {}, achievements: [], sigil: '',
   stats: { games: 0, wins: 0, runnerWins: 0, tungWins: 0, offerings: 0, caught: 0, hides: 0, distance: 0,
     sprays:0, emotes:0, taunts:0, lootboxes:0 },
 };
@@ -2964,6 +2995,9 @@ function normalizeProfile(raw) {
   p.unlimited = p.unlimited === true;
   p.passClaimed = Math.max(0, Math.min(100, Math.floor(Number(p.passClaimed) || 0)));
   p.sigil = typeof p.sigil === 'string' ? p.sigil.slice(0, 40) : '';
+  // Free cosmetics belong to every profile, including profiles made before
+  // they were added to the game.
+  for (const id of ['shirt-blackie']) if (!p.owned.includes(id)) p.owned.push(id);
   return p;
 }
 // Accounts flagged `unlimited` never spend T-bucks; the balance is cosmetic for them.
