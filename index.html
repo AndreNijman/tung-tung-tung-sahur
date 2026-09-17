@@ -3206,6 +3206,13 @@ function drawSprayArt(g, id, x, y, w, h) {
 function drawCosmeticIcon(canvas, item) {
   const g=canvas.getContext('2d'), w=canvas.width, h=canvas.height; g.clearRect(0,0,w,h); g.fillStyle='#050507';g.fillRect(0,0,w,h);
   if(!item) return;
+  if (item.id === 'shirt-blackie') {
+    const src=createEliSprite(), scale=Math.min((w-4)/src.width,(h-4)/src.height);
+    const sw=Math.round(src.width*scale),sh=Math.round(src.height*scale);
+    g.imageSmoothingEnabled=false;g.drawImage(src,Math.round((w-sw)/2),Math.round((h-sh)/2),sw,sh);
+    g.strokeStyle=RARITY_META[item.rarity]?.color||'#34343d';g.lineWidth=2;g.strokeRect(1,1,w-2,h-2);
+    return;
+  }
   const c=item.primary || RARITY_META[item.rarity]?.color || '#c8c0a8', d=item.secondary || '#292932';
   if(item.slot==='background'){ drawStreetTheme(g,item.street,w,h); }
   else if(item.slot==='spray'){ drawSprayArt(g,item.id,w*.08,h*.08,w*.84,h*.82); }
