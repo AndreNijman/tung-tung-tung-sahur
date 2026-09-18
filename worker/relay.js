@@ -664,7 +664,7 @@ export class Room {
       }
 
       case 'chat': {
-        if (this.phase !== 'play' || !me.alive) break;
+        if (this.phase !== 'play') break;
         const now = Date.now();
         me.chatTimes = me.chatTimes.filter(at => now - at < 5000);
         if (me.chatTimes.length >= 5) break;

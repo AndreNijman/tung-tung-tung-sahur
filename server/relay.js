@@ -999,7 +999,7 @@ function handle(session, msg) {
     }
 
     case 'chat': {
-      if (room.phase !== 'play' || !me.alive) break;
+      if (room.phase !== 'play') break;
       const now = Date.now();
       me.chatTimes = me.chatTimes.filter(at => now - at < 5000);
       if (me.chatTimes.length >= 5) break;

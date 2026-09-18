@@ -216,6 +216,14 @@ async function moveTo(page, x, y, movingFlags = 1) {
         hostCosmetics.look?.tung !== 'tung-bombardiro' || !hostCosmetics.customSprite) {
       problems.push(`equipped cosmetics did not synchronize/render: ${JSON.stringify(hostCosmetics)}`);
     }
+    const rosterLabels = await guests[0].evaluate(() => {
+      const labels = [];
+      const originalDrawText = drawText;
+      drawText = (_ctx, text) => { labels.push(String(text)); };
+      try { drawHudMp(ctx, game); } finally { drawText = originalDrawText; }
+      return labels;
+    });
+    if (!rosterLabels.includes('Host — TUNG')) problems.push(`HUD did not identify the Tung: ${JSON.stringify(rosterLabels)}`);
     const initial = await host.evaluate(() => ({ alive: game.alive, count: game.itemState.length, time: game.timeLeft }));
     if (!initial.alive || initial.count !== 2 || initial.time > 120 || initial.time < 115) {
       problems.push(`match did not start cleanly: ${JSON.stringify(initial)}`);
@@ -296,6 +304,15 @@ async function moveTo(page, x, y, movingFlags = 1) {
     await survivor.waitForFunction(() => game.alive === false);
     await host.waitForFunction(() => document.getElementById('event-banner').textContent.includes('Guest1 was caught'));
     await guests[1].waitForFunction(() => document.getElementById('event-banner').textContent.includes('Guest1 was caught'));
+    // Dead players must be able to use global chat while spectating. This
+    // drives the browser action as well as the relay's authorization path.
+    const spectatorChatOpened = await survivor.evaluate(() => { openChat(); return chatOpen; });
+    if (!spectatorChatOpened) problems.push('caught player could not open spectator chat');
+    await survivor.evaluate(() => {
+      document.getElementById('chat-input').value = 'spectator-global check';
+      closeChat(true);
+    });
+    await guests[1].waitForFunction(() => document.getElementById('chat-log').textContent.includes('spectator-global check'));
     console.log('  catch: authoritative');
 
     // The Tung is the host in this round. Its disconnect must end the match and
