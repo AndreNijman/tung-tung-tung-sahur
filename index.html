@@ -194,7 +194,7 @@
   #lootbox-result { max-width:900px; min-height:38px; margin:12px auto; color:var(--accent); text-align:center; }
 
   /* =========================================================================
-     INSANELY DRAMATIC CS CASE OPENING THEATER
+     INSANELY DRAMATIC LOOTBOX OPENING THEATER
      ========================================================================= */
   .lootbox-theater {
     position:absolute; inset:0; z-index:999; display:none; background:#030306;
@@ -216,16 +216,17 @@
   .lootbox-theater.on .theater-bar { height:36px; }
 
   .theater-beacon {
-    position:absolute; width:260px; height:260px; border-radius:50%; filter:blur(55px);
-    pointer-events:none; z-index:5; opacity:0.25; animation:beacon-pulse 1.8s infinite alternate ease-in-out;
+    position:absolute; width:300px; height:300px; border-radius:50%;
+    pointer-events:none; z-index:5; opacity:0.35; will-change:transform, opacity;
+    animation:beacon-pulse 1.8s infinite alternate ease-in-out;
   }
-  .theater-beacon.tl { top:-90px; left:-90px; background:var(--theater-glow, #e0a040); }
-  .theater-beacon.tr { top:-90px; right:-90px; background:var(--theater-glow, #f05b4c); }
-  .theater-beacon.bl { bottom:-90px; left:-90px; background:var(--theater-glow, #f05b4c); }
-  .theater-beacon.br { bottom:-90px; right:-90px; background:var(--theater-glow, #e0a040); }
+  .theater-beacon.tl { top:-110px; left:-110px; background:radial-gradient(circle, var(--theater-glow, #e0a040) 0%, rgba(224,160,64,0.35) 35%, transparent 70%); }
+  .theater-beacon.tr { top:-110px; right:-110px; background:radial-gradient(circle, var(--theater-glow, #f05b4c) 0%, rgba(240,91,76,0.35) 35%, transparent 70%); }
+  .theater-beacon.bl { bottom:-110px; left:-110px; background:radial-gradient(circle, var(--theater-glow, #f05b4c) 0%, rgba(240,91,76,0.35) 35%, transparent 70%); }
+  .theater-beacon.br { bottom:-110px; right:-110px; background:radial-gradient(circle, var(--theater-glow, #e0a040) 0%, rgba(224,160,64,0.35) 35%, transparent 70%); }
   @keyframes beacon-pulse {
-    0% { opacity:0.18; transform:scale(0.9); }
-    100% { opacity:0.6; transform:scale(1.35); }
+    0% { opacity:0.2; transform:scale(0.92); }
+    100% { opacity:0.55; transform:scale(1.28); }
   }
 
   .theater-vignette {
@@ -256,7 +257,7 @@
     position:absolute; width:920px; height:920px; left:50%; top:50%; margin:-460px 0 0 -460px;
     border-radius:50%; pointer-events:none; z-index:12; opacity:0; transition:opacity 0.8s ease;
     background:repeating-conic-gradient(from 0deg, transparent 0deg 11.25deg, var(--godray-color, rgba(240,91,76,0.18)) 11.25deg 22.5deg);
-    animation:godrays-rotate 24s linear infinite;
+    animation:godrays-rotate 24s linear infinite; will-change:transform; contain:strict;
   }
   @keyframes godrays-rotate { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
 
@@ -332,7 +333,7 @@
     border-top:2px solid #444; border-radius:2px; box-shadow:0 10px 30px rgba(0,0,0,0.8); margin-top:4px;
   }
 
-  /* STAGE 2: CS Roulette Carousel */
+  /* STAGE 2: Hyper-Roulette Carousel */
   .theater-roulette {
     position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); height:250px;
     z-index:30; display:none; flex-direction:column; justify-content:center;
@@ -350,12 +351,12 @@
   .roulette-needle.needle-top {
     position:absolute; top:0; left:50%; transform:translateX(-50%); width:0; height:0;
     border-left:12px solid transparent; border-right:12px solid transparent;
-    border-top:22px solid #ffcc00; filter:drop-shadow(0 0 10px #ffcc00); transition:transform 0.04s ease;
+    border-top:22px solid #ffcc00; filter:drop-shadow(0 0 8px #ffcc00); transition:transform 0.04s ease;
   }
   .roulette-needle.needle-bottom {
     position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:0; height:0;
     border-left:12px solid transparent; border-right:12px solid transparent;
-    border-bottom:22px solid #ffcc00; filter:drop-shadow(0 0 10px #ffcc00); transition:transform 0.04s ease;
+    border-bottom:22px solid #ffcc00; filter:drop-shadow(0 0 8px #ffcc00); transition:transform 0.04s ease;
   }
   .roulette-needle.kick {
     transform:translateX(-50%) scale(1.35,0.75) translateY(-3px);
@@ -366,7 +367,7 @@
   }
   .roulette-viewport {
     position:relative; width:100%; height:196px; overflow:hidden; background:rgba(6,6,10,0.95);
-    box-shadow:inset 0 0 40px rgba(0,0,0,0.95);
+    box-shadow:inset 0 0 40px rgba(0,0,0,0.95); contain:paint layout;
   }
   .roulette-viewport::before, .roulette-viewport::after {
     content:""; position:absolute; top:0; bottom:0; width:22%; z-index:20; pointer-events:none;
@@ -378,7 +379,9 @@
     right:0; background:linear-gradient(270deg, rgba(3,3,6,1) 0%, rgba(3,3,6,0) 100%);
   }
   .roulette-track {
-    display:flex; height:100%; align-items:center; gap:12px; padding:0; will-change:transform;
+    display:flex; height:100%; align-items:center; gap:12px; padding:0;
+    will-change:transform; transform:translate3d(0, 0, 0); backface-visibility:hidden;
+    contain:layout;
   }
   .roulette-card {
     flex:0 0 160px; height:178px; background:#0d0d14; border:2px solid var(--card-border, #333);
@@ -397,8 +400,8 @@
   .roulette-card.rarity-legendary {
     border-color:#e0a040; box-shadow:0 0 20px rgba(224,160,64,0.4);
   }
-  .roulette-card canvas {
-    width:88px; height:88px; background:#050508; image-rendering:pixelated; border-radius:3px;
+  .roulette-card canvas, .roulette-card img, .roulette-card-icon {
+    width:88px; height:88px; background:#050508; image-rendering:pixelated; border-radius:3px; object-fit:contain;
   }
   .roulette-card-name {
     font:bold 11px monospace; color:#eee; text-align:center; white-space:nowrap;
@@ -458,26 +461,29 @@
     100% { transform: perspective(900px) translateZ(0) rotateX(0deg) rotateY(0deg) scale(1); opacity: 1; filter: brightness(1); }
   }
   .reveal-card-foil {
-    position:absolute; inset:0; border-radius:6px; pointer-events:none; opacity:0.75;
-    mix-blend-mode:color-dodge;
+    position:absolute; inset:0; border-radius:6px; pointer-events:none; opacity:0.45;
+    overflow:hidden;
+  }
+  .reveal-card-foil::before {
+    content:""; position:absolute; inset:-60%;
     background:linear-gradient(115deg,
       transparent 20%,
-      rgba(255,60,100,0.3) 35%,
+      rgba(255,60,100,0.35) 35%,
       rgba(255,230,80,0.45) 45%,
       rgba(80,255,180,0.45) 55%,
       rgba(60,140,255,0.4) 65%,
       transparent 80%);
-    background-size:250% 250%;
-    animation:foil-sweep 4s infinite linear;
+    will-change:transform;
+    animation:foil-sweep 3.5s infinite linear;
   }
   @keyframes foil-sweep {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+    0% { transform:translate3d(-30%, -15%, 0); }
+    50% { transform:translate3d(30%, 15%, 0); }
+    100% { transform:translate3d(-30%, -15%, 0); }
   }
   .reveal-card-glare {
-    position:absolute; inset:0; border-radius:6px; pointer-events:none; opacity:0.6;
-    mix-blend-mode:color-dodge; background:linear-gradient(135deg, transparent 25%, rgba(255,255,255,0.45) 50%, transparent 75%);
+    position:absolute; inset:0; border-radius:6px; pointer-events:none; opacity:0.45;
+    background:linear-gradient(135deg, transparent 25%, rgba(255,255,255,0.35) 50%, transparent 75%);
   }
   .reveal-card-header {
     display:flex; width:100%; justify-content:space-between; align-items:center; font-size:10px;
@@ -544,13 +550,19 @@
   }
 
   /* Mythic Anomaly Mode & Special Stamping */
-  .lootbox-theater.mythic-mode {
-    box-shadow: inset 0 0 100px rgba(240, 91, 76, 0.7);
-    animation: mythic-screen-throb 1.2s infinite alternate ease-in-out;
+  .theater-mythic-glow {
+    position:absolute; inset:0; pointer-events:none; z-index:11; opacity:0;
+    box-shadow: inset 0 0 100px rgba(240, 91, 76, 0.8), inset 0 0 180px rgba(240, 91, 76, 0.4);
+    transition: opacity 0.35s ease;
+    will-change: opacity;
   }
-  @keyframes mythic-screen-throb {
-    0% { filter: brightness(1) drop-shadow(0 0 10px rgba(240, 91, 76, 0.4)); }
-    100% { filter: brightness(1.15) drop-shadow(0 0 35px rgba(240, 91, 76, 0.9)); }
+  .lootbox-theater.mythic-mode .theater-mythic-glow {
+    opacity: 1;
+    animation: mythic-glow-throb 1.2s infinite alternate ease-in-out;
+  }
+  @keyframes mythic-glow-throb {
+    0% { opacity: 0.45; }
+    100% { opacity: 1.0; }
   }
   .lootbox-theater.mythic-mode .reveal-rarity-title {
     animation: mythic-text-glitch 0.25s infinite alternate;
@@ -948,6 +960,7 @@
     <div class="theater-beacon bl"></div>
     <div class="theater-beacon br"></div>
     <div class="theater-vignette"></div>
+    <div class="theater-mythic-glow" id="theater-mythic-glow"></div>
     <div id="theater-emergency-flasher" class="theater-emergency-flasher"></div>
 
     <canvas id="theater-fx-canvas" class="theater-fx-canvas" width="960" height="540"></canvas>
@@ -973,7 +986,7 @@
       <div class="crate-pedestal"></div>
     </div>
 
-    <!-- STAGE 2: CS Roulette Carousel -->
+    <!-- STAGE 2: Hyper-Roulette Carousel -->
     <div class="theater-roulette" id="theater-roulette">
       <div class="roulette-rail top">
         <div class="rail-indicator">◀◀ SAHUR VELOCITY</div>
@@ -3943,7 +3956,7 @@ function drawXpOrb(canvas, amount) {
 }
 
 // ---------------------------------------------------------------------------
-// Pure Web Audio Ultra-Dramatic Synthesizer for CS Case Unboxing
+// Pure Web Audio Ultra-Dramatic Synthesizer for Lootbox Unboxing
 // ---------------------------------------------------------------------------
 class LootboxAudioSystem {
   constructor() {
@@ -4044,7 +4057,7 @@ class LootboxAudioSystem {
     src.connect(bpf); bpf.connect(g); g.connect(ctx.destination);
     src.start(now);
   }
-  playCaseTick(progress = 0, isSpecial = false) {
+  playRouletteTick(progress = 0, isSpecial = false) {
     const ctx = this.getCtx(); if (!ctx) return;
     const now = ctx.currentTime;
     const osc = ctx.createOscillator(), g = ctx.createGain();
@@ -4067,6 +4080,9 @@ class LootboxAudioSystem {
     g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
     osc2.connect(g2); g2.connect(ctx.destination);
     osc2.start(now); osc2.stop(now + 0.042);
+  }
+  playCaseTick(progress = 0, isSpecial = false) {
+    return this.playRouletteTick(progress, isSpecial);
   }
   playHeartbeat(volume = 0.7) {
     const ctx = this.getCtx(); if (!ctx) return;
@@ -4464,7 +4480,7 @@ class LootboxFX {
       });
     }
   }
-  burstConfetti(count = 140) {
+  burstConfetti(count = 75) {
     const colors = ['#f5c542', '#ff4a32', '#b484dc', '#6f9fe7', '#ffffff', '#2ecc71'];
     for (let i = 0; i < count; i++) {
       this.particles.push({
@@ -4479,7 +4495,7 @@ class LootboxFX {
       });
     }
   }
-  burstCoinFountain(x, y, count = 35) {
+  burstCoinFountain(x, y, count = 30) {
     for (let i = 0; i < count; i++) {
       const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.3;
       const speed = 7 + Math.random() * 9;
@@ -4498,7 +4514,7 @@ class LootboxFX {
     // Secondary wider wave
     this.shockwaves.push({ x, y, radius: 5, maxRadius: 420, speed: 0.10, alpha: 0.7, color: '#ffffff', lineWidth: 4 });
   }
-  burstLightning(count = 6) {
+  burstLightning(count = 5) {
     for (let i = 0; i < count; i++) {
       const segs = [];
       let cx = 480, cy = 270;
@@ -4515,7 +4531,7 @@ class LootboxFX {
     }
   }
   update() {
-    if (this.revealMode && Math.random() < 0.55) {
+    if (this.revealMode && this.particles.length < 40 && Math.random() < 0.45) {
       this.addEmber(this.revealColor || '#ffcc00');
     }
     for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -4568,15 +4584,17 @@ class LootboxFX {
     }
 
     for (const la of this.lightningArcs) {
-      g.strokeStyle = '#fff'; g.shadowColor = la.color; g.shadowBlur = 18;
-      g.globalAlpha = la.alpha; g.lineWidth = 3.5;
+      // High-performance 2-pass glow: halo stroke followed by core stroke
       g.beginPath();
       for (let s = 0; s < la.segs.length; s++) {
         if (s === 0) g.moveTo(la.segs[s].x, la.segs[s].y);
         else g.lineTo(la.segs[s].x, la.segs[s].y);
       }
+      g.strokeStyle = la.color; g.lineWidth = 8; g.globalAlpha = la.alpha * 0.45;
       g.stroke();
-      g.shadowBlur = 0;
+
+      g.strokeStyle = '#ffffff'; g.lineWidth = 2.5; g.globalAlpha = la.alpha;
+      g.stroke();
     }
 
     for (const p of this.particles) {
@@ -4607,12 +4625,13 @@ class LootboxFX {
         g.fillText('T', 0, 1);
         g.restore();
       } else if (p.type === 'ember') {
-        g.save();
+        // High-performance 2-pass glow (no shadowBlur)
+        g.globalAlpha = p.alpha * 0.32;
         g.fillStyle = p.color;
-        g.shadowColor = p.color;
-        g.shadowBlur = 10;
-        g.beginPath(); g.arc(p.x, p.y, p.size, 0, Math.PI * 2); g.fill();
-        g.restore();
+        g.beginPath(); g.arc(p.x, p.y, p.size * 2.2, 0, Math.PI * 2); g.fill();
+        g.globalAlpha = p.alpha;
+        g.fillStyle = '#ffffff';
+        g.beginPath(); g.arc(p.x, p.y, p.size * 0.7, 0, Math.PI * 2); g.fill();
       }
     }
     g.globalAlpha = 1;
@@ -4620,8 +4639,29 @@ class LootboxFX {
 }
 
 // ---------------------------------------------------------------------------
-// Dramatic CS-Style Lootbox Theater Master Controller
+// Dramatic Hyper-Roulette Lootbox Theater Master Controller
 // ---------------------------------------------------------------------------
+const rouletteIconCache = new Map();
+function getRouletteIconUrl(data) {
+  let cacheKey = '';
+  if (data.type === 'item') cacheKey = `item_${data.item.id}`;
+  else if (data.type === 'coins') cacheKey = `coins_${data.amount}`;
+  else if (data.type === 'xp') cacheKey = `xp_${data.amount}`;
+  else cacheKey = 'generic';
+
+  if (rouletteIconCache.has(cacheKey)) return rouletteIconCache.get(cacheKey);
+
+  const offscreen = document.createElement('canvas');
+  offscreen.width = 110; offscreen.height = 110;
+  if (data.type === 'item') drawCosmeticIcon(offscreen, data.item);
+  else if (data.type === 'coins') drawCoinStack(offscreen, data.amount);
+  else if (data.type === 'xp') drawXpOrb(offscreen, data.amount);
+
+  const url = offscreen.toDataURL();
+  rouletteIconCache.set(cacheKey, url);
+  return url;
+}
+
 class LootboxTheaterManager {
   constructor() {
     this.audio = new LootboxAudioSystem();
@@ -4731,17 +4771,18 @@ class LootboxTheaterManager {
   triggerCameraShake(trauma = 1.0) {
     this.shakeTrauma = Math.max(this.shakeTrauma, trauma);
     if (this.shakeAnimId) return;
-    const wrap = $('wrap');
+    const target = $('lootbox-theater');
+    if (!target) return;
     const updateShake = () => {
       if (this.shakeTrauma <= 0.01) {
-        wrap.style.transform = '';
+        target.style.transform = '';
         this.shakeAnimId = null;
         return;
       }
-      const dx = (Math.random() * 2 - 1) * 24 * this.shakeTrauma;
-      const dy = (Math.random() * 2 - 1) * 24 * this.shakeTrauma;
-      const r = (Math.random() * 2 - 1) * 4.0 * this.shakeTrauma;
-      wrap.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(${r.toFixed(2)}deg)`;
+      const dx = (Math.random() * 2 - 1) * 20 * this.shakeTrauma;
+      const dy = (Math.random() * 2 - 1) * 20 * this.shakeTrauma;
+      const r = (Math.random() * 2 - 1) * 3.5 * this.shakeTrauma;
+      target.style.transform = `translate3d(${dx.toFixed(1)}px, ${dy.toFixed(1)}px, 0) rotate(${r.toFixed(2)}deg)`;
       this.shakeTrauma *= 0.90;
       this.shakeAnimId = requestAnimationFrame(updateShake);
     };
@@ -4822,7 +4863,7 @@ class LootboxTheaterManager {
       fx.burstSteam(480, 240, 25);
     }, 850);
 
-    // 4. Crate drops down and CS Carousel deploys
+    // 4. Crate drops down and Hyper-Roulette deploys
     setTimeout(() => {
       if (!this.isSpinning) return;
       crateWrap.style.transform = 'translateY(320px) scale(0.6)';
@@ -4835,7 +4876,7 @@ class LootboxTheaterManager {
     $('theater-crate-wrap').style.display = 'none';
     const roulette = $('theater-roulette');
     roulette.style.display = 'flex';
-    $('theater-hud-sub').textContent = 'ENGAGING CS HYPER-ROULETTE VELOCITY...';
+    $('theater-hud-sub').textContent = 'ENGAGING HYPER-ROULETTE VELOCITY...';
 
     // Populate 50 item cards in track
     const track = $('roulette-track');
@@ -4883,11 +4924,11 @@ class LootboxTheaterManager {
       card.style.setProperty('--card-color', rMeta.color);
       card.style.setProperty('--card-border', rMeta.color + '55');
 
-      const canvas = document.createElement('canvas');
-      canvas.width = 110; canvas.height = 110;
-      if (data.type === 'item') drawCosmeticIcon(canvas, data.item);
-      else if (data.type === 'coins') drawCoinStack(canvas, data.amount);
-      else if (data.type === 'xp') drawXpOrb(canvas, data.amount);
+      const iconImg = document.createElement('img');
+      iconImg.className = 'roulette-card-icon';
+      iconImg.width = 88; iconImg.height = 88;
+      iconImg.alt = data.name;
+      iconImg.src = getRouletteIconUrl(data);
 
       const nameEl = document.createElement('div');
       nameEl.className = 'roulette-card-name';
@@ -4901,7 +4942,7 @@ class LootboxTheaterManager {
       rarityEl.className = 'roulette-card-rarity';
       rarityEl.textContent = data.rarity === 'mythic' ? '★ MYTHIC ★' : rMeta.label;
 
-      card.append(slotEl, canvas, nameEl, rarityEl);
+      card.append(slotEl, iconImg, nameEl, rarityEl);
       track.appendChild(card);
     }
 
@@ -4943,7 +4984,7 @@ class LootboxTheaterManager {
       // Custom extreme quartic deceleration curve
       const eased = 1 - Math.pow(1 - progress, 4.2);
       const currentScroll = targetScroll * eased;
-      track.style.transform = `translate3d(${-currentScroll}px, 0, 0)`;
+      track.style.transform = `translate3d(${-currentScroll.toFixed(2)}px, 0, 0)`;
 
       // Check card boundary crossing
       const needleWorldX = currentScroll + (viewportW / 2);
@@ -4952,9 +4993,9 @@ class LootboxTheaterManager {
         lastTickIndex = currentCardIndex;
         const currentCard = cardsData[currentCardIndex];
         const isSpecial = currentCard && (currentCard.rarity === 'mythic' || currentCard.rarity === 'legendary');
-        this.audio.playCaseTick(progress, isSpecial);
+        this.audio.playRouletteTick(progress, isSpecial);
         triggerNeedleKick(isSpecial);
-        if (progress > 0.6) this.triggerCameraShake(0.09);
+        if (progress > 0.6) this.triggerCameraShake(0.08);
 
         if (isSpecial) {
           const rf = $('roulette-flash');
@@ -5048,26 +5089,26 @@ class LootboxTheaterManager {
     const fx = this.ensureFX();
     fx.revealMode = true;
     fx.revealColor = rMeta.color;
-    fx.burstSparks(480, 270, outcome.rarity === 'mythic' ? 110 : 60, rMeta.color);
-    fx.burstConfetti(160);
+    fx.burstSparks(480, 270, outcome.rarity === 'mythic' ? 55 : 35, rMeta.color);
+    fx.burstConfetti(75);
     fx.addShockwave(480, 270, rMeta.color);
 
     if (outcome.duplicate || outcome.type === 'coins') {
-      fx.burstCoinFountain(480, 280, 40);
+      fx.burstCoinFountain(480, 280, 25);
     }
 
     if (outcome.rarity === 'mythic') {
       theater.classList.add('mythic-mode');
-      fx.burstLightning(10);
+      fx.burstLightning(6);
       // Continuous celestial lightning while admiring the card
       this.mythicLightningTimer = setInterval(() => {
         if ($('theater-reveal').style.display === 'flex') {
-          fx.burstLightning(4);
+          fx.burstLightning(3);
         } else {
           clearInterval(this.mythicLightningTimer);
           this.mythicLightningTimer = null;
         }
-      }, 750);
+      }, 850);
     }
 
     // 4. God Rays
@@ -5103,7 +5144,7 @@ class LootboxTheaterManager {
     $('reveal-subtitle').textContent = outcome.rarity === 'mythic' ? 'A CELESTIAL ANOMALY OF SAHUR HAS BEEN CLAIMED' : 'ACQUIRED VIA QUANTUM SAHUR PROTOCOL';
 
     $('reveal-type-pill').textContent = outcome.type === 'item' ? outcome.item.slot.toUpperCase() : outcome.type.toUpperCase();
-    $('reveal-stattrack').textContent = `CASE DROP #${profile.stats.lootboxes.toString().padStart(4, '0')}`;
+    $('reveal-stattrack').textContent = `UNBOXING #${profile.stats.lootboxes.toString().padStart(4, '0')}`;
     $('reveal-item-name').textContent = outcome.name;
 
     if (outcome.type === 'item') {
@@ -5173,7 +5214,8 @@ class LootboxTheaterManager {
     if ($('theater-emergency-flasher')) $('theater-emergency-flasher').classList.remove('active');
     $('theater-roulette').style.display = 'none';
     $('theater-crate-wrap').style.display = 'none';
-    $('wrap').style.transform = '';
+    theater.style.transform = '';
+    if ($('wrap')) $('wrap').style.transform = '';
 
     renderLootboxes();
   }
@@ -5243,7 +5285,7 @@ function openLootbox(box) {
   $('lootbox-result').textContent = `${box.name} OPENED — ${outcome.summaryText || outcome.name}`;
   renderLootboxes();
 
-  // Trigger Insanely Dramatic CS-Style Case Opening Theater!
+  // Trigger Insanely Dramatic Lootbox Theater!
   LootboxTheater.start(box, outcome);
 }
 
