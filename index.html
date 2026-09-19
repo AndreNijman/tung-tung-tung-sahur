@@ -162,13 +162,431 @@
   .pass-node p { margin:0; color:var(--muted); font-size:10px; line-height:1.4; }
   .pass-node.locked { opacity:.55; }
   .pass-node.secret canvas { background:#000; }
-  .lootbox-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; max-width:900px; margin:0 auto; }
-  .lootbox { min-height:230px; position:relative; overflow:hidden; text-align:left; border-top:4px solid var(--rarity); background:var(--surface); padding:16px; }
-  .lootbox-art { height:92px; display:grid; place-items:center; margin-bottom:12px; background:#07070a; color:var(--rarity); font:bold 28px monospace; }
-  .lootbox-art::before { content:""; width:62px; height:48px; border:4px solid currentColor; box-shadow:inset 0 0 0 3px #07070a, inset 0 0 0 5px currentColor; }
-  .lootbox h3 { margin:0 0 6px; color:var(--text); }
+  .lootbox-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; max-width:920px; margin:0 auto; }
+  .lootbox {
+    min-height:245px; position:relative; overflow:hidden; text-align:left;
+    border:1px solid rgba(255,255,255,0.08); border-top:4px solid var(--rarity);
+    background:var(--surface); padding:16px; display:flex; flex-direction:column; justify-content:space-between;
+    transition:transform 0.22s cubic-bezier(0.16,1,0.3,1), box-shadow 0.22s cubic-bezier(0.16,1,0.3,1), border-color 0.2s;
+  }
+  .lootbox:hover {
+    transform:translateY(-5px) scale(1.02);
+    box-shadow:0 12px 32px rgba(0,0,0,0.8), 0 0 22px var(--rarity);
+    border-color:var(--rarity);
+  }
+  .lootbox-art {
+    height:100px; display:grid; place-items:center; margin-bottom:12px;
+    background:radial-gradient(circle at center, #181822 0%, #060609 100%);
+    color:var(--rarity); position:relative; border-radius:4px;
+    border:1px solid rgba(255,255,255,0.06); overflow:hidden;
+  }
+  .lootbox-art::before {
+    content:""; width:64px; height:50px; border:3px solid currentColor;
+    background:linear-gradient(135deg, rgba(255,255,255,0.1), transparent);
+    box-shadow:inset 0 0 0 3px #07070a, inset 0 0 0 5px currentColor, 0 0 16px currentColor;
+    transition:transform 0.25s ease;
+  }
+  .lootbox:hover .lootbox-art::before {
+    transform:scale(1.12) rotate(-2deg);
+  }
+  .lootbox h3 { margin:0 0 6px; color:var(--text); font-size:14px; letter-spacing:1px; }
   .lootbox p { min-height:48px; color:var(--muted); font-size:11px; line-height:1.45; }
   #lootbox-result { max-width:900px; min-height:38px; margin:12px auto; color:var(--accent); text-align:center; }
+
+  /* =========================================================================
+     INSANELY DRAMATIC CS CASE OPENING THEATER
+     ========================================================================= */
+  .lootbox-theater {
+    position:absolute; inset:0; z-index:999; display:none; background:#030306;
+    overflow:hidden; pointer-events:auto; user-select:none; perspective:1000px;
+  }
+  .lootbox-theater.on {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .theater-bar {
+    position:absolute; left:0; right:0; height:0; background:#000; z-index:100;
+    transition:height 0.6s cubic-bezier(0.16,1,0.3,1); pointer-events:none;
+  }
+  .theater-bar.top {
+    top:0; border-bottom:2px solid rgba(224,160,64,0.4); box-shadow:0 4px 20px rgba(0,0,0,0.9);
+  }
+  .theater-bar.bottom {
+    bottom:0; border-top:2px solid rgba(224,160,64,0.4); box-shadow:0 -4px 20px rgba(0,0,0,0.9);
+  }
+  .lootbox-theater.on .theater-bar { height:36px; }
+
+  .theater-beacon {
+    position:absolute; width:260px; height:260px; border-radius:50%; filter:blur(55px);
+    pointer-events:none; z-index:5; opacity:0.25; animation:beacon-pulse 1.8s infinite alternate ease-in-out;
+  }
+  .theater-beacon.tl { top:-90px; left:-90px; background:var(--theater-glow, #e0a040); }
+  .theater-beacon.tr { top:-90px; right:-90px; background:var(--theater-glow, #f05b4c); }
+  .theater-beacon.bl { bottom:-90px; left:-90px; background:var(--theater-glow, #f05b4c); }
+  .theater-beacon.br { bottom:-90px; right:-90px; background:var(--theater-glow, #e0a040); }
+  @keyframes beacon-pulse {
+    0% { opacity:0.18; transform:scale(0.9); }
+    100% { opacity:0.6; transform:scale(1.35); }
+  }
+
+  .theater-vignette {
+    position:absolute; inset:0; background:radial-gradient(circle at center, transparent 30%, rgba(2,2,4,0.92) 90%);
+    pointer-events:none; z-index:8;
+  }
+  .theater-emergency-flasher {
+    position:absolute; inset:0; pointer-events:none; z-index:18; opacity:0;
+    background:radial-gradient(circle at center, transparent 35%, rgba(240,40,20,0.5) 100%);
+    transition:opacity 0.15s ease;
+  }
+  .theater-emergency-flasher.active {
+    opacity:1;
+    animation:flasher-strobe 0.22s infinite alternate ease-in-out;
+  }
+  @keyframes flasher-strobe {
+    0% { opacity:0.1; background:radial-gradient(circle at center, transparent 40%, rgba(240,40,20,0.2) 100%); }
+    100% { opacity:0.85; background:radial-gradient(circle at center, transparent 25%, rgba(240,40,20,0.65) 100%); }
+  }
+  .roulette-flash {
+    position:absolute; inset:0; pointer-events:none; z-index:22; opacity:0;
+    transition:opacity 0.08s ease;
+  }
+  .theater-fx-canvas {
+    position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:15;
+  }
+  .theater-godrays {
+    position:absolute; width:920px; height:920px; left:50%; top:50%; margin:-460px 0 0 -460px;
+    border-radius:50%; pointer-events:none; z-index:12; opacity:0; transition:opacity 0.8s ease;
+    background:repeating-conic-gradient(from 0deg, transparent 0deg 11.25deg, var(--godray-color, rgba(240,91,76,0.18)) 11.25deg 22.5deg);
+    animation:godrays-rotate 24s linear infinite;
+  }
+  @keyframes godrays-rotate { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+
+  .theater-hud {
+    position:absolute; top:42px; left:0; right:0; text-align:center; z-index:60; pointer-events:none;
+  }
+  .theater-hud-pill {
+    display:inline-block; font:bold 11px monospace; letter-spacing:3px; color:var(--accent);
+    background:rgba(14,14,20,0.88); border:1px solid rgba(224,160,64,0.4); padding:4px 14px;
+    box-shadow:0 0 14px rgba(224,160,64,0.3);
+  }
+  .theater-hud-sub {
+    font-size:12px; font-weight:bold; color:#fff; margin-top:4px; letter-spacing:2px;
+    text-shadow:0 0 8px rgba(255,255,255,0.7);
+  }
+
+  .theater-skip-btn {
+    position:absolute; top:44px; right:20px; z-index:110; font:bold 11px monospace;
+    background:rgba(16,16,22,0.85); border:1px solid #555; color:#aaa; padding:6px 14px;
+    cursor:pointer; letter-spacing:1px; transition:all 0.2s;
+  }
+  .theater-skip-btn:hover {
+    background:var(--accent); color:#000; border-color:var(--accent); box-shadow:0 0 14px var(--accent);
+  }
+
+  /* STAGE 1: Crate Slam */
+  .theater-crate-wrap {
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:25; pointer-events:none; transition:opacity 0.4s ease, transform 0.4s ease;
+  }
+  .theater-crate {
+    position:relative; width:220px; height:160px; background:linear-gradient(180deg, #1e1e28 0%, #101016 100%);
+    border:3px solid var(--crate-color, #e0a040); box-shadow:0 0 40px var(--crate-glow, rgba(224,160,64,0.4)), inset 0 0 24px rgba(0,0,0,0.9);
+    border-radius:6px; display:flex; flex-direction:column; align-items:center; justify-content:space-between;
+    padding:14px 10px; box-sizing:border-box; transform-origin:center bottom;
+  }
+  .theater-crate.slam {
+    animation:crate-slam-anim 0.65s cubic-bezier(0.18,0.89,0.32,1.28) forwards;
+  }
+  @keyframes crate-slam-anim {
+    0% { transform:translateY(-380px) scale(0.6); opacity:0; }
+    70% { transform:translateY(15px) scale(1.08,0.92); opacity:1; }
+    85% { transform:translateY(-8px) scale(0.96,1.04); }
+    100% { transform:translateY(0) scale(1); opacity:1; }
+  }
+  .crate-hazard-stripe {
+    width:100%; height:10px; opacity:0.85;
+    background:repeating-linear-gradient(45deg, #111, #111 8px, var(--crate-color, #e0a040) 8px, var(--crate-color, #e0a040) 16px);
+  }
+  .crate-hazard-stripe.bottom { margin-top:auto; }
+  .crate-emblem {
+    font-size:32px; color:var(--crate-color, #e0a040); text-shadow:0 0 16px var(--crate-color, #e0a040); margin:6px 0;
+  }
+  .crate-tier-tag {
+    font:bold 14px monospace; letter-spacing:3px; color:#fff; text-shadow:0 0 10px rgba(255,255,255,0.8);
+  }
+  .crate-padlock {
+    position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:44px; height:48px;
+    background:#252532; border:3px solid #ffcc00; box-shadow:0 0 20px rgba(255,204,0,0.6);
+    border-radius:4px; display:grid; place-items:center; font-size:22px; transition:transform 0.4s ease, opacity 0.4s ease; z-index:10;
+  }
+  .crate-padlock.snap {
+    transform:translate(-50%, 80px) rotate(45deg) scale(0.4); opacity:0;
+  }
+  .crate-light-beam {
+    position:absolute; left:50%; bottom:20px; transform:translateX(-50%); width:140px; height:0;
+    background:linear-gradient(180deg, rgba(255,255,255,0.95), var(--crate-glow, rgba(224,160,64,0.6)), transparent);
+    filter:blur(8px); pointer-events:none; opacity:0; transition:height 0.6s cubic-bezier(0.16,1,0.3,1), opacity 0.4s ease;
+  }
+  .crate-light-beam.active { height:420px; opacity:1; }
+  .crate-pedestal {
+    width:280px; height:18px; background:linear-gradient(180deg, #242432, #101016);
+    border-top:2px solid #444; border-radius:2px; box-shadow:0 10px 30px rgba(0,0,0,0.8); margin-top:4px;
+  }
+
+  /* STAGE 2: CS Roulette Carousel */
+  .theater-roulette {
+    position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); height:250px;
+    z-index:30; display:none; flex-direction:column; justify-content:center;
+  }
+  .roulette-rail {
+    height:24px; background:linear-gradient(90deg, #0a0a0e, #1c1c28, #0a0a0e);
+    border-top:2px solid var(--accent); border-bottom:2px solid var(--accent);
+    display:flex; align-items:center; justify-content:space-between; padding:0 20px;
+    font:bold 10px monospace; color:var(--accent); letter-spacing:2px; box-shadow:0 0 12px rgba(224,160,64,0.3);
+  }
+  .roulette-needle-wrap {
+    position:absolute; left:50%; top:0; bottom:0; width:0; transform:translateX(-50%);
+    z-index:45; pointer-events:none;
+  }
+  .roulette-needle.needle-top {
+    position:absolute; top:0; left:50%; transform:translateX(-50%); width:0; height:0;
+    border-left:12px solid transparent; border-right:12px solid transparent;
+    border-top:22px solid #ffcc00; filter:drop-shadow(0 0 10px #ffcc00); transition:transform 0.04s ease;
+  }
+  .roulette-needle.needle-bottom {
+    position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:0; height:0;
+    border-left:12px solid transparent; border-right:12px solid transparent;
+    border-bottom:22px solid #ffcc00; filter:drop-shadow(0 0 10px #ffcc00); transition:transform 0.04s ease;
+  }
+  .roulette-needle.kick {
+    transform:translateX(-50%) scale(1.35,0.75) translateY(-3px);
+  }
+  .roulette-needle-line {
+    position:absolute; top:20px; bottom:20px; left:50%; width:2px; transform:translateX(-50%);
+    background:linear-gradient(180deg, #ffcc00, rgba(255,204,0,0.15), #ffcc00); box-shadow:0 0 8px #ffcc00;
+  }
+  .roulette-viewport {
+    position:relative; width:100%; height:196px; overflow:hidden; background:rgba(6,6,10,0.95);
+    box-shadow:inset 0 0 40px rgba(0,0,0,0.95);
+  }
+  .roulette-viewport::before, .roulette-viewport::after {
+    content:""; position:absolute; top:0; bottom:0; width:22%; z-index:20; pointer-events:none;
+  }
+  .roulette-viewport::before {
+    left:0; background:linear-gradient(90deg, rgba(3,3,6,1) 0%, rgba(3,3,6,0) 100%);
+  }
+  .roulette-viewport::after {
+    right:0; background:linear-gradient(270deg, rgba(3,3,6,1) 0%, rgba(3,3,6,0) 100%);
+  }
+  .roulette-track {
+    display:flex; height:100%; align-items:center; gap:12px; padding:0; will-change:transform;
+  }
+  .roulette-card {
+    flex:0 0 160px; height:178px; background:#0d0d14; border:2px solid var(--card-border, #333);
+    border-top:5px solid var(--card-color, #777); border-radius:4px; box-sizing:border-box;
+    display:flex; flex-direction:column; align-items:center; justify-content:space-between;
+    padding:8px 6px; position:relative; overflow:hidden; box-shadow:0 6px 16px rgba(0,0,0,0.7);
+  }
+  .roulette-card.rarity-mythic {
+    border-color:#f05b4c; box-shadow:0 0 25px rgba(240,91,76,0.5), inset 0 0 15px rgba(240,91,76,0.3);
+    background:radial-gradient(circle at center, #261118 0%, #0d0d14 100%); animation:mythic-card-pulse 1.4s infinite alternate;
+  }
+  @keyframes mythic-card-pulse {
+    0% { box-shadow:0 0 15px rgba(240,91,76,0.4); }
+    100% { box-shadow:0 0 30px rgba(240,91,76,0.85); }
+  }
+  .roulette-card.rarity-legendary {
+    border-color:#e0a040; box-shadow:0 0 20px rgba(224,160,64,0.4);
+  }
+  .roulette-card canvas {
+    width:88px; height:88px; background:#050508; image-rendering:pixelated; border-radius:3px;
+  }
+  .roulette-card-name {
+    font:bold 11px monospace; color:#eee; text-align:center; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; width:100%;
+  }
+  .roulette-card-slot {
+    font-size:9px; color:var(--card-color, #aaa); letter-spacing:1px; text-transform:uppercase;
+  }
+  .roulette-card-rarity {
+    font:bold 9px monospace; letter-spacing:1px; padding:2px 6px; background:rgba(0,0,0,0.4);
+    border-radius:2px; color:var(--card-color, #aaa);
+  }
+
+  /* STAGE 3: Flashbang */
+  .theater-flashbang {
+    position:absolute; inset:0; z-index:80; pointer-events:none; opacity:0; background:#fff;
+    transition:opacity 1.2s cubic-bezier(0.1,0.9,0.2,1);
+  }
+
+  /* STAGE 4: Reveal Trophy Stage */
+  .theater-reveal {
+    position:absolute; inset:0; z-index:70; display:none; flex-direction:column;
+    align-items:center; justify-content:center; pointer-events:auto; padding:10px 20px; box-sizing:border-box;
+  }
+  .reveal-banner {
+    text-align:center; margin-bottom:6px; animation:reveal-slam 0.5s cubic-bezier(0.18,0.89,0.32,1.28) forwards;
+  }
+  @keyframes reveal-slam {
+    0% { transform:scale(2.2); opacity:0; }
+    100% { transform:scale(1); opacity:1; }
+  }
+  .reveal-stars {
+    color:#ffcc00; font-size:16px; letter-spacing:6px; text-shadow:0 0 12px #ffcc00;
+  }
+  .reveal-rarity-title {
+    font:bold 26px monospace; letter-spacing:4px; color:var(--reveal-color, #ff4a32);
+    text-shadow:0 0 28px var(--reveal-glow, rgba(255,74,50,0.85)); margin:2px 0;
+  }
+  .reveal-subtitle {
+    font-size:11px; color:#bbb; letter-spacing:2px;
+  }
+  .reveal-card-perspective {
+    perspective:800px; margin-bottom:8px;
+  }
+  .reveal-card {
+    position:relative; width:214px; height:252px; background:linear-gradient(160deg, #161622 0%, #0a0a0f 100%);
+    border:3px solid var(--reveal-color, #e0a040); border-radius:8px;
+    box-shadow:0 0 45px var(--reveal-glow, rgba(224,160,64,0.5)), 0 15px 35px rgba(0,0,0,0.9);
+    display:flex; flex-direction:column; align-items:center; justify-content:space-between;
+    padding:10px 8px; box-sizing:border-box; cursor:grab; transform-style:preserve-3d;
+    transition:transform 0.12s ease-out; animation:reveal-card-3d-burst 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  @keyframes reveal-card-3d-burst {
+    0% { transform: perspective(900px) translateZ(400px) rotateX(45deg) rotateY(180deg) scale(0.15); opacity: 0; filter: brightness(3.5); }
+    65% { transform: perspective(900px) translateZ(30px) rotateX(-12deg) rotateY(-8deg) scale(1.15); opacity: 1; filter: brightness(1.3); }
+    85% { transform: perspective(900px) translateZ(0) rotateX(4deg) rotateY(2deg) scale(0.98); }
+    100% { transform: perspective(900px) translateZ(0) rotateX(0deg) rotateY(0deg) scale(1); opacity: 1; filter: brightness(1); }
+  }
+  .reveal-card-foil {
+    position:absolute; inset:0; border-radius:6px; pointer-events:none; opacity:0.75;
+    mix-blend-mode:color-dodge;
+    background:linear-gradient(115deg,
+      transparent 20%,
+      rgba(255,60,100,0.3) 35%,
+      rgba(255,230,80,0.45) 45%,
+      rgba(80,255,180,0.45) 55%,
+      rgba(60,140,255,0.4) 65%,
+      transparent 80%);
+    background-size:250% 250%;
+    animation:foil-sweep 4s infinite linear;
+  }
+  @keyframes foil-sweep {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .reveal-card-glare {
+    position:absolute; inset:0; border-radius:6px; pointer-events:none; opacity:0.6;
+    mix-blend-mode:color-dodge; background:linear-gradient(135deg, transparent 25%, rgba(255,255,255,0.45) 50%, transparent 75%);
+  }
+  .reveal-card-header {
+    display:flex; width:100%; justify-content:space-between; align-items:center; font-size:10px;
+  }
+  .reveal-type-pill {
+    padding:2px 6px; background:rgba(255,255,255,0.1); color:var(--reveal-color, #ffcc00);
+    font:bold 9px monospace; letter-spacing:1px; border-radius:2px;
+  }
+  .reveal-stattrack {
+    color:var(--accent); font:bold 9px monospace; letter-spacing:1px;
+  }
+  .reveal-card-preview-wrap {
+    position:relative; width:114px; height:114px; display:grid; place-items:center;
+  }
+  .reveal-card-preview-wrap canvas {
+    width:114px; height:114px; background:#050508; image-rendering:pixelated;
+    border-radius:4px; border:1px solid rgba(255,255,255,0.1); box-shadow:0 0 16px rgba(0,0,0,0.8);
+  }
+  .reveal-item-name {
+    font:bold 14px monospace; color:#fff; text-align:center; text-shadow:0 0 10px rgba(255,255,255,0.6);
+    margin-top:4px; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .reveal-item-desc {
+    font-size:10px; color:#999; text-align:center; line-height:1.3;
+  }
+  .reveal-payout-badge {
+    background:#e0a040; color:#000; font:bold 10px monospace; padding:3px 8px; border-radius:2px;
+    box-shadow:0 0 12px rgba(224,160,64,0.6); animation:payout-pulse 1s infinite alternate;
+  }
+  @keyframes payout-pulse {
+    0% { transform:scale(0.97); }
+    100% { transform:scale(1.04); }
+  }
+  .reveal-actions {
+    display:flex; gap:10px; flex-wrap:wrap; justify-content:center; z-index:85;
+  }
+  .reveal-btn {
+    min-height:38px; padding:8px 16px; font:bold 11px monospace; letter-spacing:1px;
+    cursor:pointer; border:none; transition:transform 0.15s, box-shadow 0.15s, background-color 0.15s;
+  }
+  .reveal-btn.equip-btn {
+    background:#2ecc71; color:#000; box-shadow:0 0 15px rgba(46,204,113,0.4);
+  }
+  .reveal-btn.equip-btn:hover {
+    background:#48e68b; transform:translateY(-2px);
+  }
+  .reveal-btn.again-btn {
+    background:var(--accent); color:#000; box-shadow:0 0 15px rgba(224,160,64,0.4);
+  }
+  .reveal-btn.again-btn:hover {
+    background:var(--accent-hi); transform:translateY(-2px);
+  }
+  .reveal-btn.inspect-btn {
+    background:#20202a; color:#ccc; border:1px solid #444;
+  }
+  .reveal-btn.inspect-btn:hover {
+    background:#2a2a38; color:#fff; transform:translateY(-2px);
+  }
+  .reveal-btn.claim-btn {
+    background:#14141c; color:#aaa; border:1px solid #333;
+  }
+  .reveal-btn.claim-btn:hover {
+    background:#22222e; color:#fff; transform:translateY(-2px);
+  }
+
+  /* Mythic Anomaly Mode & Special Stamping */
+  .lootbox-theater.mythic-mode {
+    box-shadow: inset 0 0 100px rgba(240, 91, 76, 0.7);
+    animation: mythic-screen-throb 1.2s infinite alternate ease-in-out;
+  }
+  @keyframes mythic-screen-throb {
+    0% { filter: brightness(1) drop-shadow(0 0 10px rgba(240, 91, 76, 0.4)); }
+    100% { filter: brightness(1.15) drop-shadow(0 0 35px rgba(240, 91, 76, 0.9)); }
+  }
+  .lootbox-theater.mythic-mode .reveal-rarity-title {
+    animation: mythic-text-glitch 0.25s infinite alternate;
+  }
+  @keyframes mythic-text-glitch {
+    0% { text-shadow: -2px 0 #f05b4c, 2px 0 #00ffff, 0 0 25px #f05b4c; }
+    50% { text-shadow: 2px 0 #ffcc00, -2px 0 #f05b4c, 0 0 35px #ffcc00; }
+    100% { text-shadow: -3px 0 #00ffff, 3px 0 #f05b4c, 0 0 45px #f05b4c; }
+  }
+  .reveal-payout-badge.stamp-slam {
+    animation: stamp-slam-anim 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+  }
+  @keyframes stamp-slam-anim {
+    0% { transform: scale(2.8) rotate(-15deg); opacity: 0; }
+    70% { transform: scale(0.95) rotate(-3deg); opacity: 1; }
+    100% { transform: scale(1) rotate(-4deg); opacity: 1; }
+  }
+  .reveal-giant-stamp {
+    display:none; margin:2px auto 4px; pointer-events:none;
+    font:900 22px 'Arial Black', sans-serif; letter-spacing:4px; text-transform:uppercase;
+    padding:4px 18px; border:3px solid var(--reveal-color, #ff4a32); border-radius:6px;
+    color:var(--reveal-color, #ff4a32); background:rgba(10,10,16,0.94);
+    text-shadow:0 0 16px currentColor, 0 0 32px currentColor;
+    box-shadow:0 0 28px var(--reveal-glow, rgba(255,74,50,0.6)), inset 0 0 18px var(--reveal-glow, rgba(255,74,50,0.6));
+    white-space:nowrap; width:fit-content;
+  }
+  .reveal-giant-stamp.slam {
+    display:block;
+    animation:giant-stamp-slam 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+  }
+  @keyframes giant-stamp-slam {
+    0% { transform:scale(3.5) rotate(-16deg); opacity:0; }
+    65% { transform:scale(0.96) rotate(-3deg); opacity:1; }
+    80% { transform:scale(1.03) rotate(-1deg); opacity:1; }
+    100% { transform:scale(1) rotate(-2deg); opacity:0.98; }
+  }
   .how-layout { display:grid; grid-template-columns:180px minmax(0,1fr); gap:18px; max-width:900px; height:min(390px,calc(100vh - 150px)); margin:0 auto; }
   .how-nav { display:flex; flex-direction:column; border-right:1px solid var(--divider); }
   .how-nav button { text-align:left; background:transparent; color:var(--muted); border-left:2px solid transparent; }
@@ -521,6 +939,100 @@
     <input id="chat-input" maxlength="160" autocomplete="off" aria-label="Global chat message" placeholder="global message">
   </div>
   <div id="event-banner" role="status" aria-live="assertive"></div>
+  <div id="lootbox-theater" class="lootbox-theater" aria-hidden="true">
+    <div class="theater-bar top"></div>
+    <div class="theater-bar bottom"></div>
+
+    <div class="theater-beacon tl"></div>
+    <div class="theater-beacon tr"></div>
+    <div class="theater-beacon bl"></div>
+    <div class="theater-beacon br"></div>
+    <div class="theater-vignette"></div>
+    <div id="theater-emergency-flasher" class="theater-emergency-flasher"></div>
+
+    <canvas id="theater-fx-canvas" class="theater-fx-canvas" width="960" height="540"></canvas>
+    <div class="theater-godrays" id="theater-godrays"></div>
+
+    <div class="theater-hud" id="theater-hud">
+      <div class="theater-hud-pill" id="theater-hud-pill">CONTAINMENT PROTOCOL DEPLOYED // LEVEL 4 CRATE</div>
+      <div class="theater-hud-sub" id="theater-hud-sub">DECRYPTING SAHUR RESONANCE MATRIX...</div>
+    </div>
+
+    <button class="theater-skip-btn" id="theater-skip-btn">FAST REVEAL &gt;&gt;</button>
+
+    <!-- STAGE 1: Crate Slam -->
+    <div class="theater-crate-wrap" id="theater-crate-wrap">
+      <div class="theater-crate" id="theater-crate">
+        <div class="crate-hazard-stripe"></div>
+        <div class="crate-emblem" id="crate-emblem">⚡</div>
+        <div class="crate-tier-tag" id="crate-tier-tag">MYTHIC COFFER</div>
+        <div class="crate-padlock" id="crate-padlock">🔒</div>
+        <div class="crate-light-beam" id="crate-light-beam"></div>
+        <div class="crate-hazard-stripe bottom"></div>
+      </div>
+      <div class="crate-pedestal"></div>
+    </div>
+
+    <!-- STAGE 2: CS Roulette Carousel -->
+    <div class="theater-roulette" id="theater-roulette">
+      <div class="roulette-rail top">
+        <div class="rail-indicator">◀◀ SAHUR VELOCITY</div>
+        <div class="rail-label" id="roulette-status-text">ENGAGING QUANTUM ROULETTE</div>
+        <div class="rail-indicator">CONTAINMENT ▶▶</div>
+      </div>
+      <div class="roulette-needle-wrap">
+        <div class="roulette-needle needle-top" id="roulette-needle-top"></div>
+        <div class="roulette-needle-line"></div>
+        <div class="roulette-needle needle-bottom" id="roulette-needle-bottom"></div>
+      </div>
+      <div class="roulette-viewport" id="roulette-viewport">
+        <div id="roulette-flash" class="roulette-flash"></div>
+        <div class="roulette-track" id="roulette-track"></div>
+      </div>
+      <div class="roulette-rail bottom">
+        <div class="rail-label" id="roulette-nearmiss-warning">CRITICAL PROXIMITY SENSORS ACTIVE</div>
+      </div>
+    </div>
+
+    <!-- STAGE 3: Flashbang -->
+    <div class="theater-flashbang" id="theater-flashbang"></div>
+
+    <!-- STAGE 4: Reveal Trophy Stage -->
+    <div class="theater-reveal" id="theater-reveal">
+      <div class="reveal-banner" id="reveal-banner">
+        <div class="reveal-stars" id="reveal-stars">★ ★ ★ ★ ★</div>
+        <div id="reveal-giant-stamp" class="reveal-giant-stamp"></div>
+        <div class="reveal-rarity-title" id="reveal-rarity-title">★ MYTHIC DROP ★</div>
+        <div class="reveal-subtitle" id="reveal-subtitle">COSMIC HARMONY REVEALED</div>
+      </div>
+
+      <div class="reveal-card-perspective" id="reveal-card-perspective">
+        <div class="reveal-card" id="reveal-card">
+          <div class="reveal-card-foil"></div>
+          <div class="reveal-card-glare" id="reveal-card-glare"></div>
+          <div class="reveal-card-header">
+            <span class="reveal-type-pill" id="reveal-type-pill">COSMETIC</span>
+            <span class="reveal-stattrack" id="reveal-stattrack">DROP #001</span>
+          </div>
+          <div class="reveal-card-preview-wrap">
+            <canvas id="reveal-preview-canvas" width="240" height="240"></canvas>
+          </div>
+          <div class="reveal-item-name" id="reveal-item-name">ITEM NAME</div>
+          <div class="reveal-item-desc" id="reveal-item-desc">Item description</div>
+          <div class="reveal-payout-badge" id="reveal-payout-badge" style="display:none;">
+            <span id="reveal-payout-text">+0 T-BUCKS</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="reveal-actions" id="reveal-actions">
+        <button class="reveal-btn equip-btn" id="reveal-equip-btn">EQUIP NOW</button>
+        <button class="reveal-btn inspect-btn" id="reveal-inspect-btn">3D INSPECT</button>
+        <button class="reveal-btn again-btn" id="reveal-again-btn">OPEN ANOTHER</button>
+        <button class="reveal-btn claim-btn" id="reveal-claim-btn">COLLECT &amp; RETURN</button>
+      </div>
+    </div>
+  </div>
 </div>
 <script>
 "use strict";
@@ -3380,15 +3892,1378 @@ function renderWardrobe() {
 $('b-preview-current').onclick = () => { wardrobePreviewLook = null; renderWardrobePreview(); };
 for(const button of $('wardrobe-mode').querySelectorAll('button'))button.onclick=()=>{wardrobeMode=button.dataset.wardrobeMode;wardrobeSlot=wardrobeMode==='tung'?'tung':'all';wardrobePreviewLook=null;renderWardrobe();};
 const LOOTBOXES=[
-  {id:'common',name:'COMMON BOX',price:250,rarity:'common',odds:'65% T-bucks · 20% XP · 15% cosmetic'},
-  {id:'rare',name:'RARE BOX',price:800,rarity:'rare',odds:'20% currency · 80% Uncommon–Epic cosmetic'},
-  {id:'legendary',name:'LEGENDARY BOX',price:2500,rarity:'legendary',odds:'Rare+ cosmetic · 18% Legendary · 4% Mythic'},
-  {id:'mythic',name:'MYTHIC BOX',price:6000,rarity:'mythic',odds:'100% Mythic cosmetic'},
+  {id:'common',name:'COMMON BOX',price:250,rarity:'common',odds:'65% T-bucks · 20% XP · 15% cosmetic',emblem:'📦'},
+  {id:'rare',name:'RARE BOX',price:800,rarity:'rare',odds:'20% currency · 80% Uncommon–Epic cosmetic',emblem:'💠'},
+  {id:'legendary',name:'LEGENDARY BOX',price:2500,rarity:'legendary',odds:'Rare+ cosmetic · 18% Legendary · 4% Mythic',emblem:'🔥'},
+  {id:'mythic',name:'MYTHIC BOX',price:6000,rarity:'mythic',odds:'100% Mythic cosmetic',emblem:'👑'},
 ];
 function weightedCosmetic(allowed){const pool=SHOP_ITEMS.filter(i=>allowed.includes(i.rarity));return pool[Math.floor(Math.random()*pool.length)]||SHOP_ITEMS[0];}
-function grantLootCosmetic(item){if(profile.owned.includes(item.id)){const refund=Math.max(100,Math.floor(item.price*.35));profile.coins+=refund;return `Duplicate ${item.name}: +${refund.toLocaleString()} T-bucks`;}profile.owned.push(item.id);return `${RARITY_META[item.rarity].label} COSMETIC: ${item.name}`;}
-function openLootbox(box){if(!canAfford(box.price)){$('lootbox-result').textContent='Not enough T-bucks.';return;}spendCoins(box.price);profile.stats.lootboxes++;let result='';const roll=Math.random();if(box.id==='common'){if(roll<.65){const coins=80+Math.floor(Math.random()*121);profile.coins+=coins;result=`+${coins} T-bucks`;}else if(roll<.85){const xp=100+Math.floor(Math.random()*201);profile.xp+=xp;result=`+${xp} XP`;}else result=grantLootCosmetic(weightedCosmetic(['uncommon']));}else if(box.id==='rare'){if(roll<.2){const coins=350+Math.floor(Math.random()*301);profile.coins+=coins;result=`+${coins} T-bucks`;}else result=grantLootCosmetic(weightedCosmetic(roll>.9?['epic']:['uncommon','rare']));}else if(box.id==='legendary'){result=grantLootCosmetic(weightedCosmetic(roll<.04?['mythic']:roll<.22?['legendary']:['rare','epic']));}else result=grantLootCosmetic(weightedCosmetic(['mythic']));unlockAchievements({});saveProfile();$('lootbox-result').textContent=`${box.name} OPENED — ${result}`;renderLootboxes();}
-function renderLootboxes(){const list=$('lootbox-catalog');list.replaceChildren();for(const box of LOOTBOXES){const article=document.createElement('article');article.className=`lootbox rarity-${box.rarity}`;const art=document.createElement('div');art.className='lootbox-art';const h=document.createElement('h3');h.textContent=box.name;const p=document.createElement('p');p.textContent=box.odds;const buy=actionButton(`OPEN · ${box.price.toLocaleString()} T-BUCKS`,()=>openLootbox(box),!canAfford(box.price));article.append(art,h,p,buy);list.appendChild(article);}}
+
+function drawCoinStack(canvas, amount) {
+  const g = canvas.getContext('2d'), w = canvas.width, h = canvas.height;
+  g.clearRect(0,0,w,h); g.fillStyle = '#050508'; g.fillRect(0,0,w,h);
+  const cx = w / 2, cy = h * 0.58;
+  const coins = [
+    { x: cx - 22, y: cy + 16, r: 22 },
+    { x: cx + 22, y: cy + 16, r: 22 },
+    { x: cx, y: cy - 4, r: 26 },
+    { x: cx - 12, y: cy - 22, r: 20 },
+    { x: cx + 14, y: cy - 18, r: 20 },
+  ];
+  for (const c of coins) {
+    g.fillStyle = '#946c14';
+    g.beginPath(); g.ellipse(c.x, c.y + 4, c.r, c.r * 0.62, 0, 0, Math.PI * 2); g.fill();
+    const grad = g.createRadialGradient(c.x - 5, c.y - 5, 2, c.x, c.y, c.r);
+    grad.addColorStop(0, '#fff5b8'); grad.addColorStop(0.35, '#f5c542'); grad.addColorStop(1, '#a67512');
+    g.fillStyle = grad;
+    g.beginPath(); g.ellipse(c.x, c.y, c.r, c.r * 0.6, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#6e4c05'; g.lineWidth = 1.5; g.stroke();
+    g.fillStyle = '#5c3d02';
+    g.font = `bold ${Math.floor(c.r * 0.8)}px monospace`;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('T', c.x, c.y + 1);
+  }
+}
+
+function drawXpOrb(canvas, amount) {
+  const g = canvas.getContext('2d'), w = canvas.width, h = canvas.height;
+  g.clearRect(0,0,w,h); g.fillStyle = '#050508'; g.fillRect(0,0,w,h);
+  const cx = w / 2, cy = h / 2, r = Math.min(w, h) * 0.36;
+  const radGrad = g.createRadialGradient(cx, cy, 3, cx, cy, r * 1.2);
+  radGrad.addColorStop(0, '#ffffff');
+  radGrad.addColorStop(0.25, '#c77dff');
+  radGrad.addColorStop(0.65, '#7b2cbf');
+  radGrad.addColorStop(1, 'rgba(20, 0, 45, 0)');
+  g.fillStyle = radGrad;
+  g.beginPath(); g.arc(cx, cy, r * 1.25, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#f3d9fa';
+  g.font = `bold ${Math.floor(r * 0.88)}px monospace`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('XP', cx, cy + 2);
+}
+
+// ---------------------------------------------------------------------------
+// Pure Web Audio Ultra-Dramatic Synthesizer for CS Case Unboxing
+// ---------------------------------------------------------------------------
+class LootboxAudioSystem {
+  constructor() {
+    this.tensionOsc = null;
+    this.tensionGain = null;
+  }
+  getCtx() {
+    if (typeof audio !== 'undefined' && audio.init) {
+      audio.init();
+      if (audio.ctx && audio.ctx.state === 'suspended') {
+        audio.ctx.resume().catch(() => {});
+      }
+      return audio.ctx;
+    }
+    return null;
+  }
+  playCrateImpact() {
+    const ctx = this.getCtx(); if (!ctx) return;
+    const now = ctx.currentTime;
+    // Massive sub-bass slam
+    const subOsc = ctx.createOscillator(), subGain = ctx.createGain();
+    subOsc.type = 'sine';
+    subOsc.frequency.setValueAtTime(85, now);
+    subOsc.frequency.exponentialRampToValueAtTime(18, now + 0.75);
+    subGain.gain.setValueAtTime(1.1, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+    subOsc.connect(subGain); subGain.connect(ctx.destination);
+    subOsc.start(now); subOsc.stop(now + 0.8);
+
+    // Industrial debris / chain rattle noise
+    const bufferSize = Math.floor(ctx.sampleRate * 0.45);
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass'; filter.frequency.setValueAtTime(360, now);
+    filter.frequency.linearRampToValueAtTime(70, now + 0.4);
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.9, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    noise.connect(filter); filter.connect(noiseGain); noiseGain.connect(ctx.destination);
+    noise.start(now);
+    this.playEmergencyAlarm(ctx, now + 0.1);
+  }
+  playEmergencyAlarm(ctx, now) {
+    const siren = ctx.createOscillator(), gain = ctx.createGain();
+    siren.type = 'sawtooth';
+    siren.frequency.setValueAtTime(880, now);
+    siren.frequency.setValueAtTime(520, now + 0.18);
+    siren.frequency.setValueAtTime(880, now + 0.36);
+    gain.gain.setValueAtTime(0.24, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    siren.connect(gain); gain.connect(ctx.destination);
+    siren.start(now); siren.stop(now + 0.55);
+  }
+  playNearMissAlert(ctx, now) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(950, now);
+    o.frequency.exponentialRampToValueAtTime(320, now + 0.22);
+    g.gain.setValueAtTime(0.35, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(now); o.stop(now + 0.25);
+  }
+  playLockSnap() {
+    const ctx = this.getCtx(); if (!ctx) return;
+    const now = ctx.currentTime;
+    // Searing laser cutter / metal snap
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(1600, now);
+    osc.frequency.exponentialRampToValueAtTime(280, now + 0.22);
+    gain.gain.setValueAtTime(0.8, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(now); osc.stop(now + 0.24);
+  }
+  playSteamVent() {
+    const ctx = this.getCtx(); if (!ctx) return;
+    const now = ctx.currentTime, dur = 0.55;
+    const bufferSize = Math.floor(ctx.sampleRate * dur);
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const out = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) out[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer;
+    const bpf = ctx.createBiquadFilter();
+    bpf.type = 'bandpass';
+    bpf.frequency.setValueAtTime(2400, now);
+    bpf.frequency.linearRampToValueAtTime(650, now + dur);
+    bpf.Q.value = 3.0;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.65, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    src.connect(bpf); bpf.connect(g); g.connect(ctx.destination);
+    src.start(now);
+  }
+  playCaseTick(progress = 0, isSpecial = false) {
+    const ctx = this.getCtx(); if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = 'sine';
+    const baseFreq = isSpecial ? 2600 : 2300 - progress * 900;
+    osc.frequency.setValueAtTime(baseFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(180, now + 0.025);
+    const vol = (0.5 + progress * 0.45) * (isSpecial ? 1.3 : 1.0);
+    g.gain.setValueAtTime(vol, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.028);
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(now); osc.stop(now + 0.03);
+
+    // Deep casing tick body
+    const osc2 = ctx.createOscillator(), g2 = ctx.createGain();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(isSpecial ? 620 : 450, now);
+    osc2.frequency.exponentialRampToValueAtTime(110, now + 0.038);
+    g2.gain.setValueAtTime(vol * 0.45, now);
+    g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+    osc2.connect(g2); g2.connect(ctx.destination);
+    osc2.start(now); osc2.stop(now + 0.042);
+  }
+  playHeartbeat(volume = 0.7) {
+    const ctx = this.getCtx(); if (!ctx) return;
+    const now = ctx.currentTime;
+    const o1 = ctx.createOscillator(), g1 = ctx.createGain();
+    o1.type = 'sine';
+    o1.frequency.setValueAtTime(56, now);
+    o1.frequency.exponentialRampToValueAtTime(24, now + 0.13);
+    g1.gain.setValueAtTime(volume * 1.1, now);
+    g1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    o1.connect(g1); g1.connect(ctx.destination);
+    o1.start(now); o1.stop(now + 0.16);
+
+    const o2 = ctx.createOscillator(), g2 = ctx.createGain();
+    o2.type = 'sine';
+    o2.frequency.setValueAtTime(50, now + 0.11);
+    o2.frequency.exponentialRampToValueAtTime(22, now + 0.22);
+    g2.gain.setValueAtTime(volume * 0.7, now + 0.11);
+    g2.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+    o2.connect(g2); g2.connect(ctx.destination);
+    o2.start(now + 0.11); o2.stop(now + 0.25);
+  }
+  startTensionRiser() {
+    const ctx = this.getCtx(); if (!ctx) return;
+    this.stopTensionRiser();
+    const now = ctx.currentTime;
+    const osc1 = ctx.createOscillator(), osc2 = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter(), gain = ctx.createGain();
+
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(75, now);
+    osc1.frequency.exponentialRampToValueAtTime(620, now + 6.5);
+
+    osc2.type = 'sawtooth';
+    osc2.frequency.setValueAtTime(77, now);
+    osc2.frequency.exponentialRampToValueAtTime(635, now + 6.5);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(120, now);
+    filter.frequency.exponentialRampToValueAtTime(2600, now + 6.5);
+    filter.Q.value = 4.5;
+
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.38, now + 5.5);
+
+    osc1.connect(filter); osc2.connect(filter);
+    filter.connect(gain); gain.connect(ctx.destination);
+    osc1.start(now); osc2.start(now);
+    this.tensionOsc = [osc1, osc2]; this.tensionGain = gain;
+  }
+  stopTensionRiser(immediate = false) {
+    if (this.tensionGain) {
+      const ctx = this.getCtx(), now = ctx ? ctx.currentTime : 0;
+      if (immediate && ctx) this.tensionGain.gain.setValueAtTime(0, now);
+      else if (ctx) this.tensionGain.gain.linearRampToValueAtTime(0, now + 0.08);
+    }
+    if (this.tensionOsc) {
+      for (const o of this.tensionOsc) { try { o.stop(); } catch (e) {} }
+      this.tensionOsc = null;
+    }
+  }
+  // Authentic Indonesian Bedug Drum strike ("TUUUUUNG!")
+  playBedugStrike(ctx, now, intensity = 1.0) {
+    // Mallet slap attack
+    const slap = ctx.createOscillator(), sg = ctx.createGain();
+    slap.type = 'triangle';
+    slap.frequency.setValueAtTime(340, now);
+    slap.frequency.exponentialRampToValueAtTime(75, now + 0.08);
+    sg.gain.setValueAtTime(0.7 * intensity, now);
+    sg.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+    slap.connect(sg); sg.connect(ctx.destination);
+    slap.start(now); slap.stop(now + 0.1);
+
+    // Deep hollow wooden drum body punch
+    const boom = ctx.createOscillator(), bg = ctx.createGain();
+    boom.type = 'sine';
+    boom.frequency.setValueAtTime(64, now);
+    boom.frequency.exponentialRampToValueAtTime(32, now + 1.8);
+    bg.gain.setValueAtTime(1.0 * intensity, now);
+    bg.gain.exponentialRampToValueAtTime(0.0001, now + 2.0);
+    boom.connect(bg); bg.connect(ctx.destination);
+    boom.start(now); boom.stop(now + 2.0);
+
+    // Overtone resonance
+    const res = ctx.createOscillator(), rg = ctx.createGain();
+    res.type = 'triangle';
+    res.frequency.setValueAtTime(128, now);
+    res.frequency.exponentialRampToValueAtTime(60, now + 1.2);
+    rg.gain.setValueAtTime(0.4 * intensity, now);
+    rg.gain.exponentialRampToValueAtTime(0.001, now + 1.3);
+    res.connect(rg); rg.connect(ctx.destination);
+    res.start(now); res.stop(now + 1.3);
+  }
+  // Synthesized Indonesian Sahur Call ("SA-HURRRRR!")
+  playSahurChant(ctx, now) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(145, now);
+    osc.frequency.exponentialRampToValueAtTime(105, now + 1.2);
+
+    const f1 = ctx.createBiquadFilter();
+    f1.type = 'bandpass'; f1.Q.value = 5.0;
+    f1.frequency.setValueAtTime(820, now);
+    f1.frequency.linearRampToValueAtTime(450, now + 0.4);
+
+    const f2 = ctx.createBiquadFilter();
+    f2.type = 'bandpass'; f2.Q.value = 6.0;
+    f2.frequency.setValueAtTime(1300, now);
+    f2.frequency.linearRampToValueAtTime(850, now + 0.4);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.45, now + 0.15);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+
+    osc.connect(f1); osc.connect(f2);
+    f1.connect(gain); f2.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now); osc.stop(now + 1.25);
+  }
+  playCinematicBraam(ctx, now, intensity = 1.0) {
+    const osc1 = ctx.createOscillator(), osc2 = ctx.createOscillator(), sub = ctx.createOscillator();
+    osc1.type = 'sawtooth'; osc1.frequency.setValueAtTime(55, now);
+    osc2.type = 'sawtooth'; osc2.frequency.setValueAtTime(55.8, now);
+    sub.type = 'sine'; sub.frequency.setValueAtTime(27.5, now);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(250, now);
+    filter.frequency.exponentialRampToValueAtTime(1600, now + 0.12);
+    filter.frequency.exponentialRampToValueAtTime(80, now + 2.4);
+    filter.Q.value = 5.5;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.52 * intensity, now + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 2.5);
+
+    osc1.connect(filter); osc2.connect(filter);
+    filter.connect(gain);
+    sub.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc1.start(now); osc2.start(now); sub.start(now);
+    osc1.stop(now + 2.6); osc2.stop(now + 2.6); sub.stop(now + 2.6);
+  }
+  playAngelicChoir(ctx, now, duration = 3.2) {
+    const freqs = [174.61, 261.63, 349.23, 392.00, 523.25];
+    for (let i = 0; i < freqs.length; i++) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sawtooth';
+      o.frequency.value = freqs[i];
+
+      const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = 800; f1.Q.value = 4.0;
+      const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 1250; f2.Q.value = 5.0;
+
+      const vib = ctx.createOscillator(), vibG = ctx.createGain();
+      vib.frequency.value = 5.2 + i * 0.3; vibG.gain.value = 2.0;
+      vib.connect(o.frequency); vib.start(now); vib.stop(now + duration);
+
+      g.gain.setValueAtTime(0.001, now);
+      g.gain.linearRampToValueAtTime(0.14, now + 0.4);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+      o.connect(f1); o.connect(f2);
+      f1.connect(g); f2.connect(g);
+      g.connect(ctx.destination);
+      o.start(now); o.stop(now + duration);
+    }
+  }
+  playAnvilImpact(ctx, now) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(1400, now);
+    o.frequency.exponentialRampToValueAtTime(120, now + 0.3);
+    g.gain.setValueAtTime(0.4, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(now); o.stop(now + 0.35);
+  }
+  playRevealImpact(rarity) {
+    const ctx = this.getCtx(); if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // 0. Cinematic Inception Braam Horn
+    const braamIntensity = rarity === 'mythic' ? 1.4 : rarity === 'legendary' ? 1.15 : 0.85;
+    this.playCinematicBraam(ctx, now, braamIntensity);
+
+    // 1. Sub-bass seismic drop (chest-shaking bass cannon)
+    const subOsc = ctx.createOscillator(), subGain = ctx.createGain();
+    subOsc.type = 'sine';
+    subOsc.frequency.setValueAtTime(100, now);
+    subOsc.frequency.exponentialRampToValueAtTime(22, now + 2.5);
+    subGain.gain.setValueAtTime(1.15, now);
+    subGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.6);
+    subOsc.connect(subGain); subGain.connect(ctx.destination);
+    subOsc.start(now); subOsc.stop(now + 2.6);
+
+    // 2. Bedug drum strike
+    this.playBedugStrike(ctx, now, 1.25);
+
+    // 3. Sahur vocal formant chant
+    this.playSahurChant(ctx, now + 0.12);
+
+    // 4. Angelic Holy Choir for Mythic & Legendary
+    if (rarity === 'mythic' || rarity === 'legendary') {
+      this.playAngelicChoir(ctx, now + 0.25, rarity === 'mythic' ? 4.2 : 3.0);
+    }
+
+    // 5. Rarity fanfares
+    if (rarity === 'mythic') this.playMythicApocalypse(ctx, now);
+    else if (rarity === 'legendary') this.playLegendaryKlaxon(ctx, now);
+    else if (rarity === 'epic') this.playEpicSynthwave(ctx, now);
+    else if (rarity === 'rare' || rarity === 'uncommon') this.playTriumphantChord(ctx, now);
+    else this.playCommonBrass(ctx, now);
+  }
+  playCommonBrass(ctx, now) {
+    const chord = [116.54, 174.61, 233.08];
+    for (const freq of chord) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.22, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+      o.connect(g); g.connect(ctx.destination); o.start(now); o.stop(now + 0.8);
+    }
+    for (let i = 0; i < 5; i++) {
+      const co = ctx.createOscillator(), cg = ctx.createGain();
+      co.type = 'sine'; co.frequency.value = 1800 + i * 360;
+      const t = now + 0.15 + i * 0.07;
+      cg.gain.setValueAtTime(0.18, t); cg.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      co.connect(cg); cg.connect(ctx.destination); co.start(t); co.stop(t + 0.25);
+    }
+  }
+  playTriumphantChord(ctx, now) {
+    const chord = [261.63, 329.63, 392.00, 523.25];
+    for (let i = 0; i < chord.length; i++) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'triangle'; o.frequency.value = chord[i];
+      g.gain.setValueAtTime(0.28, now + i * 0.04);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+      o.connect(g); g.connect(ctx.destination); o.start(now + i * 0.04); o.stop(now + 1.2);
+    }
+  }
+  playEpicSynthwave(ctx, now) {
+    const chord = [174.61, 220.00, 261.63, 349.23, 440.00];
+    for (const freq of chord) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.value = freq;
+      const filter = ctx.createBiquadFilter(); filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(800, now); filter.frequency.exponentialRampToValueAtTime(3200, now + 0.6);
+      g.gain.setValueAtTime(0.2, now); g.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+      o.connect(filter); filter.connect(g); g.connect(ctx.destination); o.start(now); o.stop(now + 2.0);
+    }
+  }
+  playLegendaryKlaxon(ctx, now) {
+    const siren = ctx.createOscillator(), sGain = ctx.createGain();
+    siren.type = 'sawtooth';
+    for (let k = 0; k < 6; k++) {
+      siren.frequency.setValueAtTime(700, now + k * 0.35);
+      siren.frequency.linearRampToValueAtTime(980, now + k * 0.35 + 0.17);
+      siren.frequency.linearRampToValueAtTime(700, now + k * 0.35 + 0.35);
+    }
+    sGain.gain.setValueAtTime(0.28, now); sGain.gain.exponentialRampToValueAtTime(0.001, now + 2.4);
+    siren.connect(sGain); sGain.connect(ctx.destination); siren.start(now); siren.stop(now + 2.4);
+
+    const chord = [130.81, 155.56, 196.00, 261.63];
+    for (const freq of chord) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.3, now); g.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+      o.connect(g); g.connect(ctx.destination); o.start(now); o.stop(now + 2.0);
+    }
+  }
+  playMythicApocalypse(ctx, now) {
+    const chord = [138.59, 207.65, 261.63, 311.13, 349.23, 523.25];
+    for (let i = 0; i < chord.length; i++) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.value = chord[i];
+      const lfo = ctx.createOscillator(), lfoGain = ctx.createGain();
+      lfo.frequency.value = 4.8 + i * 0.4; lfoGain.gain.value = 3.5;
+      lfo.connect(o.frequency); lfo.start(now); lfo.stop(now + 3.5);
+      const filter = ctx.createBiquadFilter(); filter.type = 'bandpass';
+      filter.frequency.value = chord[i] * 1.5; filter.Q.value = 2.0;
+      g.gain.setValueAtTime(0.001, now); g.gain.linearRampToValueAtTime(0.25, now + 0.35);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 3.5);
+      o.connect(filter); filter.connect(g); g.connect(ctx.destination); o.start(now); o.stop(now + 3.5);
+    }
+    const siren = ctx.createOscillator(), sGain = ctx.createGain();
+    siren.type = 'sawtooth';
+    for (let k = 0; k < 8; k++) {
+      siren.frequency.setValueAtTime(800, now + k * 0.3);
+      siren.frequency.linearRampToValueAtTime(1150, now + k * 0.3 + 0.15);
+      siren.frequency.linearRampToValueAtTime(800, now + k * 0.3 + 0.3);
+    }
+    sGain.gain.setValueAtTime(0.32, now); sGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.8);
+    siren.connect(sGain); sGain.connect(ctx.destination); siren.start(now); siren.stop(now + 2.8);
+
+    const rollTimes = [0.2, 0.45, 0.65, 0.8, 0.95, 1.1];
+    for (const rt of rollTimes) {
+      this.playBedugStrike(ctx, now + rt, 0.75);
+    }
+  }
+  speakAnnouncer(text) {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.pitch = 0.55; u.rate = 0.88; u.volume = 1.0;
+        window.speechSynthesis.speak(u);
+      } catch (e) {}
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Particle FX Engine for Lootbox Theater
+// ---------------------------------------------------------------------------
+class LootboxFX {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas ? canvas.getContext('2d') : null;
+    this.particles = [];
+    this.shockwaves = [];
+    this.lightningArcs = [];
+    this.speedLines = false;
+    this.revealMode = false;
+    this.revealColor = '#ffcc00';
+    this.animId = null;
+    this.running = false;
+  }
+  start() {
+    if (this.running) return;
+    this.running = true;
+    const loop = () => {
+      if (!this.running) return;
+      this.update();
+      this.draw();
+      this.animId = requestAnimationFrame(loop);
+    };
+    this.animId = requestAnimationFrame(loop);
+  }
+  stop() {
+    this.running = false;
+    this.revealMode = false;
+    if (this.animId) cancelAnimationFrame(this.animId);
+    this.particles = []; this.shockwaves = []; this.lightningArcs = [];
+    if (this.ctx) this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+  addEmber(color = '#ffcc00') {
+    this.particles.push({
+      type: 'ember',
+      x: 340 + Math.random() * 280,
+      y: 490 + Math.random() * 30,
+      vx: (Math.random() - 0.5) * 1.4,
+      vy: -1.2 - Math.random() * 2.2,
+      size: 1.8 + Math.random() * 2.5,
+      color,
+      alpha: 0.85 + Math.random() * 0.15,
+      decay: 0.005 + Math.random() * 0.005,
+      wobble: Math.random() * Math.PI * 2,
+      wobbleSpeed: 0.04 + Math.random() * 0.06
+    });
+  }
+  burstSparks(x, y, count = 40, color = '#ffcc00') {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 3 + Math.random() * 9;
+      this.particles.push({
+        type: 'spark', x, y,
+        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        size: 1.5 + Math.random() * 2.5,
+        alpha: 1.0, color, decay: 0.02 + Math.random() * 0.03
+      });
+    }
+  }
+  burstNeedleSparks(x, y, isSpecial = false) {
+    const count = isSpecial ? 18 : 8;
+    const color = isSpecial ? '#ff4a32' : '#ffcc00';
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.random() - 0.5) * Math.PI + Math.PI / 2;
+      const speed = 2 + Math.random() * (isSpecial ? 7 : 4);
+      this.particles.push({
+        type: 'spark', x, y,
+        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        size: isSpecial ? 2.5 : 1.5,
+        alpha: 1.0, color, decay: 0.04 + Math.random() * 0.04
+      });
+    }
+  }
+  burstSteam(x, y, count = 16) {
+    for (let i = 0; i < count; i++) {
+      this.particles.push({
+        type: 'smoke', x: x + (Math.random() - 0.5) * 30, y: y + (Math.random() - 0.5) * 10,
+        vx: (Math.random() - 0.5) * 4, vy: -1.5 - Math.random() * 3,
+        size: 14 + Math.random() * 18, alpha: 0.65, decay: 0.015 + Math.random() * 0.02
+      });
+    }
+  }
+  burstConfetti(count = 140) {
+    const colors = ['#f5c542', '#ff4a32', '#b484dc', '#6f9fe7', '#ffffff', '#2ecc71'];
+    for (let i = 0; i < count; i++) {
+      this.particles.push({
+        type: 'confetti',
+        x: Math.random() * 960, y: -20 - Math.random() * 60,
+        vx: (Math.random() - 0.5) * 4, vy: 2 + Math.random() * 5,
+        w: 6 + Math.random() * 6, h: 10 + Math.random() * 8,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rot: Math.random() * Math.PI * 2, rotSpeed: (Math.random() - 0.5) * 0.2,
+        flip: Math.random() * Math.PI, flipSpeed: 0.06 + Math.random() * 0.1,
+        alpha: 1.0, decay: 0.003 + Math.random() * 0.004
+      });
+    }
+  }
+  burstCoinFountain(x, y, count = 35) {
+    for (let i = 0; i < count; i++) {
+      const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.3;
+      const speed = 7 + Math.random() * 9;
+      this.particles.push({
+        type: 'coin', x, y,
+        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        r: 10 + Math.random() * 4,
+        flip: Math.random() * Math.PI, flipSpeed: 0.12 + Math.random() * 0.14,
+        alpha: 1.0, decay: 0.008 + Math.random() * 0.006
+      });
+    }
+  }
+  addShockwave(x, y, color = '#ffcc00') {
+    // Primary fast shockwave
+    this.shockwaves.push({ x, y, radius: 10, maxRadius: 540, speed: 0.16, alpha: 1.0, color, lineWidth: 8 });
+    // Secondary wider wave
+    this.shockwaves.push({ x, y, radius: 5, maxRadius: 420, speed: 0.10, alpha: 0.7, color: '#ffffff', lineWidth: 4 });
+  }
+  burstLightning(count = 6) {
+    for (let i = 0; i < count; i++) {
+      const segs = [];
+      let cx = 480, cy = 270;
+      const targetX = Math.random() < 0.5 ? Math.random() * 180 : 780 + Math.random() * 180;
+      const targetY = Math.random() * 540;
+      segs.push({ x: cx, y: cy });
+      for (let s = 0; s < 7; s++) {
+        cx += (targetX - cx) * 0.2 + (Math.random() - 0.5) * 70;
+        cy += (targetY - cy) * 0.2 + (Math.random() - 0.5) * 70;
+        segs.push({ x: cx, y: cy });
+      }
+      segs.push({ x: targetX, y: targetY });
+      this.lightningArcs.push({ segs, alpha: 1.0, color: '#f05b4c' });
+    }
+  }
+  update() {
+    if (this.revealMode && Math.random() < 0.55) {
+      this.addEmber(this.revealColor || '#ffcc00');
+    }
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx; p.y += p.vy;
+      p.alpha -= p.decay;
+      if (p.type === 'spark') { p.vy += 0.25; p.vx *= 0.98; }
+      else if (p.type === 'smoke') { p.size += 0.45; }
+      else if (p.type === 'confetti') {
+        p.rot += p.rotSpeed; p.flip += p.flipSpeed;
+        p.vx += Math.sin(p.flip) * 0.15;
+      } else if (p.type === 'coin') {
+        p.vy += 0.38; // gravity
+        p.flip += p.flipSpeed;
+      } else if (p.type === 'ember') {
+        p.wobble += p.wobbleSpeed;
+        p.x += Math.sin(p.wobble) * 0.85;
+      }
+      if (p.alpha <= 0 || p.y > 620) this.particles.splice(i, 1);
+    }
+    for (let i = this.shockwaves.length - 1; i >= 0; i--) {
+      const sw = this.shockwaves[i];
+      sw.radius += (sw.maxRadius - sw.radius) * (sw.speed || 0.14) + 4;
+      sw.alpha -= 0.024;
+      if (sw.alpha <= 0 || sw.radius >= sw.maxRadius) this.shockwaves.splice(i, 1);
+    }
+    for (let i = this.lightningArcs.length - 1; i >= 0; i--) {
+      const la = this.lightningArcs[i];
+      la.alpha -= 0.065;
+      if (la.alpha <= 0) this.lightningArcs.splice(i, 1);
+    }
+  }
+  draw() {
+    if (!this.ctx) return;
+    const g = this.ctx;
+    g.clearRect(0, 0, 960, 540);
+
+    if (this.speedLines) {
+      g.strokeStyle = 'rgba(255,204,0,0.22)'; g.lineWidth = 2.5;
+      for (let i = 0; i < 14; i++) {
+        const y = Math.random() * 540, x = Math.random() * 960, len = 70 + Math.random() * 160;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x - len, y); g.stroke();
+      }
+    }
+
+    for (const sw of this.shockwaves) {
+      g.strokeStyle = sw.color; g.globalAlpha = sw.alpha;
+      g.lineWidth = Math.max(1, (sw.lineWidth || 8) * sw.alpha);
+      g.beginPath(); g.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2); g.stroke();
+    }
+
+    for (const la of this.lightningArcs) {
+      g.strokeStyle = '#fff'; g.shadowColor = la.color; g.shadowBlur = 18;
+      g.globalAlpha = la.alpha; g.lineWidth = 3.5;
+      g.beginPath();
+      for (let s = 0; s < la.segs.length; s++) {
+        if (s === 0) g.moveTo(la.segs[s].x, la.segs[s].y);
+        else g.lineTo(la.segs[s].x, la.segs[s].y);
+      }
+      g.stroke();
+      g.shadowBlur = 0;
+    }
+
+    for (const p of this.particles) {
+      g.globalAlpha = Math.max(0, p.alpha);
+      if (p.type === 'spark') {
+        g.fillStyle = p.color;
+        g.beginPath(); g.arc(p.x, p.y, p.size, 0, Math.PI * 2); g.fill();
+      } else if (p.type === 'smoke') {
+        g.fillStyle = 'rgba(180,180,200,0.15)';
+        g.beginPath(); g.arc(p.x, p.y, p.size, 0, Math.PI * 2); g.fill();
+      } else if (p.type === 'confetti') {
+        g.save();
+        g.translate(p.x, p.y);
+        g.rotate(p.rot);
+        g.scale(Math.cos(p.flip), 1);
+        g.fillStyle = p.color;
+        g.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        g.restore();
+      } else if (p.type === 'coin') {
+        g.save();
+        g.translate(p.x, p.y);
+        g.scale(Math.cos(p.flip), 1);
+        g.fillStyle = '#f5c542';
+        g.beginPath(); g.arc(0, 0, p.r, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = '#a67512'; g.lineWidth = 2; g.stroke();
+        g.fillStyle = '#5c3d02'; g.font = `bold ${Math.floor(p.r * 0.9)}px monospace`;
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText('T', 0, 1);
+        g.restore();
+      } else if (p.type === 'ember') {
+        g.save();
+        g.fillStyle = p.color;
+        g.shadowColor = p.color;
+        g.shadowBlur = 10;
+        g.beginPath(); g.arc(p.x, p.y, p.size, 0, Math.PI * 2); g.fill();
+        g.restore();
+      }
+    }
+    g.globalAlpha = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dramatic CS-Style Lootbox Theater Master Controller
+// ---------------------------------------------------------------------------
+class LootboxTheaterManager {
+  constructor() {
+    this.audio = new LootboxAudioSystem();
+    this.fx = null;
+    this.currentBox = null;
+    this.currentOutcome = null;
+    this.isSpinning = false;
+    this.spinAnimId = null;
+    this.inspectSpin = false;
+    this.inspectAngle = 0;
+    this.inspectAnimId = null;
+    this.shakeTrauma = 0;
+    this.shakeAnimId = null;
+    this.mythicLightningTimer = null;
+    this.setupListeners();
+  }
+
+  ensureFX() {
+    if (!this.fx) {
+      const c = $('theater-fx-canvas');
+      this.fx = new LootboxFX(c);
+    }
+    return this.fx;
+  }
+
+  setupListeners() {
+    const el = $('lootbox-theater');
+    if (!el) return;
+
+    // Interactive 3D Card Tilt with holographic foil glare
+    el.addEventListener('mousemove', (e) => {
+      if (this.inspectSpin) return;
+      const card = $('reveal-card');
+      if (!card || $('theater-reveal').style.display !== 'flex') return;
+      const rect = card.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = (e.clientX - cx) / (rect.width / 2);
+      const dy = (e.clientY - cy) / (rect.height / 2);
+      const rotY = Math.max(-22, Math.min(22, dx * 20));
+      const rotX = Math.max(-22, Math.min(22, -dy * 20));
+      card.style.transform = `perspective(800px) rotateY(${rotY}deg) rotateX(${rotX}deg) scale(1.05)`;
+      const glare = $('reveal-card-glare');
+      if (glare) {
+        const angle = 115 + dx * 45;
+        glare.style.background = `linear-gradient(${angle}deg, transparent 20%, rgba(255,255,255,0.45) 50%, transparent 80%)`;
+      }
+    });
+
+    el.addEventListener('mouseleave', () => {
+      if (this.inspectSpin) return;
+      const card = $('reveal-card');
+      if (card) card.style.transform = 'perspective(800px) rotateY(0deg) rotateX(0deg) scale(1)';
+    });
+
+    // Button actions
+    $('theater-skip-btn').onclick = () => this.skipToReveal();
+    $('reveal-claim-btn').onclick = () => this.close();
+    $('reveal-again-btn').onclick = () => {
+      if (this.currentBox) openLootbox(this.currentBox);
+    };
+    $('reveal-inspect-btn').onclick = () => this.toggleInspect();
+    $('reveal-card').onclick = () => this.toggleInspect();
+    $('reveal-equip-btn').onclick = () => this.equipCurrentItem();
+  }
+
+  toggleInspect() {
+    this.inspectSpin = !this.inspectSpin;
+    const card = $('reveal-card');
+    const btn = $('reveal-inspect-btn');
+    if (this.inspectSpin) {
+      btn.textContent = 'STOP INSPECT (360°)';
+      btn.style.background = '#e0a040'; btn.style.color = '#000';
+      const loop = () => {
+        if (!this.inspectSpin) return;
+        this.inspectAngle = (this.inspectAngle + 1.5) % 360;
+        card.style.transform = `perspective(850px) rotateY(${this.inspectAngle}deg) scale(1.18) translateY(-6px)`;
+        const glare = $('reveal-card-glare');
+        if (glare) {
+          const glareAngle = (this.inspectAngle * 2.5) % 360;
+          glare.style.background = `linear-gradient(${glareAngle}deg, transparent 20%, rgba(255,255,255,0.5) 50%, transparent 80%)`;
+        }
+        this.inspectAnimId = requestAnimationFrame(loop);
+      };
+      this.inspectAnimId = requestAnimationFrame(loop);
+    } else {
+      btn.textContent = '3D INSPECT';
+      btn.style.background = ''; btn.style.color = '';
+      if (this.inspectAnimId) cancelAnimationFrame(this.inspectAnimId);
+      card.style.transform = 'perspective(800px) rotateY(0deg) rotateX(0deg) scale(1)';
+    }
+  }
+
+  equipCurrentItem() {
+    if (!this.currentOutcome || this.currentOutcome.type !== 'item') return;
+    const item = this.currentOutcome.item;
+    if (!item) return;
+    profile.equipped[item.slot] = item.id;
+    saveProfile();
+    const btn = $('reveal-equip-btn');
+    btn.textContent = 'EQUIPPED ✓';
+    btn.disabled = true;
+    this.audio.playTriumphantChord(this.audio.getCtx(), this.audio.getCtx().currentTime);
+    if (typeof renderWardrobe === 'function') renderWardrobe();
+  }
+
+  triggerCameraShake(trauma = 1.0) {
+    this.shakeTrauma = Math.max(this.shakeTrauma, trauma);
+    if (this.shakeAnimId) return;
+    const wrap = $('wrap');
+    const updateShake = () => {
+      if (this.shakeTrauma <= 0.01) {
+        wrap.style.transform = '';
+        this.shakeAnimId = null;
+        return;
+      }
+      const dx = (Math.random() * 2 - 1) * 24 * this.shakeTrauma;
+      const dy = (Math.random() * 2 - 1) * 24 * this.shakeTrauma;
+      const r = (Math.random() * 2 - 1) * 4.0 * this.shakeTrauma;
+      wrap.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(${r.toFixed(2)}deg)`;
+      this.shakeTrauma *= 0.90;
+      this.shakeAnimId = requestAnimationFrame(updateShake);
+    };
+    this.shakeAnimId = requestAnimationFrame(updateShake);
+  }
+
+  start(box, outcome) {
+    this.currentBox = box;
+    this.currentOutcome = outcome;
+    this.isSpinning = true;
+    this.inspectSpin = false;
+    if (this.mythicLightningTimer) {
+      clearInterval(this.mythicLightningTimer);
+      this.mythicLightningTimer = null;
+    }
+
+    const theater = $('lootbox-theater');
+    theater.classList.remove('mythic-mode');
+    const fx = this.ensureFX();
+    fx.start();
+
+    // Theme colors
+    const color = RARITY_META[box.rarity]?.color || '#e0a040';
+    theater.style.setProperty('--crate-color', color);
+    theater.style.setProperty('--crate-glow', `${color}88`);
+    theater.style.setProperty('--theater-glow', color);
+
+    // Reset stages
+    theater.classList.add('on');
+    theater.setAttribute('aria-hidden', 'false');
+    $('theater-hud').style.display = 'block';
+    $('theater-skip-btn').style.display = 'block';
+    $('theater-godrays').style.opacity = '0';
+    $('theater-flashbang').style.opacity = '0';
+    $('theater-reveal').style.display = 'none';
+    $('theater-roulette').style.display = 'none';
+
+    const crateWrap = $('theater-crate-wrap');
+    crateWrap.style.display = 'flex';
+    crateWrap.style.opacity = '1';
+    crateWrap.style.transform = 'scale(1)';
+
+    const crate = $('theater-crate');
+    crate.className = 'theater-crate slam';
+    $('crate-emblem').textContent = box.emblem || '⚡';
+    $('crate-tier-tag').textContent = box.name;
+    const padlock = $('crate-padlock');
+    padlock.className = 'crate-padlock';
+    $('crate-light-beam').className = 'crate-light-beam';
+
+    $('theater-hud-pill').textContent = `CONTAINMENT ENGAGED // ${box.name}`;
+    $('theater-hud-sub').textContent = 'BREACHING REINFORCED SAHUR CORE...';
+
+    // 1. Crate impact
+    this.audio.playCrateImpact();
+    this.triggerCameraShake(1.2);
+    fx.burstSparks(480, 270, 50, color);
+    fx.burstSteam(350, 340); fx.burstSteam(610, 340);
+    const flasher = $('theater-emergency-flasher');
+    if (flasher) {
+      flasher.classList.add('active');
+      setTimeout(() => { if (flasher) flasher.classList.remove('active'); }, 1300);
+    }
+
+    // 2. Padlock snap
+    setTimeout(() => {
+      if (!this.isSpinning) return;
+      this.audio.playLockSnap();
+      padlock.classList.add('snap');
+      fx.burstSparks(480, 270, 45, '#ffcc00');
+    }, 450);
+
+    // 3. Steam vent & light beam eruption
+    setTimeout(() => {
+      if (!this.isSpinning) return;
+      this.audio.playSteamVent();
+      $('crate-light-beam').classList.add('active');
+      fx.burstSteam(480, 240, 25);
+    }, 850);
+
+    // 4. Crate drops down and CS Carousel deploys
+    setTimeout(() => {
+      if (!this.isSpinning) return;
+      crateWrap.style.transform = 'translateY(320px) scale(0.6)';
+      crateWrap.style.opacity = '0';
+      this.deployRoulette();
+    }, 1350);
+  }
+
+  deployRoulette() {
+    $('theater-crate-wrap').style.display = 'none';
+    const roulette = $('theater-roulette');
+    roulette.style.display = 'flex';
+    $('theater-hud-sub').textContent = 'ENGAGING CS HYPER-ROULETTE VELOCITY...';
+
+    // Populate 50 item cards in track
+    const track = $('roulette-track');
+    track.replaceChildren();
+
+    const totalCards = 50;
+    const winnerIndex = 38;
+    const allShopPool = SHOP_ITEMS.slice();
+
+    const cardsData = [];
+    for (let i = 0; i < totalCards; i++) {
+      if (i === winnerIndex) {
+        cardsData.push(this.currentOutcome);
+      } else if (i === winnerIndex - 1 || i === winnerIndex + 1) {
+        // Guaranteed heart-stopping NEAR-MISS item!
+        if (this.currentOutcome.rarity !== 'mythic') {
+          const mythics = SHOP_ITEMS.filter(x => x.rarity === 'mythic');
+          const teaser = mythics[Math.floor(Math.random() * mythics.length)] || SHOP_ITEMS[0];
+          cardsData.push({ type: 'item', item: teaser, rarity: 'mythic', name: teaser.name });
+        } else {
+          const legends = SHOP_ITEMS.filter(x => x.rarity === 'legendary');
+          const teaser = legends[Math.floor(Math.random() * legends.length)] || SHOP_ITEMS[0];
+          cardsData.push({ type: 'item', item: teaser, rarity: 'legendary', name: teaser.name });
+        }
+      } else {
+        const rand = Math.random();
+        if (rand < 0.28) {
+          const c = 100 + Math.floor(Math.random() * 400);
+          cardsData.push({ type: 'coins', amount: c, rarity: 'common', name: `${c} T-BUCKS` });
+        } else if (rand < 0.45) {
+          const x = 150 + Math.floor(Math.random() * 300);
+          cardsData.push({ type: 'xp', amount: x, rarity: 'uncommon', name: `${x} XP` });
+        } else {
+          const it = allShopPool[Math.floor(Math.random() * allShopPool.length)];
+          cardsData.push({ type: 'item', item: it, rarity: it.rarity, name: it.name });
+        }
+      }
+    }
+
+    for (let i = 0; i < cardsData.length; i++) {
+      const data = cardsData[i];
+      const card = document.createElement('div');
+      const rMeta = RARITY_META[data.rarity] || RARITY_META.common;
+      card.className = `roulette-card rarity-${data.rarity}`;
+      card.style.setProperty('--card-color', rMeta.color);
+      card.style.setProperty('--card-border', rMeta.color + '55');
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 110; canvas.height = 110;
+      if (data.type === 'item') drawCosmeticIcon(canvas, data.item);
+      else if (data.type === 'coins') drawCoinStack(canvas, data.amount);
+      else if (data.type === 'xp') drawXpOrb(canvas, data.amount);
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'roulette-card-name';
+      nameEl.textContent = data.name;
+
+      const slotEl = document.createElement('div');
+      slotEl.className = 'roulette-card-slot';
+      slotEl.textContent = data.type === 'item' ? data.item.slot : data.type.toUpperCase();
+
+      const rarityEl = document.createElement('div');
+      rarityEl.className = 'roulette-card-rarity';
+      rarityEl.textContent = data.rarity === 'mythic' ? '★ MYTHIC ★' : rMeta.label;
+
+      card.append(slotEl, canvas, nameEl, rarityEl);
+      track.appendChild(card);
+    }
+
+    // Scroll physics
+    const cardStep = 172; // 160px width + 12px gap
+    const viewport = $('roulette-viewport');
+    const viewportW = viewport.clientWidth || 960;
+    const winnerCenter = winnerIndex * cardStep + 80;
+    const jitter = (Math.random() - 0.5) * 105; // Agonizing near-border offset
+    const targetScroll = winnerCenter - (viewportW / 2) + jitter;
+
+    track.style.transform = 'translate3d(0, 0, 0)';
+
+    // Start spin loop
+    const duration = 7200;
+    const startTime = performance.now();
+    let lastTickIndex = -1;
+    let lastHeartbeatTime = 0;
+    this.audio.startTensionRiser();
+    this.ensureFX().speedLines = true;
+
+    const needleTop = $('roulette-needle-top');
+    const needleBottom = $('roulette-needle-bottom');
+    const triggerNeedleKick = (isSpecial) => {
+      needleTop.classList.add('kick');
+      needleBottom.classList.add('kick');
+      this.ensureFX().burstNeedleSparks(viewportW / 2, 240, isSpecial);
+      setTimeout(() => {
+        needleTop.classList.remove('kick');
+        needleBottom.classList.remove('kick');
+      }, 45);
+    };
+
+    const spinStep = (now) => {
+      if (!this.isSpinning) return;
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+
+      // Custom extreme quartic deceleration curve
+      const eased = 1 - Math.pow(1 - progress, 4.2);
+      const currentScroll = targetScroll * eased;
+      track.style.transform = `translate3d(${-currentScroll}px, 0, 0)`;
+
+      // Check card boundary crossing
+      const needleWorldX = currentScroll + (viewportW / 2);
+      const currentCardIndex = Math.floor(needleWorldX / cardStep);
+      if (currentCardIndex !== lastTickIndex && currentCardIndex >= 0 && currentCardIndex < totalCards) {
+        lastTickIndex = currentCardIndex;
+        const currentCard = cardsData[currentCardIndex];
+        const isSpecial = currentCard && (currentCard.rarity === 'mythic' || currentCard.rarity === 'legendary');
+        this.audio.playCaseTick(progress, isSpecial);
+        triggerNeedleKick(isSpecial);
+        if (progress > 0.6) this.triggerCameraShake(0.09);
+
+        if (isSpecial) {
+          const rf = $('roulette-flash');
+          if (rf) {
+            rf.style.background = currentCard.rarity === 'mythic' ? 'rgba(240,91,76,0.5)' : 'rgba(224,160,64,0.45)';
+            rf.style.opacity = '1';
+            setTimeout(() => { if (rf) rf.style.opacity = '0'; }, 90);
+          }
+          $('roulette-status-text').textContent = currentCard.rarity === 'mythic' ? '⚡ CELESTIAL ENTITY CROSSING NEEDLE ⚡' : '★ COVERT LEGENDARY PASSING ★';
+        }
+
+        // Near-miss warning HUD
+        if (currentCardIndex === winnerIndex - 1 || currentCardIndex === winnerIndex + 1) {
+          $('roulette-nearmiss-warning').textContent = '⚠️ CRITICAL PROXIMITY // NEAR MISS DETECTED ⚠️';
+          $('roulette-nearmiss-warning').style.color = '#f05b4c';
+          const flasher = $('theater-emergency-flasher');
+          if (flasher) flasher.classList.add('active');
+          this.audio.playNearMissAlert(this.audio.getCtx(), this.audio.getCtx().currentTime);
+          this.triggerCameraShake(0.22);
+        }
+      }
+
+      // Heartbeat pulse in second half
+      if (progress > 0.45 && now - lastHeartbeatTime > (650 - progress * 150)) {
+        lastHeartbeatTime = now;
+        this.audio.playHeartbeat(0.45 + progress * 0.55);
+      }
+
+      // Cut speed lines when slowing down
+      if (progress > 0.4) this.ensureFX().speedLines = false;
+
+      // Agonizing silence cliffhanger & needle trembling at 94%
+      if (progress > 0.94 && progress < 0.995) {
+        this.audio.stopTensionRiser(true);
+        needleTop.style.transform = `translateX(-50%) rotate(${(Math.random() - 0.5) * 6}deg)`;
+        needleBottom.style.transform = `translateX(-50%) rotate(${(Math.random() - 0.5) * 6}deg)`;
+      } else if (progress >= 0.995) {
+        needleTop.style.transform = '';
+        needleBottom.style.transform = '';
+      }
+
+      if (progress < 1) {
+        this.spinAnimId = requestAnimationFrame(spinStep);
+      } else {
+        // LOCK & DETONATE!
+        this.audio.stopTensionRiser(true);
+        this.detonateAndReveal();
+      }
+    };
+    this.spinAnimId = requestAnimationFrame(spinStep);
+  }
+
+  skipToReveal() {
+    if (!this.isSpinning) return;
+    if (this.spinAnimId) cancelAnimationFrame(this.spinAnimId);
+    this.audio.stopTensionRiser(true);
+    this.ensureFX().speedLines = false;
+    this.detonateAndReveal();
+  }
+
+  detonateAndReveal() {
+    this.isSpinning = false;
+    const outcome = this.currentOutcome;
+    const rMeta = RARITY_META[outcome.rarity] || RARITY_META.common;
+    const theater = $('lootbox-theater');
+
+    theater.style.setProperty('--reveal-color', rMeta.color);
+    theater.style.setProperty('--reveal-glow', `${rMeta.color}aa`);
+    theater.style.setProperty('--godray-color', `${rMeta.color}33`);
+
+    // Hide top HUD to give full focus to the trophy stage
+    $('theater-hud').style.display = 'none';
+    $('theater-skip-btn').style.display = 'none';
+
+    // 1. Audio Impact
+    this.audio.playRevealImpact(outcome.rarity);
+    if (outcome.rarity === 'mythic') this.audio.speakAnnouncer('M-M-MYTHIC DROP! UNBELIEVABLE SAHUR!');
+    else if (outcome.rarity === 'legendary') this.audio.speakAnnouncer('LEGENDARY COVERT UNBOXING!');
+    else if (outcome.duplicate) this.audio.speakAnnouncer('DUPLICATE CASHOUT!');
+
+    // 2. Visual Flashbang & Trauma
+    const flash = $('theater-flashbang');
+    flash.style.background = outcome.rarity === 'mythic' ? '#fffbe6' : '#ffffff';
+    flash.style.opacity = '1';
+    setTimeout(() => { flash.style.opacity = '0'; }, 80);
+
+    const traumaLevel = outcome.rarity === 'mythic' ? 1.7 : outcome.rarity === 'legendary' ? 1.35 : 0.95;
+    this.triggerCameraShake(traumaLevel);
+
+    // 3. Particles
+    const fx = this.ensureFX();
+    fx.revealMode = true;
+    fx.revealColor = rMeta.color;
+    fx.burstSparks(480, 270, outcome.rarity === 'mythic' ? 110 : 60, rMeta.color);
+    fx.burstConfetti(160);
+    fx.addShockwave(480, 270, rMeta.color);
+
+    if (outcome.duplicate || outcome.type === 'coins') {
+      fx.burstCoinFountain(480, 280, 40);
+    }
+
+    if (outcome.rarity === 'mythic') {
+      theater.classList.add('mythic-mode');
+      fx.burstLightning(10);
+      // Continuous celestial lightning while admiring the card
+      this.mythicLightningTimer = setInterval(() => {
+        if ($('theater-reveal').style.display === 'flex') {
+          fx.burstLightning(4);
+        } else {
+          clearInterval(this.mythicLightningTimer);
+          this.mythicLightningTimer = null;
+        }
+      }, 750);
+    }
+
+    // 4. God Rays
+    $('theater-godrays').style.opacity = '1';
+
+    // 5. Hide roulette, show reveal trophy stage
+    $('theater-roulette').style.display = 'none';
+    const flasher = $('theater-emergency-flasher');
+    if (flasher) flasher.classList.remove('active');
+
+    const reveal = $('theater-reveal');
+    reveal.style.display = 'flex';
+
+    // Giant Rarity Stamp for Mythic & Legendary
+    const giantStamp = $('reveal-giant-stamp');
+    if (giantStamp) {
+      if (outcome.rarity === 'mythic' || outcome.rarity === 'legendary') {
+        giantStamp.textContent = outcome.rarity === 'mythic' ? '★ MYTHIC ANOMALY ★' : '★ COVERT LEGENDARY ★';
+        giantStamp.style.display = 'block';
+        giantStamp.className = 'reveal-giant-stamp slam';
+        $('reveal-rarity-title').style.display = 'none';
+        this.audio.playAnvilImpact(this.audio.getCtx(), this.audio.getCtx().currentTime + 0.15);
+      } else {
+        giantStamp.style.display = 'none';
+        giantStamp.className = 'reveal-giant-stamp';
+        $('reveal-rarity-title').style.display = 'block';
+      }
+    }
+
+    // 6. Populate Trophy Winner Card
+    $('reveal-stars').textContent = outcome.rarity === 'mythic' ? '★ ★ ★ ★ ★' : outcome.rarity === 'legendary' ? '★ ★ ★ ★' : '★ ★ ★';
+    $('reveal-rarity-title').textContent = `${rMeta.label} UNBOXED`;
+    $('reveal-subtitle').textContent = outcome.rarity === 'mythic' ? 'A CELESTIAL ANOMALY OF SAHUR HAS BEEN CLAIMED' : 'ACQUIRED VIA QUANTUM SAHUR PROTOCOL';
+
+    $('reveal-type-pill').textContent = outcome.type === 'item' ? outcome.item.slot.toUpperCase() : outcome.type.toUpperCase();
+    $('reveal-stattrack').textContent = `CASE DROP #${profile.stats.lootboxes.toString().padStart(4, '0')}`;
+    $('reveal-item-name').textContent = outcome.name;
+
+    if (outcome.type === 'item') {
+      $('reveal-item-desc').textContent = outcome.item.slot === 'tung' ? 'Playable creature avatar for the endless night.' : 'Equippable player cosmetic item.';
+    } else if (outcome.type === 'coins') {
+      $('reveal-item-desc').textContent = 'Pure currency for store cosmetics and high-tier unboxings.';
+    } else {
+      $('reveal-item-desc').textContent = 'Account progression boost towards your Procession Pass.';
+    }
+
+    // High-res preview canvas
+    const pCanvas = $('reveal-preview-canvas');
+    if (outcome.type === 'item') drawCosmeticIcon(pCanvas, outcome.item);
+    else if (outcome.type === 'coins') drawCoinStack(pCanvas, outcome.amount);
+    else if (outcome.type === 'xp') drawXpOrb(pCanvas, outcome.amount);
+
+    // Duplicate refund stamp
+    const payoutBadge = $('reveal-payout-badge');
+    if (outcome.duplicate) {
+      payoutBadge.style.display = 'block';
+      payoutBadge.className = 'reveal-payout-badge stamp-slam';
+      $('reveal-payout-text').textContent = `DUPLICATE CASHOUT: +${outcome.refund.toLocaleString()} T-BUCKS`;
+    } else {
+      payoutBadge.style.display = 'none';
+    }
+
+    // Buttons
+    const equipBtn = $('reveal-equip-btn');
+    if (outcome.type === 'item' && !outcome.duplicate) {
+      equipBtn.style.display = 'inline-block';
+      const slot = outcome.item.slot;
+      const isEquipped = profile.equipped && profile.equipped[slot] === outcome.item.id;
+      equipBtn.textContent = isEquipped ? 'EQUIPPED ✓' : 'EQUIP NOW';
+      equipBtn.disabled = isEquipped;
+    } else {
+      equipBtn.style.display = 'none';
+    }
+
+    const againBtn = $('reveal-again-btn');
+    if (this.currentBox) {
+      againBtn.textContent = `OPEN ANOTHER (${this.currentBox.price.toLocaleString()} T-BUCKS)`;
+      againBtn.disabled = !canAfford(this.currentBox.price);
+    }
+  }
+
+  close() {
+    this.isSpinning = false;
+    this.inspectSpin = false;
+    if (this.spinAnimId) cancelAnimationFrame(this.spinAnimId);
+    if (this.inspectAnimId) cancelAnimationFrame(this.inspectAnimId);
+    if (this.mythicLightningTimer) {
+      clearInterval(this.mythicLightningTimer);
+      this.mythicLightningTimer = null;
+    }
+    this.audio.stopTensionRiser(true);
+    if (this.fx) this.fx.stop();
+
+    const theater = $('lootbox-theater');
+    theater.classList.remove('on');
+    theater.classList.remove('mythic-mode');
+    theater.setAttribute('aria-hidden', 'true');
+    $('theater-hud').style.display = '';
+    $('theater-skip-btn').style.display = '';
+    $('theater-reveal').style.display = 'none';
+    $('reveal-rarity-title').style.display = '';
+    if ($('reveal-giant-stamp')) $('reveal-giant-stamp').style.display = 'none';
+    if ($('theater-emergency-flasher')) $('theater-emergency-flasher').classList.remove('active');
+    $('theater-roulette').style.display = 'none';
+    $('theater-crate-wrap').style.display = 'none';
+    $('wrap').style.transform = '';
+
+    renderLootboxes();
+  }
+}
+
+const LootboxTheater = new LootboxTheaterManager();
+
+function grantLootCosmeticItem(item) {
+  if (profile.owned.includes(item.id)) {
+    const refund = Math.max(100, Math.floor(item.price * 0.35));
+    profile.coins += refund;
+    return {
+      type: 'item', item, duplicate: true, refund,
+      rarity: item.rarity, name: item.name,
+      summaryText: `Duplicate ${item.name}: +${refund.toLocaleString()} T-bucks`
+    };
+  }
+  profile.owned.push(item.id);
+  return {
+    type: 'item', item, duplicate: false, refund: 0,
+    rarity: item.rarity, name: item.name,
+    summaryText: `${RARITY_META[item.rarity].label} COSMETIC: ${item.name}`
+  };
+}
+function grantLootCosmetic(item) {
+  return grantLootCosmeticItem(item).summaryText;
+}
+
+function openLootbox(box) {
+  if (!canAfford(box.price)) {
+    $('lootbox-result').textContent = 'Not enough T-bucks.';
+    return;
+  }
+  spendCoins(box.price);
+  profile.stats.lootboxes++;
+
+  let outcome = null;
+  const roll = Math.random();
+  if (box.id === 'common') {
+    if (roll < 0.65) {
+      const coins = 80 + Math.floor(Math.random() * 121);
+      profile.coins += coins;
+      outcome = { type: 'coins', amount: coins, name: `${coins} T-BUCKS`, rarity: 'common', summaryText: `+${coins} T-bucks` };
+    } else if (roll < 0.85) {
+      const xp = 100 + Math.floor(Math.random() * 201);
+      profile.xp += xp;
+      outcome = { type: 'xp', amount: xp, name: `${xp} XP`, rarity: 'uncommon', summaryText: `+${xp} XP` };
+    } else {
+      outcome = grantLootCosmeticItem(weightedCosmetic(['uncommon']));
+    }
+  } else if (box.id === 'rare') {
+    if (roll < 0.2) {
+      const coins = 350 + Math.floor(Math.random() * 301);
+      profile.coins += coins;
+      outcome = { type: 'coins', amount: coins, name: `${coins} T-BUCKS`, rarity: 'rare', summaryText: `+${coins} T-bucks` };
+    } else {
+      outcome = grantLootCosmeticItem(weightedCosmetic(roll > 0.9 ? ['epic'] : ['uncommon', 'rare']));
+    }
+  } else if (box.id === 'legendary') {
+    outcome = grantLootCosmeticItem(weightedCosmetic(roll < 0.04 ? ['mythic'] : roll < 0.22 ? ['legendary'] : ['rare', 'epic']));
+  } else {
+    outcome = grantLootCosmeticItem(weightedCosmetic(['mythic']));
+  }
+
+  unlockAchievements({});
+  saveProfile();
+  $('lootbox-result').textContent = `${box.name} OPENED — ${outcome.summaryText || outcome.name}`;
+  renderLootboxes();
+
+  // Trigger Insanely Dramatic CS-Style Case Opening Theater!
+  LootboxTheater.start(box, outcome);
+}
+
+function renderLootboxes() {
+  const list = $('lootbox-catalog');
+  list.replaceChildren();
+  for (const box of LOOTBOXES) {
+    const article = document.createElement('article');
+    article.className = `lootbox rarity-${box.rarity}`;
+    const art = document.createElement('div');
+    art.className = 'lootbox-art';
+    const h = document.createElement('h3');
+    h.textContent = box.name;
+    const p = document.createElement('p');
+    p.textContent = box.odds;
+    const buy = actionButton(`OPEN · ${box.price.toLocaleString()} T-BUCKS`, () => openLootbox(box), !canAfford(box.price));
+    article.append(art, h, p, buy);
+    list.appendChild(article);
+  }
+}
 function renderAchievements() {
   const list = $('achievement-catalog'); list.replaceChildren();
   for (const achievement of ACHIEVEMENTS) {
