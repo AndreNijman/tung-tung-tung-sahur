@@ -1,0 +1,8 @@
+// The NetLog stub for tests/latency/rooms.test.mjs (see netlog-stub.js).
+{
+  "name": "games-guard",
+  "main": "netlog-stub.js",
+  "compatibility_date": "2026-08-11",
+  "durable_objects": { "bindings": [{ "name": "RECORDS", "class_name": "Records" }] },
+  "migrations": [{ "tag": "v1", "new_classes": ["Records"] }]
+}
