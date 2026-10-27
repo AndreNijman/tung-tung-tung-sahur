@@ -1,5 +1,5 @@
 import { NetStats, sendNetLog, coloOf } from './netstats.js';
-import { playerWhere, withWhere, whereOf } from './netplace.js';
+import { playerWhere, withWhere, whereOf, regionOfColo, shardRegion, roomStub } from './netplace.js';
 
 const CATCH_DIST = 0.52;
 const PICKUP_DIST = 0.62;
@@ -134,6 +134,8 @@ function randomInt(max) {
   } while (values[0] >= limit);
   return values[0] % max;
 }
+
+const CODE_PATTERN = new RegExp(`^[${CODE_ALPHABET}]{5}$`);
 
 function makeCode() {
   let code = '';
@@ -433,6 +435,13 @@ export class Room {
   }
 
   async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === '/ping') {
+      const colo = await this.coloNow();
+      return Response.json({ colo, region: regionOfColo(colo) }, {
+        headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' },
+      });
+    }
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
       return new Response('websocket upgrade required', { status: 426 });
     }
@@ -1298,7 +1307,14 @@ export class Room {
     this.endNetLog('abandoned');
     this.net = new NetStats();
     for (const player of this.players.values()) this.net.seat(player.id, player.name, player.where);
-    if (!this.colo) coloOf().then(colo => { this.colo = colo; });
+    this.coloNow();
+  }
+
+  // Where this object runs, looked up once. DEV_COLO stands in under wrangler
+  // dev, where the lookup would report the developer's own colo.
+  async coloNow() {
+    if (!this.colo) this.colo = this.env?.DEV_COLO || await coloOf();
+    return this.colo;
   }
 
   endNetLog(outcome) {
@@ -1307,7 +1323,7 @@ export class Room {
     if (!net) return;
     const s = this.settings;
     const mode = `${net.seats.size}p · ${s.tungs ? `${s.tungs} tung` : `${s.botTungs} bot tung`} · ${s.mapN}x${s.mapN}`;
-    const record = net.record({ code: this.code, mode, outcome, colo: this.colo });
+    const record = net.record({ code: this.code, mode, outcome, colo: this.colo, region: regionOfColo(this.colo) });
     if (record.runTime < 10) return;
     sendNetLog(this.env, this.state, 'tung', record);
   }
@@ -1450,6 +1466,25 @@ export class Room {
   }
 }
 
+// GET /ping?room=ABCDE[&shard=…]: the room's colo and region, for the lobby
+// screens, which time this request as the player's ping to the room. It
+// reaches the room's object but never creates a room in it.
+async function pingRoom(request, url, env) {
+  const headers = { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' };
+  const code = String(url.searchParams.get('room') || '').toUpperCase();
+  const shard = url.searchParams.get('shard') || '';
+  if (request.method !== 'GET' || !CODE_PATTERN.test(code) || (shard && !shardRegion(shard))) {
+    return Response.json({ error: 'use GET /ping?room=ABCDE' }, { status: 400, headers });
+  }
+  try {
+    const response = await roomStub(env.ROOMS, code, shard).fetch('https://room.internal/ping');
+    return new Response(response.body, { status: response.status, headers: { ...headers, 'Content-Type': 'application/json' } });
+  } catch (error) {
+    console.error('room ping failed', error);
+    return Response.json({ error: 'room unreachable' }, { status: 503, headers });
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1486,6 +1521,7 @@ export default {
       }
       return Response.json({ lobbies }, { status, headers });
     }
+    if (url.pathname === '/ping') return pingRoom(request, url, env);
     if (url.pathname === '/health') {
       return Response.json({ ok: true, service: 'tung-relay' }, {
         headers: { 'Cache-Control': 'no-store' },
@@ -1540,7 +1576,10 @@ export default {
     headers.set('X-Tung-Room-Code', code);
     headers.set('X-Tung-Admin', adminName ? '1' : '0');
     headers.set('X-Tung-Admin-Name', adminName);
-    const roomRequest = withWhere(new Request(request, { headers }), where);
+    // The room only ever sees /ws: no outside path reaches its internal routes.
+    const target = new URL(request.url);
+    target.pathname = '/ws';
+    const roomRequest = withWhere(new Request(target, new Request(request, { headers })), where);
     return env.ROOMS.getByName(code).fetch(roomRequest);
   },
 };
