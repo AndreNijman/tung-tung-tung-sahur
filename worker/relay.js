@@ -1,4 +1,5 @@
 import { NetStats, sendNetLog, coloOf } from './netstats.js';
+import { playerWhere, withWhere, whereOf } from './netplace.js';
 
 const CATCH_DIST = 0.52;
 const PICKUP_DIST = 0.62;
@@ -150,9 +151,15 @@ function originAllowed(origin) {
   }
 }
 
-async function adminIdentity(request, env) {
+// games-guard's proxy (tung.andrenijman.com/_guard/tung-ws) signs what it
+// forwards: the admin name it checked and where the player connects from.
+function proxyAuthorized(request, env) {
   const proxyAuthorization = request.headers.get('X-Tung-Proxy-Authorization');
-  if (proxyAuthorization && envSecretMatches(proxyAuthorization, env?.TUNG_PROXY_SECRET)) {
+  return !!proxyAuthorization && envSecretMatches(proxyAuthorization, env?.TUNG_PROXY_SECRET);
+}
+
+async function adminIdentity(request, env) {
+  if (proxyAuthorized(request, env)) {
     const username = String(request.headers.get('X-Tung-Proxy-Admin-Name') || '').toLowerCase();
     return ADMIN_USERS.has(username) ? username : '';
   }
@@ -364,6 +371,7 @@ class Player {
     this.colorIdx = 0;
     this.spawnIdx = 0;
     this.chatTimes = [];
+    this.where = null;                // { country, edge } from netplace.js, for the lag log
   }
 
   publicLobby() {
@@ -449,6 +457,7 @@ export class Room {
       ip: request.headers.get('CF-Connecting-IP') || 'unknown',
       admin: request.headers.get('X-Tung-Admin') === '1',
       adminName: request.headers.get('X-Tung-Admin-Name') || '',
+      where: whereOf(request),
     };
 
     server.accept();
@@ -589,6 +598,7 @@ export class Room {
     }
 
     const player = new Player(this.nextPlayerId++, session.socket, message.name, sanitizeCosmetics(message), session.adminName);
+    player.where = session.where || null;
     this.addPlayer(player);
     session.player = player;
     if (session.action === 'create') {
@@ -721,7 +731,7 @@ export class Room {
     player.a = 0;
     player.lastMoveAt = Date.now();
     player.moveTokens = MOVE_BURST;
-    this.net?.seat(player.id, player.name);
+    this.net?.seat(player.id, player.name, player.where);
 
     this.send(player.socket, {
       t: 'begin',
@@ -1287,7 +1297,7 @@ export class Room {
   startNetLog() {
     this.endNetLog('abandoned');
     this.net = new NetStats();
-    for (const player of this.players.values()) this.net.seat(player.id, player.name);
+    for (const player of this.players.values()) this.net.seat(player.id, player.name, player.where);
     if (!this.colo) coloOf().then(colo => { this.colo = colo; });
   }
 
@@ -1521,12 +1531,16 @@ export default {
       return new Response('room codes must be five characters', { status: 400 });
     }
 
+    // Behind games-guard's proxy request.cf describes the proxy's hop; the
+    // proxy passes on the player's own country and edge, trusted only when
+    // the request carries its secret.
+    const where = playerWhere(request, { trustHeaders: proxyAuthorized(request, env) });
     const headers = new Headers(request.headers);
     headers.set('X-Tung-Room-Action', action);
     headers.set('X-Tung-Room-Code', code);
     headers.set('X-Tung-Admin', adminName ? '1' : '0');
     headers.set('X-Tung-Admin-Name', adminName);
-    const roomRequest = new Request(request, { headers });
+    const roomRequest = withWhere(new Request(request, { headers }), where);
     return env.ROOMS.getByName(code).fetch(roomRequest);
   },
 };

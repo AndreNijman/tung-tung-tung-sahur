@@ -1,3 +1,6 @@
+// netstats.js v2 (canonical copy: games-site shared/net/). v2 adds where each
+// player connects from (seat's third argument; see netplace.js).
+//
 // Lag statistics for one online match, sent to the games-guard NetLog when the
 // match ends so laggy games can be found later at
 // games.andrenijman.com/_guard/admin/lag. Clients report their ping and frame
@@ -37,12 +40,15 @@ export class NetStats {
     this.loops = 0;
   }
 
-  seat(key, name) {
+  /** `where` is netplace.js's `{ country, edge }` for this player, when the relay knows it. */
+  seat(key, name, where) {
     let s = this.seats.get(key);
     if (!s) {
-      s = { name: String(name || '?'), rtt: new Hist(), gaps: new Hist(), fps: [], frameMax: 0, lastMsg: 0, reconnects: 0 };
+      s = { name: String(name || '?'), country: '', edge: '', rtt: new Hist(), gaps: new Hist(), fps: [], frameMax: 0, lastMsg: 0, reconnects: 0 };
       this.seats.set(key, s);
     } else if (name) s.name = String(name);
+    if (where?.country) s.country = String(where.country);
+    if (where?.edge) s.edge = String(where.edge);
     return s;
   }
 
@@ -78,10 +84,10 @@ export class NetStats {
     this.lostMs += lostMs;
   }
 
-  /** The record for NetLog. `base` carries code, mode, outcome and colo. */
+  /** The record for NetLog. `base` carries code, mode, outcome and colo, and region and moved when the room was placed or moved (netplace.js). */
   record(base = {}) {
     const seats = [...this.seats.values()].map((s) => ({
-      name: s.name,
+      name: s.name, country: s.country, edge: s.edge,
       rttMed: s.rtt.q(0.5), rttP95: s.rtt.q(0.95), rttMax: Math.round(s.rtt.max),
       gapP95: s.gaps.q(0.95), gapMax: Math.round(s.gaps.max),
       fpsMed: r1(median(s.fps)), fpsMin: r1(s.fps.length ? Math.min(...s.fps) : 0), frameMax: Math.round(s.frameMax),
