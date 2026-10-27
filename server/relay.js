@@ -1071,6 +1071,20 @@ function main() {
       res.end(JSON.stringify({ lobbies: available }));
       return;
     }
+    // The lobby screens time GET /ping?room= as the player's ping to a room.
+    // The Cloudflare relay also names the room's region; this one runs
+    // wherever it was started, so it has none to name.
+    if (url.pathname === '/ping') {
+      const code = String(url.searchParams.get('room') || '').toUpperCase();
+      const valid = code.length === 5 && [...code].every(c => CODE_ALPHABET.includes(c));
+      res.writeHead(valid ? 200 : 400, {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+        'access-control-allow-origin': '*',
+      });
+      res.end(JSON.stringify(valid ? { colo: '', region: '' } : { error: 'use GET /ping?room=ABCDE' }));
+      return;
+    }
     if (url.pathname === '/health') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: true, rooms: rooms.size, uptime: process.uptime() }));

@@ -870,6 +870,7 @@
         <div>
           <label>LOBBY CODE</label>
           <div class="code" id="lobby-code">----</div>
+          <div class="hint" id="lobby-region"></div>
         </div>
         <div style="text-align:right">
           <label>WHO IS THE TUNG</label>
@@ -3138,6 +3139,13 @@ function drawHud(ctx, game) {
 // ---------------------------------------------------------------------------
 function drawHudMp(ctx, game) {
   const net = game.net;
+  // this player's live ping, bottom right, clear of the chat and the prompts
+  const rtt = net?.pinger ? net.pinger.rtt : -1;
+  if (rtt >= 0) {
+    ctx.font = '13px monospace'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = rtt >= 200 ? 'rgb(220,80,60)' : (rtt >= 120 ? AMBER : INK_DIM);
+    ctx.fillText(`${rtt} ms`, WIN_W - 24, WIN_H - 18);
+  }
   const urgent = game.timeLeft < DAWN_WARN;
   drawText(ctx, `SUBUH IN ${fmtClock(game.timeLeft)}`, WIN_W / 2, 22,
            urgent ? 'rgb(220,80,60)' : INK_DIM,
@@ -5473,9 +5481,12 @@ function renderAvailableLobbies(lobbies) {
     const settings = clampGameSettings(lobby.settings);
     const phase = String(lobby.phase || 'lobby').toUpperCase();
     detail.textContent = `${phase}  ·  ${settings.mapN}x${settings.mapN}  ·  ${settings.lanterns} lanterns  ·  ${fmtClock(settings.night)}`;
+    const where = document.createElement('div'); where.className = 'lobby-detail';
+    roomPing($('i-relay').value.trim() || defaultRelayUrl(), code.textContent, String(lobby.shard || ''))
+      .then(label => { where.textContent = label; });
     const lock = document.createElement('span'); lock.className = 'lock';
     lock.textContent = profileAdmin ? 'DEV ACCESS' : (lobby.locked ? 'LOCKED' : 'OPEN');
-    primary.append(' ', lock); meta.append(primary, detail);
+    primary.append(' ', lock); meta.append(primary, detail, where);
     const join = document.createElement('button'); join.className = 'ghost small'; join.textContent = 'JOIN';
     join.setAttribute('aria-label', `Join lobby ${code.textContent}${lobby.locked ? ', password required' : ''}`);
     join.onclick = () => {
@@ -5556,7 +5567,7 @@ $('b-solo').onclick = () => {
 };
 $('b-solo-start').onclick = () => beginSolo();
 $('b-solo-back').onclick = () => navigateBack('scr-play');
-$('b-mp').onclick = () => { $('mp-err').textContent = ''; navigateScreen('scr-mp'); startLobbyBrowser(); };
+$('b-mp').onclick = () => { $('mp-err').textContent = ''; navigateScreen('scr-mp'); startLobbyBrowser(); probeRegions(); };
 $('b-mp-back').onclick = () => { stopLobbyBrowser(); navigateBack('scr-play'); };
 $('b-refresh-lobbies').onclick = () => refreshAvailableLobbies(true);
 
@@ -5623,6 +5634,158 @@ class NetPing {
   stop() { cancelAnimationFrame(this.raf); }
 }
 
+// netprobe.js, shared unchanged with the other game clients (only `export`
+// dropped, and wrapped in a function so its private names stay private).
+const { REGION_NAMES, pingUrl, probeRegions, regionLabel } = (() => {
+// netprobe.js v1 (canonical copy: games-site shared/net/).
+//
+// Client half of room placement: this player's ping to every Cloudflare
+// region, timed against games-guard's probes (/_guard/probe/<region>, one
+// Durable Object per region) and kept for the browser session. The client
+// sends the results to its relay, which uses them to move a mixed group's
+// room somewhere fairer (netplace.js). pingUrl() times one room directly, for
+// the lobby list. Shared, unchanged, by every game client.
+
+const REGIONS = ['wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', 'oc', 'afr', 'me'];
+
+const REGION_NAMES = {
+  wnam: 'US West', enam: 'US East', sam: 'South America', weur: 'Western Europe', eeur: 'Eastern Europe',
+  apac: 'Asia', oc: 'Oceania', afr: 'Africa', me: 'Middle East',
+};
+
+const KEY = 'games.netprobe.v1';
+const MAX_AGE = 10 * 60 * 1000;
+let pending = null;
+
+// The probes live on every game host games-guard serves; elsewhere (local
+// dev, file://, a mirror) there is nothing to time.
+function defaultBase() {
+  return typeof location !== 'undefined' && location.protocol === 'https:' && /(^|\.)andrenijman\.com$/.test(location.hostname)
+    ? '/_guard/probe/' : '';
+}
+
+function read() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(KEY) || 'null');
+    return saved && Date.now() - saved.at < MAX_AGE ? saved.ms : null;
+  } catch { return null; }
+}
+
+function write(ms) {
+  try { sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), ms })); } catch { /* private mode */ }
+}
+
+/**
+ * Round trip to `url` in ms (e.g. a relay's room ping endpoint), or null if
+ * it can't be reached. Three requests; the first wakes the Durable Object and
+ * warms the connection, the faster of the other two counts.
+ */
+async function pingUrl(url) {
+  let best = null;
+  for (let i = 0; i < 3; i++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const start = performance.now();
+    try {
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+      await response.arrayBuffer();
+      if (!response.ok) return null;
+    } catch {
+      return best;
+    } finally {
+      clearTimeout(timer);
+    }
+    const ms = performance.now() - start;
+    if (i > 0) best = best === null ? ms : Math.min(best, ms);
+  }
+  return best === null ? null : Math.max(1, Math.round(best));
+}
+
+/**
+ * This player's ping to each region in ms, e.g. { weur: 38, apac: 290 }, or
+ * null where probing is unavailable. Cached for the session; concurrent
+ * callers share one run (about a second, all regions at once).
+ */
+function probeRegions(base = defaultBase()) {
+  if (!base) return Promise.resolve(null);
+  const cached = read();
+  if (cached) return Promise.resolve(cached);
+  pending ||= Promise.all(REGIONS.map(async (region) => [region, await pingUrl(base + region)]))
+    .then((results) => {
+      const ms = Object.fromEntries(results.filter(([, t]) => t !== null));
+      if (!Object.keys(ms).length) return null;
+      write(ms);
+      return ms;
+    })
+    .catch(() => null)
+    .finally(() => { pending = null; });
+  return pending;
+}
+
+/** "Asia · 120 ms" for a room in `region` with a measured ping; just the region name without one. */
+function regionLabel(region, ms) {
+  const name = REGION_NAMES[region] || region || '';
+  return ms > 0 ? `${name} · ${Math.round(ms)} ms` : name;
+}
+
+return { REGION_NAMES, pingUrl, probeRegions, regionLabel };
+})();
+
+// ---------------------------------------------------------------------------
+// room region and ping, for the lobby screens
+//
+// The relay answers GET /ping?room=CODE[&shard=…] from the room's own object
+// with its region; timing that request (netprobe.js pingUrl) is this player's
+// ping to the room. Each room is timed at most every 30 s, one at a time.
+// ---------------------------------------------------------------------------
+const roomPings = new Map();
+let roomPingQueue = Promise.resolve();
+
+function roomPingUrls(relay, code, shard) {
+  const query = `?room=${encodeURIComponent(code)}${shard ? `&shard=${encodeURIComponent(shard)}` : ''}`;
+  let url;
+  try { url = new URL(relay, location.href); } catch { return []; }
+  url.protocol = url.protocol === 'wss:' || url.protocol === 'https:' ? 'https:' : 'http:';
+  // games-guard's /_guard/tung-ws forwards only websockets; /_guard/tung-ping
+  // is its plain twin. Until games-guard serves it, the relay's own domain
+  // answers the same request.
+  if (url.pathname === '/_guard/tung-ws') {
+    return [`${url.origin}/_guard/tung-ping${query}`, `https://relay.tung.andrenijman.com/ping${query}`];
+  }
+  return [`${url.origin}/ping${query}`];
+}
+
+async function timeRoom(relay, code, shard) {
+  for (const url of roomPingUrls(relay, code, shard)) {
+    try {
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) continue;
+      const { region } = await response.json();
+      const ms = await pingUrl(url);
+      return region ? regionLabel(region, ms) : (ms ? `${ms} ms` : '');
+    } catch { /* not this way */ }
+  }
+  return '';
+}
+
+/** "Asia · 120 ms" for a room, as a promise; '' when the relay can't say. */
+function roomPing(relay, code, shard = '') {
+  const key = `${relay} ${code} ${shard}`;
+  const known = roomPings.get(key);
+  if (known && performance.now() - known.at < 30000) return known.label;
+  const label = roomPingQueue.then(() => timeRoom(relay, code, shard)).catch(() => '');
+  roomPingQueue = label;
+  roomPings.set(key, { at: performance.now(), label });
+  return label;
+}
+
+function showRoomRegion(n) {
+  const { code, shard } = n;
+  roomPing(n.url, code, shard).then(label => {
+    if (net === n && n.code === code && n.shard === shard) $('lobby-region').textContent = label;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // relay client
 //
@@ -5647,22 +5810,29 @@ class Net {
     this.lastError = '';
     this.kickVotes=new Map();
     this.myKickVotes=new Set();
+    this.pinger = null;
+    this.request = null;
+    this.shard = '';
   }
 
-  connect(request) {
+  connect(request, room = {}) {
+    this.request = request;
     $('mp-err').textContent = 'connecting...';
     let ws;
     try {
       const socketUrl = new URL(this.url, location.href);
       if (request.t === 'create') socketUrl.searchParams.set('create', '1');
       else socketUrl.searchParams.set('code', request.code);
+      if (room.shard) socketUrl.searchParams.set('shard', room.shard);
+      if (room.ticket) socketUrl.searchParams.set('ticket', room.ticket);
       ws = new WebSocket(socketUrl);
     }
     catch (e) { $('mp-err').textContent = `bad relay address: ${e.message}`; return; }
     this.ws = ws;
     // A ping goes once a second with this client's ping and frame rate, for
-    // the relay's lag log.
+    // the relay's lag log; the HUD shows the last round trip.
     const pinger = new NetPing();
+    this.pinger = pinger;
     let pingTimer = 0;
     const timeout = setTimeout(() => {
       if (ws.readyState !== WebSocket.OPEN) {
@@ -5678,6 +5848,7 @@ class Net {
       }, 1000);
     });
     ws.addEventListener('message', (e) => {
+      if (ws !== this.ws) return;     // a socket left behind by a room move
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
       if (msg.t === 'pong') { pinger.pong(msg.c); return; }
@@ -5688,7 +5859,7 @@ class Net {
       clearTimeout(timeout);
       clearInterval(pingTimer);
       pinger.stop();
-      if (this.intentional) return;
+      if (this.intentional || ws !== this.ws) return;
       if (this.phase === 'play') showDisconnected(this.lastError || 'connection to the street was lost');
       else {
         $('mp-err').textContent = this.lastError || 'relay disconnected';
@@ -5710,8 +5881,11 @@ class Net {
   handle(msg) {
     if (msg.t === 'welcome') {
       this.you = msg.you; this.code = msg.code;
+      // This player's ping to each region, for the relay's room placement.
+      probeRegions().then(ms => { if (ms && net === this) this.send({ t: 'regions', ms }); });
       return;
     }
+    if (msg.t === 'move') { this.onMove(msg); return; }
     if (msg.t === 'lobby') { this.onLobby(msg); return; }
     if (msg.t === 'begin') { this.onBegin(msg); return; }
     if (msg.t === 'snap') { this.onSnapshot(msg); return; }
@@ -5737,6 +5911,22 @@ class Net {
     this.players = new Map(msg.players.map(p => [p.id, Object.assign(old.get(p.id) || {}, p)]));
     renderLobby(this, msg.max, msg.min);
     showScreen('scr-lobby');
+    showRoomRegion(this);
+  }
+
+  // The relay moved this room to a region fairer for the whole lobby: rejoin
+  // it there, reclaiming this seat with the ticket when there is one. The old
+  // socket is dropped, so its close is not a disconnect.
+  onMove(msg) {
+    const shard = String(msg.shard || '');
+    if (this.shard || !/^[a-z]+-[a-z0-9]{6}$/.test(shard)) return;
+    const old = this.ws;
+    this.shard = shard;
+    const code = this.code || this.request.code;
+    this.connect({ ...this.request, t: 'join', code }, { shard, ticket: msg.ticket });
+    $(this.phase === 'lobby' ? 'lobby-err' : 'mp-err').textContent =
+      `Moving room to ${REGION_NAMES[msg.region] || 'a fairer region'}…`;
+    try { old.close(); } catch { /* already closed */ }
   }
 
   onBegin(msg) {
@@ -5999,6 +6189,7 @@ $('b-join').onclick = () => connectMultiplayer('join');
 $('i-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') connectMultiplayer('join'); });
 
 function renderLobby(n, max = 10, min = 2) {
+  if ($('lobby-code').textContent !== n.code) $('lobby-region').textContent = '';
   $('lobby-code').textContent = n.code;
   $('lobby-count').textContent = String(n.players.size);
   $('lobby-max').textContent = String(max);
