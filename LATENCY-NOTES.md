@@ -80,3 +80,35 @@ sends the resulting manifest (items, alcoves, grid) and the relay validates it
 - Measure (tests/latency/harness.mjs): 200 ms RTT, ±40 ms jitter, the old
   chase (taken from origin/main) against the buffer: stutter frames % and
   path error after removing each method's own delay, plus that delay.
+
+## Item 1 result (after the work)
+
+The plan above changed once it met the measurement. Stamping samples with
+the relay tick `k` alone made things worse (stutter 17.7% -> ~48%): the
+sender's leg to the relay is jittered too, so the positions that land in
+consecutive ticks are unevenly spaced in time, and interpolating them evenly
+draws the unevenness. So the protocol gained one optional field each way,
+both backward compatible:
+
+- `in` gains `s`: the sender's `performance.now()` when it sent that position.
+- A visible player's snapshot row gains an 8th element: the `s` of the
+  position the relay last accepted for them. Old clients ignore it; an old
+  relay omits it and the buffer falls back to the tick clock (bots always use
+  the tick clock).
+
+Each remote body now has its own track on its own clock (index.html
+`SnapBuffer`): least lateness over 3 s plus the p95 arrival gap (clamped
+50-250 ms), slewed at most 10%, interpolate, coast at most 100 ms, snap on a
+step over 1.5 tiles or a gap over 1 s.
+
+`node tests/latency/harness.mjs`, 5 seeds x 60 s, 200 ms RTT ±40 ms
+(each leg 100 ± 20, order kept):
+
+| | before (chase) | after |
+|---|---|---|
+| stutter frames | 17.7 % | 0.2 % |
+| path shape error | 0.037 tiles | 0.012 tiles |
+| drawn delay | 316 ms | 301 ms |
+| error vs. true position now | 0.794 tiles | 0.757 tiles |
+
+At 40 ms RTT, no jitter: delay 156 -> 122 ms, stutter 0.4 -> 0.1 %.
