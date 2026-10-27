@@ -2,6 +2,7 @@ import { NetStats, sendNetLog, coloOf } from './netstats.js';
 import {
   REGIONS, playerWhere, withWhere, whereOf, regionOfColo, chooseRegion, newShard, shardRegion, roomStub,
 } from './netplace.js';
+import { verifyDevPass } from './netdev.js';
 
 const CATCH_DIST = 0.52;
 const PICKUP_DIST = 0.62;
@@ -33,7 +34,8 @@ const RECENT_PINGS = 5;
 const CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXYZ23456789';
 const PLAYER_COLORS = ['#e0a040', '#68c0d8', '#8ad06a', '#d878b8', '#c8c0a8', '#e07058', '#7890d8', '#b098e0', '#58b890', '#d0cc58'];
 const PRODUCTION_ORIGIN = 'https://tung.andrenijman.com';
-const ADMIN_USERS = new Set(['andrenijman', 'mechtical', 'pojodragon365']);
+// The host dev passes (netdev.js) must name to be accepted here.
+const DEV_HOST = 'tung.andrenijman.com';
 
 const DEFAULT_SETTINGS = {
   mapN: 21,
@@ -176,33 +178,19 @@ function originAllowed(origin) {
   }
 }
 
-// games-guard's proxy (tung.andrenijman.com/_guard/tung-ws) signs what it
-// forwards: the admin name it checked and where the player connects from.
+// games-guard's proxy (tung.andrenijman.com/_guard/tung-ws and
+// /_guard/tung-lobbies) signs what it forwards: where the player connects
+// from and, for the admin lobby list, the dev it let through.
 function proxyAuthorized(request, env) {
   const proxyAuthorization = request.headers.get('X-Tung-Proxy-Authorization');
   return !!proxyAuthorization && envSecretMatches(proxyAuthorization, env?.TUNG_PROXY_SECRET);
 }
 
-async function adminIdentity(request, env) {
-  if (proxyAuthorized(request, env)) {
-    const username = String(request.headers.get('X-Tung-Proxy-Admin-Name') || '').toLowerCase();
-    return ADMIN_USERS.has(username) ? username : '';
-  }
-  const cookie = request.headers.get('Cookie');
-  if (!cookie) return '';
-  try {
-    const response = await fetch('https://tung.andrenijman.com/_guard/status', {
-      headers: { Cookie: cookie, Accept: 'application/json' },
-      redirect: 'manual',
-    });
-    if (!response.ok) return '';
-    const identity = await response.json();
-    const username = String(identity.username || '').toLowerCase();
-    return identity.signedIn === true && ADMIN_USERS.has(username) ? username : '';
-  } catch (error) {
-    console.error('admin identity check failed', error);
-    return '';
-  }
+// The admin lobby list is only for devs, and only through games-guard: it
+// sends the dev's name (from its dev cookie) with the proxy secret. In-room
+// admin comes from the dev pass in create/join instead (netdev.js).
+function proxiedDev(request, env) {
+  return proxyAuthorized(request, env) && !!String(request.headers.get('X-Tung-Proxy-Admin-Name') || '').trim();
 }
 
 function envSecretMatches(authorization, expected) {
@@ -532,8 +520,8 @@ export class Room {
       handshakeTimer: null,
       messageQueue: Promise.resolve(),
       ip: request.headers.get('CF-Connecting-IP') || 'unknown',
-      admin: request.headers.get('X-Tung-Admin') === '1',
-      adminName: request.headers.get('X-Tung-Admin-Name') || '',
+      admin: false,                   // a verified dev pass in create/join (netdev.js)
+      adminName: '',
       where: whereOf(request),
       ticket: request.headers.get('X-Tung-Room-Ticket') || '',
     };
@@ -615,6 +603,14 @@ export class Room {
     }
 
     let seat = null;
+    // A dev (netdev.js) may create, or join any room: locked, full or mid-night.
+    // A missing or bad pass is just a normal player.
+    const dev = message.dev
+      ? await verifyDevPass(message.dev, DEV_HOST, { publicKey: this.env?.DEV_TEST_PUBLIC_KEY || undefined })
+      : null;
+    if (session.closed) return;
+    session.admin = !!dev;
+    session.adminName = dev?.name || '';
 
     if (session.action === 'create') {
       if (this.created) {
@@ -648,7 +644,7 @@ export class Room {
         this.fatal(session, 'no lobby with that code');
         return;
       }
-      if (this.phase !== 'lobby' && !(session.admin && this.phase === 'play')) {
+      if (this.phase !== 'lobby' && !session.admin) {
         this.fatal(session, 'that night has already started');
         return;
       }
@@ -659,7 +655,7 @@ export class Room {
       const now = Date.now();
       const attempts = (this.passwordAttempts.get(session.ip) || [])
         .filter(at => now - at < PASSWORD_ATTEMPT_WINDOW_MS);
-      if (this.passwordHash && attempts.length >= PASSWORD_ATTEMPT_MAX) {
+      if (this.passwordHash && !session.admin && attempts.length >= PASSWORD_ATTEMPT_MAX) {
         this.passwordAttempts.set(session.ip, attempts);
         this.fatal(session, 'too many password attempts; wait a minute');
         return;
@@ -670,7 +666,7 @@ export class Room {
         this.fatal(session, 'no lobby with that code');
         return;
       }
-      if (this.phase !== 'lobby' && !(session.admin && this.phase === 'play')) {
+      if (this.phase !== 'lobby' && !session.admin) {
         this.fatal(session, 'that night has already started');
         return;
       }
@@ -719,7 +715,12 @@ export class Room {
       color: PLAYER_COLORS[player.colorIdx],
     });
     if (this.phase === 'play' && player.admin) this.joinRunningGame(player);
-    else this.sendLobby();
+    else if (this.phase === 'over') {
+      // A dev arriving on the result screen waits in the lobby for the next night.
+      this.send(player.socket, this.lobbyMessage());
+      this.broadcast({ t: 'roster', players: this.publicRoster(), host: this.hostId }, player.id);
+    } else this.sendLobby();
+    if (dev && !seat) this.broadcast({ t: 'dev-joined', name: dev.name });
     if (seat && !this.tickets.size) this.startAdopted();
   }
 
@@ -779,7 +780,7 @@ export class Room {
       }
 
       case 'votekick':{
-        if(this.phase!=='play')break;const target=this.players.get(Number(message.id));if(!target||target.id===me.id)break;let votes=this.kickVotes.get(target.id);if(!votes){votes=new Set();this.kickVotes.set(target.id,votes);}votes.add(me.id);const needed=Math.floor(this.players.size/2)+1,passed=votes.size>=needed;this.broadcast({t:'ev',e:'votekick',who:target.id,by:me.id,votes:votes.size,needed,passed});if(passed){const targetSession=[...this.sessions].find(candidate=>candidate.player?.id===target.id);if(targetSession){this.send(target.socket,{t:'ev',e:'kicked',m:'removed by lobby vote'});if(target.role==='tung')this.backToLobby();this.closeSession(targetSession,1008,'removed by lobby vote');}}break;
+        if(this.phase!=='play')break;const target=this.players.get(Number(message.id));if(!target||target.id===me.id||target.admin)break;let votes=this.kickVotes.get(target.id);if(!votes){votes=new Set();this.kickVotes.set(target.id,votes);}votes.add(me.id);const needed=Math.floor(this.players.size/2)+1,passed=votes.size>=needed;this.broadcast({t:'ev',e:'votekick',who:target.id,by:me.id,votes:votes.size,needed,passed});if(passed){const targetSession=[...this.sessions].find(candidate=>candidate.player?.id===target.id);if(targetSession){this.send(target.socket,{t:'ev',e:'kicked',m:'removed by lobby vote'});if(target.role==='tung')this.backToLobby();this.closeSession(targetSession,1008,'removed by lobby vote');}}break;
       }
 
       case 'chat': {
@@ -851,7 +852,6 @@ export class Room {
       players: this.publicRoster(),
       host: this.hostId,
     }, player.id);
-    this.broadcast({ t: 'ev', e: 'dev-joined', who: player.id });
   }
 
   fatal(session, message) {
@@ -958,7 +958,11 @@ export class Room {
   }
 
   sendLobby() {
-    this.broadcast({
+    this.broadcast(this.lobbyMessage());
+  }
+
+  lobbyMessage() {
+    return {
       t: 'lobby',
       code: this.code,
       host: this.hostId,
@@ -967,7 +971,7 @@ export class Room {
       max: MAX_PLAYERS,
       min: this.settings.tungs===0?1:MIN_PLAYERS,
       players: [...this.players.values()].map(player => player.publicLobby()),
-    });
+    };
   }
 
   lobbySummary() {
@@ -1753,8 +1757,8 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'GET' && (url.pathname === '/lobbies' || url.pathname === '/admin/lobbies')) {
       const adminRequest = url.pathname === '/admin/lobbies';
-      if (adminRequest && !(await adminIdentity(request, env))) {
-        return Response.json({ error: 'admin account required' }, { status: 403 });
+      if (adminRequest && !proxiedDev(request, env)) {
+        return Response.json({ error: 'dev access required' }, { status: 403 });
       }
       const registry = env.REGISTRY.getByName('global');
       let status = 200;
@@ -1818,7 +1822,6 @@ export default {
     }
 
     const action = creating ? 'create' : 'join';
-    const adminName = await adminIdentity(request, env);
     let code = suppliedCode;
     if (creating) {
       try {
@@ -1844,8 +1847,6 @@ export default {
     const headers = new Headers(request.headers);
     headers.set('X-Tung-Room-Action', action);
     headers.set('X-Tung-Room-Code', code);
-    headers.set('X-Tung-Admin', adminName ? '1' : '0');
-    headers.set('X-Tung-Admin-Name', adminName);
     headers.set('X-Tung-Room-Ticket', ticket);
     // The room only ever sees /ws: no outside path reaches its internal routes.
     const target = new URL(request.url);

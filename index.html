@@ -3561,8 +3561,9 @@ let profile = normalizeProfile(readStored('tung-profile-guest', readStored('tung
 let profileAccount = false;
 let profileCloudReady = false;
 let profileUsername = 'GUEST';
-let profileAdmin = false;
-const ADMIN_USERS = new Set(['andrenijman', 'mechtical', 'pojodragon365']);
+// A dev (netdev.js devPass: games-guard's Access admins) gets the admin lobby
+// list and the DEV ADMIN PANEL; the relay checks the pass itself.
+let devAdmin = false;
 let profileSaveTimer = null;
 
 function saveProfile() {
@@ -3580,7 +3581,6 @@ async function loadAccountProfile() {
     const status = await fetch('/_guard/status', { cache: 'no-store' });
     const identity = await status.json();
     profileAccount = !!identity.signedIn; profileUsername = identity.username || 'GUEST';
-    profileAdmin = profileAccount && ADMIN_USERS.has(profileUsername.toLowerCase());
     if (profileAccount) {
       const response = await fetch('/_guard/profile', { cache: 'no-store' });
       if (response.ok) {
@@ -3596,8 +3596,8 @@ async function loadAccountProfile() {
 function renderProfileStrip() {
   $('profile-level').textContent = String(profileLevel(profile.xp));
   $('profile-coins').textContent = profile.unlimited ? '\u221E' : profile.coins.toLocaleString();
-  $('profile-user').textContent = profileAccount ? `${profileUsername}${profileAdmin ? ' - ADMIN' : ''}` : 'GUEST - LOCAL SAVE';
-  $('admin-badge').classList.toggle('on', profileAdmin);
+  $('profile-user').textContent = profileAccount ? `${profileUsername}${devAdmin ? ' - ADMIN' : ''}` : 'GUEST - LOCAL SAVE';
+  $('admin-badge').classList.toggle('on', devAdmin);
 }
 
 function showEventBanner(message, duration = 3200) {
@@ -5345,7 +5345,8 @@ $('b-buy-pass').onclick = () => {
   if (profile.pass || !canAfford(1000)) return;
   spendCoins(1000); profile.pass = true; grantPassRewards(); saveProfile(); renderPass();
 };
-loadAccountProfile();
+// A signed-in player's account name stands in when no name is saved (setPlayer).
+loadAccountProfile().then(() => { if (net?.you == null) syncPlayer(''); });
 
 let soloSettings = readStored('tung-solo-settings', DEFAULT_SETTINGS);
 
@@ -5485,13 +5486,13 @@ function renderAvailableLobbies(lobbies) {
     roomPing($('i-relay').value.trim() || defaultRelayUrl(), code.textContent, String(lobby.shard || ''))
       .then(label => { where.textContent = label; });
     const lock = document.createElement('span'); lock.className = 'lock';
-    lock.textContent = profileAdmin ? 'DEV ACCESS' : (lobby.locked ? 'LOCKED' : 'OPEN');
+    lock.textContent = devAdmin ? 'DEV ACCESS' : (lobby.locked ? 'LOCKED' : 'OPEN');
     primary.append(' ', lock); meta.append(primary, detail, where);
     const join = document.createElement('button'); join.className = 'ghost small'; join.textContent = 'JOIN';
     join.setAttribute('aria-label', `Join lobby ${code.textContent}${lobby.locked ? ', password required' : ''}`);
     join.onclick = () => {
       $('i-code').value = code.textContent;
-      if (!profileAdmin && lobby.locked && !$('i-password').value) {
+      if (!devAdmin && lobby.locked && !$('i-password').value) {
         $('mp-err').textContent = 'enter this lobby\'s password first';
         $('i-password').focus();
         return;
@@ -5512,11 +5513,14 @@ async function refreshAvailableLobbies(showLoading = false) {
   }
   try {
     const url = lobbyListUrl($('i-relay').value.trim() || defaultRelayUrl());
-    if (profileAdmin) {
+    const publicUrl = new URL(url);
+    if (devAdmin) {
       if (url.pathname === '/_guard/tung-lobbies') url.searchParams.set('admin', '1');
       else url.pathname = '/admin/lobbies';
     }
-    const response = await fetch(url, { cache: 'no-store', credentials: 'include' });
+    let response = await fetch(url, { cache: 'no-store', credentials: 'include' });
+    // The admin list only answers through games-guard; elsewhere a dev sees the public one.
+    if (devAdmin && response.status === 403) response = await fetch(publicUrl, { cache: 'no-store', credentials: 'include' });
     if (!response.ok) throw new Error(`relay returned ${response.status}`);
     const data = await response.json();
     if (request !== lobbyBrowserRequest) return;
@@ -5543,6 +5547,7 @@ function stopLobbyBrowser() {
 function goMain() {
   stopLobbyBrowser();
   if (net) { net.close(); net = null; }
+  syncPlayer('');
   paused = false;
   chatOpen = false;
   $('team-chat').classList.remove('on', 'typing');
@@ -5729,6 +5734,174 @@ function regionLabel(region, ms) {
 }
 
 return { REGION_NAMES, pingUrl, probeRegions, regionLabel };
+})();
+
+// netdev.js, shared unchanged with the other game clients (only `export`
+// dropped, and wrapped in a function so its private names stay private).
+const { devPass, joinCode, clearJoinCode, setPlayer, showDevJoined } = (() => {
+// netdev.js v1 (canonical copy: games-site shared/net/).
+//
+// Dev join. A dev is anyone games-guard's Cloudflare Access admin page lets in
+// (ADMIN_EMAILS): opening that page marks the browser, and from then on every
+// game host's /_guard/dev hands it a short-lived pass signed by games-guard.
+// The client sends the pass in its create or join message; the relay checks
+// it against the public key below, so no relay holds a secret or an admin
+// list. A dev may join any room, even locked, full or mid-match, and the
+// relay tells the room with {t:'dev-joined', name}, which every client shows
+// with showDevJoined(). Admins reach a room from the admin page through
+// https://<game host>/?join=CODE, which every client honours (joinCode()).
+// setPlayer() tells the admin page's live view who is playing, and where.
+// Shared, unchanged, by every game client and relay.
+
+/** games-guard's Ed25519 public key (raw, base64url). Its private half is the guard secret DEV_SIGNING_KEY. */
+const DEV_PUBLIC_KEY = '0_eVFvtfeB30dok5z32bp942TUbLInZ4zM5iWDZ5NlY';
+
+const PASS_TTL_S = 15 * 60;
+
+function b64url(bytes) {
+  let text = '';
+  for (const byte of bytes) text += String.fromCharCode(byte);
+  return btoa(text).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function unb64url(text) {
+  const plain = atob(String(text).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(plain, (c) => c.charCodeAt(0));
+}
+
+/** A dev's display name: capitals, digits and spaces, at most 16, e.g. "ANDRE". */
+function cleanDevName(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
+}
+
+// -- relay -------------------------------------------------------------------
+
+const keys = new Map();
+function publicKey(raw) {
+  if (!keys.has(raw)) keys.set(raw, crypto.subtle.importKey('raw', unb64url(raw), { name: 'Ed25519' }, false, ['verify']));
+  return keys.get(raw);
+}
+
+/**
+ * The dev a pass names, { name }, or null when it is missing, forged, expired
+ * or for another game. `host` is the relay's own game, e.g.
+ * 'fart.andrenijman.com'. Tests pass their own `publicKey`.
+ */
+async function verifyDevPass(pass, host, options = {}) {
+  try {
+    const [version, body, signature] = String(pass || '').split('.');
+    if (version !== 'v1' || !body || !signature || pass.length > 600) return null;
+    const ok = await crypto.subtle.verify({ name: 'Ed25519' }, await publicKey(options.publicKey || DEV_PUBLIC_KEY),
+      unb64url(signature), new TextEncoder().encode(`v1.${body}`));
+    if (!ok) return null;
+    const claims = JSON.parse(new TextDecoder().decode(unb64url(body)));
+    const name = cleanDevName(claims.n);
+    const now = options.now ?? Date.now();
+    if (!name || claims.h !== host || !(claims.x * 1000 > now)) return null;
+    return { name };
+  } catch {
+    return null;
+  }
+}
+
+/** games-guard's half (and the tests'): a pass for `name` on `host`. `privateKey` is PKCS#8, base64url. */
+async function signDevPass(privateKey, { name, host, ttl = PASS_TTL_S, now = Date.now() }) {
+  const key = await crypto.subtle.importKey('pkcs8', unb64url(privateKey), { name: 'Ed25519' }, false, ['sign']);
+  const exp = Math.floor(now / 1000) + ttl;
+  const body = b64url(new TextEncoder().encode(JSON.stringify({ n: cleanDevName(name), h: host, x: exp })));
+  const signature = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, key, new TextEncoder().encode(`v1.${body}`)));
+  return { pass: `v1.${body}.${b64url(signature)}`, exp };
+}
+
+// -- client ------------------------------------------------------------------
+
+let held = null;
+let pending = null;
+
+// Passes come from games-guard, which serves every game host; elsewhere
+// (local dev, file://, a mirror) nobody is a dev.
+function guarded() {
+  return typeof location !== 'undefined' && location.protocol === 'https:' && /(^|\.)andrenijman\.com$/.test(location.hostname);
+}
+
+/**
+ * This browser's dev pass, { name, pass }, or null for everyone else. Fetch
+ * it just before sending create or join; it is reused until a minute before
+ * it expires.
+ */
+function devPass() {
+  if (!guarded()) return Promise.resolve(null);
+  if (held && held.exp * 1000 - Date.now() > 60_000) return Promise.resolve(held.dev);
+  pending ||= fetch('/_guard/dev', { cache: 'no-store', credentials: 'same-origin' })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((data) => {
+      const dev = data?.dev && data.pass ? { name: cleanDevName(data.name), pass: data.pass } : null;
+      held = dev ? { dev, exp: data.exp } : null;
+      return dev;
+    })
+    .catch(() => null)
+    .finally(() => { pending = null; });
+  return pending;
+}
+
+/** The room code from a ?join=CODE link (the admin page's), or null. */
+function joinCode() {
+  if (typeof location === 'undefined') return null;
+  const code = new URLSearchParams(location.search).get('join');
+  return code ? code.trim().slice(0, 40) : null;
+}
+
+/** Drops ?join= from the address bar once it has been used, so a reload doesn't rejoin. */
+function clearJoinCode() {
+  if (typeof location === 'undefined' || typeof history === 'undefined') return;
+  const url = new URL(location.href);
+  if (!url.searchParams.has('join')) return;
+  url.searchParams.delete('join');
+  history.replaceState(history.state, '', url);
+}
+
+/**
+ * Who this tab is playing as, and in which room (null when not in one), for
+ * the admin page's live view. Call it on joining, on leaving and when the
+ * player renames.
+ */
+function setPlayer(name, room) {
+  if (typeof window === 'undefined') return;
+  window.__gamesPlayer = { name: String(name || '').slice(0, 24), room: room ? String(room).slice(0, 40) : '' };
+}
+
+let bannerTimer = 0;
+
+/** "DEV ANDRE HAS JOINED", big, in the middle of the screen, for four seconds. */
+function showDevJoined(name) {
+  if (typeof document === 'undefined') return;
+  const label = cleanDevName(name) || 'A DEV';
+  let banner = document.getElementById('dev-joined-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'dev-joined-banner';
+    banner.setAttribute('role', 'status');
+    banner.setAttribute('aria-live', 'polite');
+    banner.style.cssText = [
+      'position:fixed', 'left:50%', 'top:50%', 'z-index:2147483647', 'pointer-events:none',
+      'transform:translate(-50%,-50%) scale(.9)', 'opacity:0', 'transition:opacity .25s ease,transform .25s ease',
+      'padding:.55em 1.1em', 'border:3px solid #ffd23f', 'border-radius:6px', 'background:rgba(12,10,20,.88)',
+      'color:#fff', 'font:800 clamp(22px,4.5vw,48px)/1.1 system-ui,sans-serif', 'letter-spacing:.06em',
+      'text-align:center', 'white-space:nowrap', 'text-shadow:0 3px 0 #000', 'box-shadow:0 10px 40px rgba(0,0,0,.5)',
+    ].join(';');
+    (document.body || document.documentElement).appendChild(banner);
+  }
+  banner.textContent = '';
+  const tag = document.createElement('span');
+  tag.textContent = `DEV ${label}`;
+  tag.style.color = '#ffd23f';
+  banner.append(tag, ' HAS JOINED');
+  requestAnimationFrame(() => { banner.style.opacity = '1'; banner.style.transform = 'translate(-50%,-50%) scale(1)'; });
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => { banner.style.opacity = '0'; banner.style.transform = 'translate(-50%,-50%) scale(.9)'; }, 4000);
+}
+
+return { devPass, joinCode, clearJoinCode, setPlayer, showDevJoined };
 })();
 
 // ---------------------------------------------------------------------------
@@ -5960,6 +6133,7 @@ class Net {
       clearInterval(pingTimer);
       pinger.stop();
       if (this.intentional || ws !== this.ws) return;
+      syncPlayer('');
       if (this.phase === 'play') showDisconnected(this.lastError || 'connection to the street was lost');
       else {
         $('mp-err').textContent = this.lastError || 'relay disconnected';
@@ -5981,6 +6155,7 @@ class Net {
   handle(msg) {
     if (msg.t === 'welcome') {
       this.you = msg.you; this.code = msg.code;
+      setPlayer(this.request.name, msg.code);
       // This player's ping to each region, for the relay's room placement.
       probeRegions().then(ms => { if (ms && net === this) this.send({ t: 'regions', ms }); });
       return;
@@ -5993,6 +6168,7 @@ class Net {
     if (msg.t === 'chat') { this.onChat(msg); return; }
     if (msg.t === 'over') { this.onOver(msg); return; }
     if (msg.t === 'roster') { this.onRoster(msg); return; }
+    if (msg.t === 'dev-joined') { showDevJoined(msg.name); return; }
     if (msg.t === 'need-manifest') { if (this.you === this.host) this.sendManifest(); return; }
     if (msg.t === 'err') {
       this.lastError = msg.m || 'relay error';
@@ -6127,7 +6303,8 @@ class Net {
       if (msg.who === this.you) { game.alive = false; game.cycleSpectate(1); audio.playSimple('scare', 1.0); }
       else audio.playSimple('stinger', 0.45);
     } else if (msg.e === 'dev-joined') {
-      showEventBanner(`${this.players.get(msg.who)?.name || 'A developer'} has joined`, 4000);
+      // A relay from before the shared dev join; the current one sends {t:'dev-joined', name}.
+      showDevJoined(this.players.get(msg.who)?.name);
     } else if(msg.e==='spray'){
       if(msg.by!==this.you){game.receiveSpray(msg);audio.playSimple('spray',.28);}
     } else if(msg.e==='votekick'){
@@ -6272,7 +6449,7 @@ class Net {
   }
 }
 
-function connectMultiplayer(kind, codeOverride) {
+async function connectMultiplayer(kind, codeOverride) {
   const name = $('i-name').value.trim() || (profileAccount?profileUsername:'guest');
   const relay = $('i-relay').value.trim() || defaultRelayUrl();
   const code = String(codeOverride || $('i-code').value).trim().toUpperCase();
@@ -6281,12 +6458,27 @@ function connectMultiplayer(kind, codeOverride) {
   stopLobbyBrowser();
   store('tung-identity', { name, relay });
   if (net) net.close();
-  net = new Net(relay);
-  const identity = { name, sigil: profile.sigil, look: profile.equipped, level:profileLevel(profile.xp) };
+  const pending = net = new Net(relay);
+  // A dev's pass lets the relay seat them anywhere (netdev.js); null for everyone else.
+  const dev = await devPass();
+  if (net !== pending) return;
+  setDevAdmin(!!dev);
+  const identity = { name, sigil: profile.sigil, look: profile.equipped, level:profileLevel(profile.xp), dev: dev?.pass };
   net.connect(kind === 'create'
     ? { t: 'create', ...identity, password, settings: DEFAULT_SETTINGS }
     : { t: 'join', ...identity, code, password });
 }
+function setDevAdmin(on) {
+  if (devAdmin === on) return;
+  devAdmin = on;
+  renderProfileStrip();
+}
+// Who this tab plays as, and in which room, for the admin page's live view.
+function syncPlayer(room) {
+  setPlayer($('i-name').value.trim() || (profileAccount ? profileUsername : 'guest'), room);
+}
+// Renaming only happens in the menus; in a room the relay keeps the name joined with.
+$('i-name').addEventListener('input', () => { if (net?.you == null) syncPlayer(''); });
 $('b-create').onclick = () => connectMultiplayer('create');
 $('b-join').onclick = () => connectMultiplayer('join');
 $('i-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') connectMultiplayer('join'); });
@@ -6340,7 +6532,7 @@ function renderLobby(n, max = 10, min = 2) {
 function renderVotekickPanel(){
   const panel=$('pause-votekick'),list=$('votekick-list');if(!panel||!list)return;
   const active=game.mode==='mp'&&net?.phase==='play';panel.style.display=active?'block':'none';list.replaceChildren();if(!active)return;
-  const targets=[...net.players.values()].filter(p=>p.id!==net.you&&!p.bot);
+  const targets=[...net.players.values()].filter(p=>p.id!==net.you&&!p.bot&&!p.admin);
   const humanCount=[...net.players.values()].filter(p=>!p.bot).length;
   if(!targets.length){const empty=document.createElement('div');empty.className='hint';empty.textContent='No other human player can be voted out.';list.appendChild(empty);return;}
   for(const p of targets){const state=net.kickVotes.get(p.id)||{votes:0,needed:Math.floor(humanCount/2)+1};const row=document.createElement('div');row.className='vote-row';const name=document.createElement('span');name.textContent=`${playerName(p)} · ${p.role==='tung'?'TUNG':'RUNNER'}`;const tally=document.createElement('span');tally.className='tally';tally.textContent=`${state.votes}/${state.needed}`;const voted=net.myKickVotes.has(p.id),button=actionButton(voted?'VOTED':'VOTE OUT',()=>net.send({t:'votekick',id:p.id}),voted);row.append(name,tally,button);list.appendChild(row);}
@@ -6349,9 +6541,9 @@ function renderVotekickPanel(){
 function renderAdminPanel(n, place) {
   const panel = $(place === 'pause' ? 'pause-admin' : 'lobby-admin');
   const actions = $(place === 'pause' ? 'pause-admin-actions' : 'lobby-admin-actions');
-  panel.classList.toggle('on', profileAdmin && !!n);
+  panel.classList.toggle('on', devAdmin && !!n);
   actions.replaceChildren();
-  if (!profileAdmin || !n) return;
+  if (!devAdmin || !n) return;
   const add = (label, message) => actions.appendChild(actionButton(label, () => n.send(message)));
   if (n.phase === 'lobby') add('FORCE START', { t: 'admin-start' });
   if (n.phase === 'play') add('END NIGHT', { t: 'admin-end' });
@@ -6360,7 +6552,7 @@ function renderAdminPanel(n, place) {
   }
 }
 
-function leaveToMultiplayer(){if(net){net.close();net=null;}paused=false;game.state='menu';showScreen('scr-mp');ctx.fillStyle='black';ctx.fillRect(0,0,WIN_W,WIN_H);startLobbyBrowser();}
+function leaveToMultiplayer(){if(net){net.close();net=null;}syncPlayer('');paused=false;game.state='menu';showScreen('scr-mp');ctx.fillStyle='black';ctx.fillRect(0,0,WIN_W,WIN_H);startLobbyBrowser();}
 $('b-leave').onclick = () => leaveToMultiplayer();
 
 function renderResult(n, msg) {
@@ -6619,6 +6811,21 @@ function frame(now) {
 renderSettings($('solo-settings'), soloSettings, true, (s) => store('tung-solo-settings', s));
 showScreen('scr-main');
 requestAnimationFrame(frame);
+syncPlayer('');
+
+// The admin page opens https://tung.andrenijman.com/?join=CODE: straight into
+// that lobby, as a dev when this browser has a dev pass, otherwise as a
+// normal join (a locked lobby then asks for its password on this screen).
+const deepJoin = joinCode();
+if (deepJoin) {
+  $('i-code').value = deepJoin.toUpperCase();
+  screenHistory.push('scr-main', 'scr-play');
+  showScreen('scr-mp');
+  connectMultiplayer('join', deepJoin).finally(clearJoinCode);
+} else devPass().then(dev => {
+  setDevAdmin(!!dev);
+  if (dev && activeScreenId() === 'scr-mp') refreshAvailableLobbies(false);
+});
 </script>
 </body>
 </html>

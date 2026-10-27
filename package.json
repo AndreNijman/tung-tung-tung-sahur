@@ -10,6 +10,8 @@
     "test:relay": "node --test tools/relay-test.mjs",
     "test:latency": "node --test tests/latency/unit.test.mjs",
     "test:latency:rooms": "node tests/latency/rooms.test.mjs",
+    "test:dev": "node tests/dev/dev-join.test.mjs",
+    "smoke:dev": "node tests/dev/smoke.mjs",
     "latency:harness": "node tests/latency/harness.mjs",
     "smoke:mp:live": "node tools/mp-smoke.js https://tung.andrenijman.com/",
     "deploy:worker": "npx wrangler deploy",

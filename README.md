@@ -176,12 +176,16 @@ rooms are not listed. The Cloudflare deployment keeps this directory in a
 persistent Registry Durable Object; individual room/password state stays
 isolated inside its Room Durable Object.
 
-The signed-in admin accounts (`andrenijman`, `mechtical`, `pojodragon365`) have a
-separate authenticated registry view.
-It can see private, full, and running rooms, bypass their password/capacity when
-joining, enter a running match as a survivor, start or end a night, and remove a
-player. The relay verifies the shared `.andrenijman.com` account session against
-the games guard; player names and client messages never grant admin access.
+Devs (anyone games-guard's Cloudflare Access admin page lets in) get the shared
+dev join (`worker/netdev.js`, inlined in `index.html`): the client sends the
+short-lived pass from `/_guard/dev` in its create/join message and the relay
+verifies its signature. A dev can bypass a lobby's password/capacity, enter a
+running night as a survivor (everyone sees "DEV NAME HAS JOINED"), start or end
+a night, and remove a player; nobody can vote a dev out. The admin page's
+`https://tung.andrenijman.com/?join=CODE` link joins that lobby directly.
+Their separate registry view (`/admin/lobbies`, also listing private, full and
+running rooms) answers only through games-guard's proxy, which names the dev.
+Player names and other client messages never grant admin access.
 
 Run it directly:
 
@@ -207,8 +211,7 @@ For a public relay, set a comma-separated origin allowlist, for example
 `file://` development and smoke tests.
 
 The live build uses the Cloudflare Durable Object relay at
-`relay.tung.andrenijman.com`. Using the custom `.andrenijman.com` hostname also
-lets the relay receive and verify the games account session for admin access.
+`relay.tung.andrenijman.com`.
 Its implementation is `worker/relay.js`; it speaks the same client protocol and
 keeps each room inside one Durable Object. Deploy it with the account-scoped
 token in `CLOUDFLARE_API_TOKEN`:
