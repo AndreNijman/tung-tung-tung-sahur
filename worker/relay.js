@@ -1,5 +1,7 @@
 import { NetStats, sendNetLog, coloOf } from './netstats.js';
-import { playerWhere, withWhere, whereOf, regionOfColo, shardRegion, roomStub } from './netplace.js';
+import {
+  REGIONS, playerWhere, withWhere, whereOf, regionOfColo, chooseRegion, newShard, shardRegion, roomStub,
+} from './netplace.js';
 
 const CATCH_DIST = 0.52;
 const PICKUP_DIST = 0.62;
@@ -24,6 +26,9 @@ const PASSWORD_ATTEMPT_MAX = 6;
 const PASSWORD_ATTEMPT_WINDOW_MS = 60000;
 const RESERVATION_MS = 15000;
 const REGISTRY_STALE_MS = 60 * 60 * 1000;
+const ADOPT_WAIT_MS = 6000;           // a moved room starts with whoever reconnected by then
+const MOVE_CLOSE_MS = 1000;           // old sockets close this long after the move message
+const RECENT_PINGS = 5;
 
 const CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXYZ23456789';
 const PLAYER_COLORS = ['#e0a040', '#68c0d8', '#8ad06a', '#d878b8', '#c8c0a8', '#e07058', '#7890d8', '#b098e0', '#58b890', '#d0cc58'];
@@ -119,6 +124,24 @@ function sanitizeCosmetics(message) {
     for (const [slot, value] of Object.entries(message.look).slice(0, 16)) look[clean(slot)] = clean(value);
   }
   return { sigil: clean(message.sigil), look, level:Math.max(1,Math.min(100,Math.round(Number(message.level)||1))) };
+}
+
+// A player's netprobe.js results, { weur: 38, apac: 290 } in ms, or null.
+function cleanProbes(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const probes = {};
+  for (const region of REGIONS) {
+    const ms = Number(raw[region]);
+    if (Number.isFinite(ms) && ms > 0 && ms < 60000) probes[region] = Math.round(ms);
+  }
+  return Object.keys(probes).length ? probes : null;
+}
+
+function makeTicket() {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let ticket = '';
+  for (let i = 0; i < 16; i++) ticket += alphabet[randomInt(alphabet.length)];
+  return ticket;
 }
 
 function normalizeCode(code) {
@@ -217,6 +240,7 @@ function cleanLobbySummary(raw) {
     host: sanitizeName(raw.host),
     phase: ['lobby', 'play', 'over'].includes(raw.phase) ? raw.phase : 'lobby',
     settings: clampSettings(raw.settings),
+    shard: shardRegion(raw.shard) ? raw.shard : '',
   };
 }
 
@@ -374,6 +398,20 @@ class Player {
     this.spawnIdx = 0;
     this.chatTimes = [];
     this.where = null;                // { country, edge } from netplace.js, for the lag log
+    this.regions = null;              // this player's ping to each region (netprobe.js)
+    this.rtts = [];                   // their last few reported pings to this room
+  }
+
+  recentRtt() {
+    if (!this.rtts.length) return null;
+    return [...this.rtts].sort((a, b) => a - b)[Math.floor(this.rtts.length / 2)];
+  }
+
+  seat() {
+    return {
+      id: this.id, name: this.name, sigil: this.sigil, look: this.look, level: this.level,
+      admin: this.admin, adminName: this.adminName, vote: this.vote, colorIdx: this.colorIdx,
+    };
   }
 
   publicLobby() {
@@ -402,6 +440,14 @@ export class Room {
     this.registryQueue = Promise.resolve();
     this.net = null;                  // lag stats for the night in progress
     this.colo = '';
+    // Room placement (netplace.js). The room's own object, once it has moved
+    // its players to a shard, keeps { shard, region } (also in storage, so a
+    // late joiner is still sent on after the object was evicted) until the
+    // shard reports it is empty. A shard is a moved copy of a room; it never
+    // moves again.
+    this.moved = undefined;           // undefined until read from storage
+    this.moving = false;
+    this.shard = '';
     this.resetRoom();
   }
 
@@ -409,6 +455,13 @@ export class Room {
     this.endNetLog('closed');
     const previousCode = this.code;
     if (notifyRegistry && previousCode) this.removeFromRegistry(previousCode, true);
+    if (this.shard && previousCode) this.releaseShard(previousCode);
+    clearTimeout(this.adoptTimer);
+    this.adoptTimer = null;
+    this.tickets = new Map();         // shard: ticket -> the seat it restores
+    this.shard = '';
+    this.movedFrom = '';
+    this.hostSeat = null;
     this.stopTick();
     this.created = false;
     this.code = null;
@@ -442,6 +495,10 @@ export class Room {
         headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' },
       });
     }
+    // Internal: only other room objects call these (the Worker forwards
+    // nothing but websockets at /ws and GET /ping).
+    if (request.method === 'POST' && url.pathname === '/_adopt') return this.adopt(request);
+    if (request.method === 'POST' && url.pathname === '/_released') return this.released(request);
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
       return new Response('websocket upgrade required', { status: 426 });
     }
@@ -454,6 +511,16 @@ export class Room {
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
+    await this.loadMoved();
+    if (this.moved && action === 'join') {
+      // This room moved to a shard: send the player on, as a normal joiner.
+      server.accept();
+      this.send(server, { t: 'move', shard: this.moved.shard, region: this.moved.region });
+      setTimeout(() => { try { server.close(4000, 'moved'); } catch { /* already closed */ } }, MOVE_CLOSE_MS);
+      return new Response(null, { status: 101, webSocket: client });
+    }
+    // The Registry handed this code out again, so the old shard is gone.
+    if (this.moved && action === 'create') await this.clearMoved();
     const session = {
       socket: server,
       action,
@@ -467,6 +534,7 @@ export class Room {
       admin: request.headers.get('X-Tung-Admin') === '1',
       adminName: request.headers.get('X-Tung-Admin-Name') || '',
       where: whereOf(request),
+      ticket: request.headers.get('X-Tung-Room-Ticket') || '',
     };
 
     server.accept();
@@ -491,7 +559,7 @@ export class Room {
   }
 
   async onSocketMessage(session, data) {
-    if (session.closed) return;
+    if (session.closed || session.moved) return;
     if (typeof data !== 'string') {
       this.closeSession(session, 1003, 'text messages only');
       return;
@@ -522,6 +590,11 @@ export class Room {
 
     if (message.t === 'ping') {
       if (session.player) this.net?.ping(session.player.id, message.rtt, message.fps, message.frameMax);
+      if (session.player && Number.isFinite(message.rtt) && message.rtt >= 0 && message.rtt < 60000) {
+        const rtts = session.player.rtts ||= [];
+        rtts.push(message.rtt);
+        if (rtts.length > RECENT_PINGS) rtts.shift();
+      }
       this.send(session.socket, { t: 'pong', c: message.c });
       return;
     }
@@ -539,6 +612,8 @@ export class Room {
       this.fatal(session, `expected ${session.action} as the first message`);
       return;
     }
+
+    let seat = null;
 
     if (session.action === 'create') {
       if (this.created) {
@@ -558,13 +633,17 @@ export class Room {
         this.resetRoom(true);
         return;
       }
+    } else if (this.tickets.has(session.ticket) && normalizeCode(message.code) === this.code) {
+      // A player from the room this shard was moved from, back in their seat.
+      seat = this.tickets.get(session.ticket);
+      this.tickets.delete(session.ticket);
     } else {
       const requestedCode = normalizeCode(message.code);
       if (requestedCode !== session.code) {
         this.fatal(session, 'room code does not match the connection');
         return;
       }
-      if (!this.created || this.code !== session.code || this.players.size === 0) {
+      if (!this.created || this.code !== session.code || (this.players.size === 0 && !this.shard)) {
         this.fatal(session, 'no lobby with that code');
         return;
       }
@@ -586,7 +665,7 @@ export class Room {
       }
       const matches = session.admin || await passwordMatches(this.passwordHash, message.password);
       if (session.closed) return;
-      if (!this.created || this.code !== session.code || this.players.size === 0) {
+      if (!this.created || this.code !== session.code || (this.players.size === 0 && !this.shard)) {
         this.fatal(session, 'no lobby with that code');
         return;
       }
@@ -606,9 +685,17 @@ export class Room {
       this.passwordAttempts.delete(session.ip);
     }
 
-    const player = new Player(this.nextPlayerId++, session.socket, message.name, sanitizeCosmetics(message), session.adminName);
+    const player = seat
+      ? new Player(seat.id, session.socket, seat.name, seat, seat.adminName)
+      : new Player(this.nextPlayerId++, session.socket, message.name, sanitizeCosmetics(message), session.adminName);
     player.where = session.where || null;
     this.addPlayer(player);
+    if (seat) {
+      player.admin = !!seat.admin;
+      player.colorIdx = seat.colorIdx;
+      player.vote = seat.vote;
+      if (seat.id === this.hostSeat) this.hostId = seat.id;
+    }
     session.player = player;
     if (session.action === 'create') {
       try {
@@ -632,6 +719,7 @@ export class Room {
     });
     if (this.phase === 'play' && player.admin) this.joinRunningGame(player);
     else this.sendLobby();
+    if (seat && !this.tickets.size) this.startAdopted();
   }
 
   handleMessage(session, message) {
@@ -661,7 +749,11 @@ export class Room {
       }
 
       case 'start':
-        if (me.id === this.hostId && this.phase === 'lobby') this.start();
+        if (me.id === this.hostId && this.phase === 'lobby') this.requestStart();
+        break;
+
+      case 'regions':
+        me.regions = cleanProbes(message.ms);
         break;
 
       case 'manifest':
@@ -709,7 +801,7 @@ export class Room {
         break;
 
       case 'admin-start':
-        if (me.admin && this.phase === 'lobby') this.start();
+        if (me.admin && this.phase === 'lobby') this.requestStart();
         break;
 
       case 'admin-end':
@@ -887,6 +979,7 @@ export class Room {
       host: host ? host.name : 'guest',
       phase: this.phase,
       settings: { ...this.settings },
+      shard: this.shard,
     };
   }
 
@@ -1317,13 +1410,174 @@ export class Room {
     return this.colo;
   }
 
+  // The host asked to start. A mixed group's room first moves to the region
+  // that is fairest for everyone (netplace.js chooseRegion), once per room
+  // session; otherwise, or if the move fails, the night starts here.
+  requestStart() {
+    if (this.phase !== 'lobby' || this.moving) return;
+    const players = [...this.players.values()];
+    const minimum = this.settings.tungs === 0 ? 1 : MIN_PLAYERS;
+    const choice = !this.shard && players.length >= Math.max(2, minimum)
+      ? chooseRegion(players.map(player => ({ probes: player.regions, rtt: player.recentRtt() })))
+      : null;
+    if (choice) this.moveRoom(choice.region);
+    else this.start();
+  }
+
+  async moveRoom(region) {
+    this.moving = true;
+    const code = this.code;
+    const shard = newShard(region);
+    const tickets = {};
+    const ticketOf = new Map();
+    for (const player of this.players.values()) {
+      const ticket = makeTicket();
+      tickets[ticket] = player.id;
+      ticketOf.set(player.id, ticket);
+    }
+    const state = {
+      settings: this.settings,
+      hostId: this.hostId,
+      nextPlayerId: this.nextPlayerId,
+      passwordHash: this.passwordHash ? [...this.passwordHash] : null,
+      players: [...this.players.values()].map(player => player.seat()),
+    };
+    try {
+      const from = await this.coloNow();
+      const response = await roomStub(this.env.ROOMS, code, shard).fetch('https://room.internal/_adopt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, shard, from, state, tickets }),
+      });
+      if (!response.ok) throw new Error(`adopt answered ${response.status}: ${await response.text()}`);
+    } catch (error) {
+      console.error('room move failed; starting here', error);
+      this.moving = false;
+      if (this.code === code && this.phase === 'lobby' && this.players.size) this.start();
+      return;
+    }
+    this.moving = false;
+    // Everyone left while the shard was set up; it empties itself.
+    if (this.code !== code) return;
+    this.moved = { shard, region };
+    try {
+      await this.state.storage.put('moved', this.moved);
+    } catch (error) {
+      console.error('could not store the room move', error);
+    }
+    // Their seats live on in the shard: detach them here without the usual
+    // leave, which would hand the code back to the Registry.
+    const sessions = [...this.sessions];
+    for (const session of sessions) {
+      const ticket = session.player ? ticketOf.get(session.player.id) : undefined;
+      this.send(session.socket, ticket ? { t: 'move', shard, region, ticket } : { t: 'move', shard, region });
+      session.player = null;
+      session.moved = true;
+    }
+    this.players = new Map();
+    this.resetRoom();
+    setTimeout(() => {
+      for (const session of sessions) this.closeSession(session, 4000, 'moved');
+    }, MOVE_CLOSE_MS);
+  }
+
+  // Shard: take over a room moved here, then wait for its players' tickets.
+  async adopt(request) {
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return new Response('invalid adopt', { status: 400 });
+    }
+    const code = normalizeCode(body?.code);
+    const state = body?.state;
+    if (!CODE_PATTERN.test(code) || !shardRegion(body?.shard) || !state || !body.tickets || typeof body.tickets !== 'object') {
+      return new Response('invalid adopt', { status: 400 });
+    }
+    if (this.created) return new Response('shard already in use', { status: 409 });
+    const seats = new Map((Array.isArray(state.players) ? state.players : [])
+      .filter(seat => Number.isInteger(seat?.id))
+      .map(seat => [seat.id, {
+        ...seat, name: sanitizeName(seat.name), ...sanitizeCosmetics(seat),
+        colorIdx: Math.max(0, Math.min(PLAYER_COLORS.length - 1, Number(seat.colorIdx) || 0)),
+        vote: seat.vote === 'random' || Number.isInteger(seat.vote) ? seat.vote : null,
+      }]));
+    this.created = true;
+    this.code = code;
+    this.shard = body.shard;
+    this.movedFrom = String(body.from || '').slice(0, 8);
+    this.settings = clampSettings(state.settings);
+    this.passwordHash = Array.isArray(state.passwordHash) ? new Uint8Array(state.passwordHash) : null;
+    this.hostSeat = state.hostId;
+    this.nextPlayerId = Math.max(1, Number(state.nextPlayerId) || 1, ...[...seats.keys()].map(id => id + 1));
+    for (const [ticket, id] of Object.entries(body.tickets)) {
+      if (seats.has(id)) this.tickets.set(ticket, seats.get(id));
+    }
+    this.touched = Date.now();
+    this.adoptTimer = setTimeout(() => this.startAdopted(), ADOPT_WAIT_MS);
+    this.coloNow();
+    return Response.json({ ok: true });
+  }
+
+  // Shard: every ticket is back, or the wait is over. Seats nobody claimed
+  // count as disconnected.
+  startAdopted() {
+    clearTimeout(this.adoptTimer);
+    this.adoptTimer = null;
+    this.tickets.clear();
+    if (!this.players.size) {
+      this.resetRoom(true);
+      return;
+    }
+    if (this.phase === 'lobby') this.start();
+  }
+
+  // Shard, once empty: the room's own object may hand out its code again.
+  releaseShard(code) {
+    const shard = this.shard;
+    const release = roomStub(this.env.ROOMS, code).fetch('https://room.internal/_released', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shard }),
+    }).catch(error => console.error('shard release failed', error));
+    this.state.waitUntil?.(release);
+  }
+
+  async released(request) {
+    const body = await request.json().catch(() => null);
+    await this.loadMoved();
+    if (this.moved && body?.shard === this.moved.shard) await this.clearMoved();
+    return new Response(null, { status: 204 });
+  }
+
+  async loadMoved() {
+    if (this.moved !== undefined) return;
+    try {
+      this.moved = (await this.state.storage?.get('moved')) || null;
+    } catch (error) {
+      console.error('could not read the room move', error);
+      this.moved = null;
+    }
+  }
+
+  async clearMoved() {
+    this.moved = null;
+    try {
+      await this.state.storage?.deleteAll();
+    } catch (error) {
+      console.error('could not clear the room move', error);
+    }
+  }
+
   endNetLog(outcome) {
     const net = this.net;
     this.net = null;
     if (!net) return;
     const s = this.settings;
     const mode = `${net.seats.size}p · ${s.tungs ? `${s.tungs} tung` : `${s.botTungs} bot tung`} · ${s.mapN}x${s.mapN}`;
-    const record = net.record({ code: this.code, mode, outcome, colo: this.colo, region: regionOfColo(this.colo) });
+    const region = shardRegion(this.shard) || regionOfColo(this.colo);
+    const moved = this.shard ? { from: this.movedFrom, to: shardRegion(this.shard) } : null;
+    const record = net.record({ code: this.code, mode, outcome, colo: this.colo, region, moved });
     if (record.runTime < 10) return;
     sendNetLog(this.env, this.state, 'tung', record);
   }
@@ -1546,6 +1800,13 @@ export default {
     if (creating === !!suppliedCode) {
       return new Response('use exactly one of ?create=1 or ?code=ABCDE', { status: 400 });
     }
+    // A room moved by netplace.js: &shard= picks its copy, &ticket= reclaims
+    // a seat there.
+    const shard = url.searchParams.get('shard') || '';
+    const ticket = url.searchParams.get('ticket') || '';
+    if ((shard && (creating || !shardRegion(shard))) || (ticket && !(shard && /^[a-z0-9]{16}$/.test(ticket)))) {
+      return new Response('invalid shard or ticket', { status: 400 });
+    }
 
     const action = creating ? 'create' : 'join';
     const adminName = await adminIdentity(request, env);
@@ -1576,10 +1837,11 @@ export default {
     headers.set('X-Tung-Room-Code', code);
     headers.set('X-Tung-Admin', adminName ? '1' : '0');
     headers.set('X-Tung-Admin-Name', adminName);
+    headers.set('X-Tung-Room-Ticket', ticket);
     // The room only ever sees /ws: no outside path reaches its internal routes.
     const target = new URL(request.url);
     target.pathname = '/ws';
     const roomRequest = withWhere(new Request(target, new Request(request, { headers })), where);
-    return env.ROOMS.getByName(code).fetch(roomRequest);
+    return roomStub(env.ROOMS, code, shard).fetch(roomRequest);
   },
 };
