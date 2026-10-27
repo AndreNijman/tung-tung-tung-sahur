@@ -533,6 +533,7 @@ class Room {
       p.moveTokens = MOVE_BURST;
       p.motionSpeed = 0;
       p.swapCooldownUntil = 0;
+      p.sentAt = null;
     });
     if(this.settings.tungs===0){const looks=['','tung-tralalero','tung-bombardiro'];for(let i=0;i<this.settings.botTungs;i++)this.bots.push({id:-1-i,name:`BOT TUNG ${i+1}`,look:{tung:looks[i%looks.length]},role:'tung',bot:true,color:PLAYER_COLORS[(order.length+i)%PLAYER_COLORS.length],x:1.5,y:1.5,a:0,flags:0,hidden:false,alive:true,carrying:-1,delivered:0,caught:0,spawnIdx:order.length+i,pathAt:0,targetCell:null,nextCell:null});}
     const actors=this.publicRoster();
@@ -751,7 +752,9 @@ class Room {
         ? -1 : (!viewer || p.id === viewer.id || !p.hidden ? p.carrying : -1);
       const row = [p.id, p.flags | (p.hidden ? FLAG_HIDDEN : 0), p.alive ? 1 : 0, carrying];
       if (concealed) ps.push(row);
-      else ps.push(row.concat([round2(p.x), round2(p.y), round3(p.a)]));
+      // The last element, when known, is when the player's own client sent
+      // this position (its clock), so the others can draw it on that clock.
+      else ps.push(row.concat([round2(p.x), round2(p.y), round3(p.a)], Number.isFinite(p.sentAt) ? [p.sentAt] : []));
     }
     return {
       t: 'snap',
@@ -923,6 +926,7 @@ function handle(session, msg) {
           me.x = msg.x; me.y = msg.y;
           me.moveTokens = Math.max(0, me.moveTokens - moved);
           acceptedMove = true;
+          me.sentAt = Number.isFinite(msg.s) && msg.s >= 0 && msg.s < 1e12 ? Math.round(msg.s) : null;
         }
         // Over budget: keep the previous position. Tokens replenish by elapsed
         // wall time, not by packet count, so flooding tiny steps gains nothing.

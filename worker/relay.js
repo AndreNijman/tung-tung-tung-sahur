@@ -400,6 +400,7 @@ class Player {
     this.where = null;                // { country, edge } from netplace.js, for the lag log
     this.regions = null;              // this player's ping to each region (netprobe.js)
     this.rtts = [];                   // their last few reported pings to this room
+    this.sentAt = null;               // their client's clock on the position last accepted
   }
 
   recentRtt() {
@@ -1080,6 +1081,7 @@ export class Room {
       player.moveTokens = MOVE_BURST;
       player.motionSpeed = 0;
       player.swapCooldownUntil = 0;
+      player.sentAt = null;
     });
     if(this.settings.tungs===0){const looks=['','tung-tralalero','tung-bombardiro'];for(let i=0;i<this.settings.botTungs;i++)this.bots.push({id:-1-i,name:`BOT TUNG ${i+1}`,look:{tung:looks[i%looks.length]},role:'tung',bot:true,color:PLAYER_COLORS[(order.length+i)%PLAYER_COLORS.length],x:1.5,y:1.5,a:0,flags:0,hidden:false,alive:true,carrying:-1,delivered:0,caught:0,spawnIdx:order.length+i,pathAt:0,targetCell:null,nextCell:null});}
     const actors=this.publicRoster();
@@ -1318,7 +1320,13 @@ export class Room {
         player.alive ? 1 : 0,
         carrying,
       ];
-      players.push(concealed ? row : row.concat([round2(player.x), round2(player.y), round3(player.a)]));
+      if (!concealed) {
+        row.push(round2(player.x), round2(player.y), round3(player.a));
+        // When the player's own client sent this position (its clock), so the
+        // others can draw it on that clock (index.html SnapBuffer).
+        if (Number.isFinite(player.sentAt)) row.push(player.sentAt);
+      }
+      players.push(row);
     }
     return {
       t: 'snap',
@@ -1604,6 +1612,7 @@ export class Room {
         player.y = message.y;
         player.moveTokens = Math.max(0, player.moveTokens - moved);
         acceptedMove = true;
+        player.sentAt = Number.isFinite(message.s) && message.s >= 0 && message.s < 1e12 ? Math.round(message.s) : null;
       }
     }
 

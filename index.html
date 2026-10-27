@@ -5734,87 +5734,96 @@ return { REGION_NAMES, pingUrl, probeRegions, regionLabel };
 // ---------------------------------------------------------------------------
 // remote bodies
 //
-// Remote bodies are drawn slightly in the past from a buffer of snapshots, so
-// a late packet is not a stall followed by a jump. Each snapshot sits on the
-// relay's own clock (tick k, 50 ms apart). The drawn time trails the newest
-// snapshot by the least lateness seen over the last few seconds plus about the
-// 95th-percentile gap between arrivals; that clock is slewed at most 10% so a
-// change of delay never jumps the picture. Between two samples a body is
-// interpolated; past the newest it coasts on its last velocity for at most
-// 100 ms. A step no body could walk (an alcove swap, a respawn) snaps.
+// Remote bodies are drawn slightly in the past from a buffer of samples, so a
+// late packet is not a stall followed by a jump. A player's sample sits on
+// their own client's clock (the relay passes on when each position was sent),
+// so jitter on both legs, theirs to the relay and the relay to here, is
+// absorbed; a bot's sits on the relay's tick clock. Each body is drawn at the
+// least lateness seen over the last few seconds plus about the 95th-percentile
+// gap between its arrivals; that clock is slewed at most 10% so a change of
+// delay never jumps the picture. Between two samples a body is interpolated;
+// past the newest it coasts on its last velocity for at most 100 ms. A step no
+// body could walk (an alcove swap, a respawn) snaps.
 // tests/latency/harness.mjs lifts this class out of the page to measure it.
 // ---------------------------------------------------------------------------
 class SnapBuffer {
   constructor(tickMs = 50) {
     this.tickMs = tickMs;
-    this.tracks = new Map();          // id -> [{ t, x, y, a }], relay ms
-    this.lates = [];                  // [arrival, arrival - relay time] for the last 3 s
-    this.gaps = [];                   // the last 60 gaps between arrivals
-    this.lastArrival = 0;
-    this.t = null;                    // relay ms of the snapshot being added
-    this.delay = 2 * tickMs;
-    this.clock = null;                // relay ms being drawn
-    this.clockAt = 0;
+    this.tracks = new Map();
+    this.k = null;
+    this.now = 0;
   }
 
   /** A snapshot for relay tick `k` arrived at `now` (ms); add() its bodies next. */
   snap(k, now) {
-    const t = Number.isFinite(k) ? k * this.tickMs : now;
-    if (this.t !== null && t < this.t - 1000) {      // the relay's tick restarted
-      this.tracks.clear(); this.lates = []; this.clock = null;
-    }
-    this.t = t;
-    this.lates.push([now, now - t]);
-    while (now - this.lates[0][0] > 3000) this.lates.shift();
-    if (this.lastArrival) {
-      this.gaps.push(now - this.lastArrival);
-      if (this.gaps.length > 60) this.gaps.shift();
-      const sorted = [...this.gaps].sort((a, b) => a - b);
-      const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
-      this.delay = Math.max(this.tickMs, Math.min(250, p95));
-    }
-    this.lastArrival = now;
+    if (Number.isFinite(k) && Number.isFinite(this.k) && k < this.k - 20) this.tracks.clear();  // a new night
+    this.k = k;
+    this.now = now;
   }
 
-  /** Body `id` at the current snapshot. */
-  add(id, x, y, a) {
+  /**
+   * Body `id` in the current snapshot. `sentAt` is when its own client sent
+   * that position (its clock, ms), which the relay passes on; without it (bots,
+   * an older relay) the sample sits on the relay's tick clock.
+   */
+  add(id, x, y, a, sentAt) {
+    const clock = Number.isFinite(sentAt) ? 'sent' : 'tick';
+    const t = clock === 'sent' ? sentAt : (Number.isFinite(this.k) ? this.k * this.tickMs : this.now);
     let track = this.tracks.get(id);
-    if (!track) this.tracks.set(id, track = []);
-    const last = track[track.length - 1];
-    if (last && this.t <= last.t) return;
+    if (!track || track.clock !== clock) {
+      track = { clock, samples: [], lates: [], gaps: [], lastArrival: 0, delay: 2 * this.tickMs, drawn: null, drawnAt: 0 };
+      this.tracks.set(id, track);
+    }
+    const samples = track.samples, last = samples[samples.length - 1];
+    if (last && t <= last.t) return;                   // nothing new since the last snapshot
     // A step no body could walk, or a body back after a long absence: start over.
-    if (last && (Math.hypot(x - last.x, y - last.y) > 1.5 || this.t - last.t > 1000)) track.length = 0;
-    track.push({ t: this.t, x, y, a });
-    if (track.length > 40) track.shift();
+    if (last && (Math.hypot(x - last.x, y - last.y) > 1.5 || t - last.t > 1000)) {
+      samples.length = 0; track.lates = []; track.drawn = null;
+    }
+    samples.push({ t, x, y, a });
+    if (samples.length > 40) samples.shift();
+    const now = this.now;
+    track.lates.push([now, now - t]);
+    while (now - track.lates[0][0] > 3000) track.lates.shift();
+    if (track.lastArrival) {
+      track.gaps.push(now - track.lastArrival);
+      if (track.gaps.length > 60) track.gaps.shift();
+      const sorted = [...track.gaps].sort((p, q) => p - q);
+      const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
+      track.delay = Math.max(this.tickMs, Math.min(250, p95));
+    }
+    track.lastArrival = now;
   }
 
-  /** Move the drawn clock to `now` (ms); once per frame, before pose(). */
+  /** Move every body's drawn time to `now` (ms); once per frame, before pose(). */
   frame(now) {
-    if (!this.lates.length) return;
-    let base = Infinity;
-    for (const [, late] of this.lates) base = Math.min(base, late);
-    const target = now - base - this.delay;
-    const dt = now - this.clockAt;
-    this.clockAt = now;
-    if (this.clock === null || Math.abs(target - this.clock) > 500 || dt <= 0) { this.clock = target; return; }
-    this.clock += dt + Math.max(-0.1 * dt, Math.min(0.1 * dt, target - this.clock));
+    for (const track of this.tracks.values()) {
+      if (!track.lates.length) continue;
+      let base = Infinity;
+      for (const [, late] of track.lates) base = Math.min(base, late);
+      const target = now - base - track.delay;
+      const dt = now - track.drawnAt;
+      track.drawnAt = now;
+      if (track.drawn === null || Math.abs(target - track.drawn) > 500 || dt <= 0) track.drawn = target;
+      else track.drawn += dt + Math.max(-0.1 * dt, Math.min(0.1 * dt, target - (track.drawn + dt)));
+    }
   }
 
   /** Where body `id` is drawn now: { x, y, a }, or null if it was never seen. */
   pose(id) {
     const track = this.tracks.get(id);
-    if (!track?.length || this.clock === null) return null;
-    const t = this.clock, n = track.length;
+    if (!track?.samples.length || track.drawn === null) return null;
+    const samples = track.samples, t = track.drawn, n = samples.length;
     const turn = (from, to) => (((to - from) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
-    if (t <= track[0].t || n === 1) return track[t <= track[0].t ? 0 : n - 1];
+    if (t <= samples[0].t || n === 1) return samples[t <= samples[0].t ? 0 : n - 1];
     for (let i = n - 1; i > 0; i--) {
-      const s0 = track[i - 1], s1 = track[i];
+      const s0 = samples[i - 1], s1 = samples[i];
       if (t < s0.t) continue;
       if (t > s1.t) break;
       const f = (t - s0.t) / (s1.t - s0.t);
       return { x: s0.x + (s1.x - s0.x) * f, y: s0.y + (s1.y - s0.y) * f, a: s0.a + turn(s0.a, s1.a) * f };
     }
-    const s0 = track[n - 2], s1 = track[n - 1];
+    const s0 = samples[n - 2], s1 = samples[n - 1];
     const ahead = Math.min(100, t - s1.t) / (s1.t - s0.t);
     return { x: s1.x + (s1.x - s0.x) * ahead, y: s1.y + (s1.y - s0.y) * ahead, a: s1.a };
   }
@@ -6080,7 +6089,7 @@ class Net {
       if (row.length >= 7) {
         p.target = [row[4], row[5]]; p.targetA = row[6];
         if (!p.pos) { p.pos = [...p.target]; p.a = p.targetA; }
-        if (id !== this.you) this.buffer.add(id, row[4], row[5], row[6]);
+        if (id !== this.you) this.buffer.add(id, row[4], row[5], row[6], row[7]);
         if (game.role === 'tung' && id !== this.you && p.role !== 'tung' && (flags & 1)) {
           game.stampFootprint(id, row[4], row[5], !!(flags & 2), carrying >= 0, outfitTrailColor(p));
         }
@@ -6237,7 +6246,8 @@ class Net {
     let flags = (game.isMoving ? 1 : 0) | (game.isSprinting ? 2 : 0) | (game.hidden ? 4 : 0);
     if (game.surge > 0) flags |= 32;
     if(game.emoteTime>0)flags|=game.performanceKind==='taunt'?128:64;
-    this.send({ t: 'in', x: game.px, y: game.py, a: game.angle, f: flags, hv: 1 });
+    // s: when this position was sent, which the relay hands on to the others.
+    this.send({ t: 'in', x: game.px, y: game.py, a: game.angle, f: flags, hv: 1, s: Math.round(performance.now()) });
   }
 
   get(id) { return this.players.get(id) || null; }
