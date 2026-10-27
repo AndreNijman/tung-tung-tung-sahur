@@ -1,3 +1,5 @@
+import { NetStats, sendNetLog, coloOf } from './netstats.js';
+
 const CATCH_DIST = 0.52;
 const PICKUP_DIST = 0.62;
 const SURAU_DIST = 0.9;
@@ -388,10 +390,13 @@ export class Room {
     this.maintenanceTimer = null;
     this.initializationQueue = Promise.resolve();
     this.registryQueue = Promise.resolve();
+    this.net = null;                  // lag stats for the night in progress
+    this.colo = '';
     this.resetRoom();
   }
 
   resetRoom(notifyRegistry = false) {
+    this.endNetLog('closed');
     const previousCode = this.code;
     if (notifyRegistry && previousCode) this.removeFromRegistry(previousCode, true);
     this.stopTick();
@@ -498,6 +503,7 @@ export class Room {
     }
 
     if (message.t === 'ping') {
+      if (session.player) this.net?.ping(session.player.id, message.rtt, message.fps, message.frameMax);
       this.send(session.socket, { t: 'pong', c: message.c });
       return;
     }
@@ -644,6 +650,7 @@ export class Room {
         break;
 
       case 'in':
+        this.net?.message(me.id);
         this.handleInput(me, message);
         break;
 
@@ -714,6 +721,7 @@ export class Room {
     player.a = 0;
     player.lastMoveAt = Date.now();
     player.moveTokens = MOVE_BURST;
+    this.net?.seat(player.id, player.name);
 
     this.send(player.socket, {
       t: 'begin',
@@ -933,6 +941,7 @@ export class Room {
     if(this.settings.tungs>0){const picked=this.pickTung();firstTungId=picked.id;how=picked.how;tungIds=[firstTungId];const candidates=[...this.players.keys()].filter(id=>id!==firstTungId);const wanted=Math.min(this.settings.tungs,this.players.size-1);while(tungIds.length<wanted&&candidates.length)tungIds.push(candidates.splice(randomInt(candidates.length),1)[0]);}
     this.seed = randomInt(0x7fffffff);
     this.phase = 'play';
+    this.startNetLog();
     this.syncRegistry();
     this.manifest = null;
     this.items = [];
@@ -1084,7 +1093,8 @@ export class Room {
 
   tickOnce() {
     const now = Date.now();
-    const dt = Math.min(0.5, (now - this.lastTickAt) / 1000);
+    const gap = now - this.lastTickAt;
+    const dt = Math.min(0.5, gap / 1000);
     this.lastTickAt = now;
     if (this.phase !== 'play') return;
     if (!this.manifest) {
@@ -1100,6 +1110,7 @@ export class Room {
 
     this.tick++;
     this.timeLeft -= dt;
+    this.net?.loop(gap, dt * 1000, Math.max(0, gap - 500));
     this.updateBots(dt);
     this.resolvePickups();
     this.resolveDeliveries();
@@ -1229,6 +1240,7 @@ export class Room {
     this.phase = 'over';
     this.result = result;
     this.stopTick();
+    this.endNetLog(result === 'abandoned' ? 'abandoned' : 'finished');
     this.syncRegistry();
     const delivered = this.items.filter(item => item.state === 2).length;
     this.broadcast({
@@ -1253,6 +1265,7 @@ export class Room {
   }
 
   backToLobby() {
+    this.endNetLog('abandoned');
     this.phase = 'lobby';
     this.stopTick();
     this.manifest = null;
@@ -1267,6 +1280,26 @@ export class Room {
     }
     this.sendLobby();
     this.syncRegistry();
+  }
+
+  // One record per night, from start to its result (or until it is abandoned),
+  // sent to games-guard's NetLog.
+  startNetLog() {
+    this.endNetLog('abandoned');
+    this.net = new NetStats();
+    for (const player of this.players.values()) this.net.seat(player.id, player.name);
+    if (!this.colo) coloOf().then(colo => { this.colo = colo; });
+  }
+
+  endNetLog(outcome) {
+    const net = this.net;
+    this.net = null;
+    if (!net) return;
+    const s = this.settings;
+    const mode = `${net.seats.size}p · ${s.tungs ? `${s.tungs} tung` : `${s.botTungs} bot tung`} · ${s.mapN}x${s.mapN}`;
+    const record = net.record({ code: this.code, mode, outcome, colo: this.colo });
+    if (record.runTime < 10) return;
+    sendNetLog(this.env, this.state, 'tung', record);
   }
 
   handleInput(player, message) {

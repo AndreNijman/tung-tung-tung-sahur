@@ -1,3 +1,10 @@
+// Tung Tung Tung Sahorror online relay (worker/relay.js).
+//
+// Production is env.production: `rime secret use cloudflare
+// cloudflare.wrangler.deploy tung-relay` runs `wrangler deploy --env
+// production` with the broker's token (see rime.toml in the deploy clone).
+// NETLOG is games-guard's NetLog entrypoint: each finished night's lag
+// statistics go there (games.andrenijman.com/_guard/admin/lag).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "tung-relay",
@@ -34,5 +41,37 @@
       "pattern": "relay.tung.andrenijman.com",
       "custom_domain": true
     }
-  ]
+  ],
+  "services": [{ "binding": "NETLOG", "service": "games-guard", "entrypoint": "NetLog" }],
+  // The same Worker name, so production keeps its Durable Object namespace.
+  // Bindings are not inherited by an environment, so they repeat.
+  "env": {
+    "production": {
+      "name": "tung-relay",
+      "workers_dev": true,
+      "preview_urls": false,
+      "observability": {
+        "enabled": true
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "ROOMS",
+            "class_name": "Room"
+          },
+          {
+            "name": "REGISTRY",
+            "class_name": "Registry"
+          }
+        ]
+      },
+      "services": [{ "binding": "NETLOG", "service": "games-guard", "entrypoint": "NetLog" }],
+      "routes": [
+        {
+          "pattern": "relay.tung.andrenijman.com",
+          "custom_domain": true
+        }
+      ]
+    }
+  }
 }

@@ -7,6 +7,7 @@
     "sim": "node tools/sim.js --knowledge blind --threat flee",
     "smoke": "node tools/smoke.js",
     "smoke:mp": "node tools/mp-smoke.js",
+    "test:relay": "node --test tools/relay-test.mjs",
     "smoke:mp:live": "node tools/mp-smoke.js https://tung.andrenijman.com/",
     "deploy:worker": "npx wrangler deploy",
     "relay": "node server/relay.js",
