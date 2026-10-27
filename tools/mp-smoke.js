@@ -12,7 +12,8 @@ const { spawn } = require('child_process');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
-const PORT = 18000 + Math.floor(Math.random() * 1000);
+// SMOKE_PORT pins the port, for machines where other servers own some ranges.
+const PORT = Number(process.env.SMOKE_PORT) || 18000 + Math.floor(Math.random() * 1000);
 const urlArg = process.argv.slice(2).find(arg => /^https?:\/\//.test(arg));
 const relayArgIndex = process.argv.indexOf('--relay');
 const relayOverride = relayArgIndex >= 0 ? process.argv[relayArgIndex + 1] : null;
