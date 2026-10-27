@@ -5775,9 +5775,10 @@ class SnapBuffer {
       this.tracks.set(id, track);
     }
     const samples = track.samples, last = samples[samples.length - 1];
-    if (last && t <= last.t) return;                   // nothing new since the last snapshot
-    // A step no body could walk, or a body back after a long absence: start over.
-    if (last && (Math.hypot(x - last.x, y - last.y) > 1.5 || t - last.t > 1000)) {
+    if (last && t <= last.t && last.t - t <= 1000) return;  // nothing new since the last snapshot
+    // A step no body could walk, a body back after a long absence, or a clock
+    // that started over (a reload, a bogus send time): start over.
+    if (last && (Math.hypot(x - last.x, y - last.y) > 1.5 || Math.abs(t - last.t) > 1000)) {
       samples.length = 0; track.lates = []; track.drawn = null;
     }
     samples.push({ t, x, y, a });

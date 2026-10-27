@@ -58,6 +58,17 @@ test('a teleport snaps instead of sliding', () => {
   assert.deepEqual([pose.x, pose.y], [9, 9]);
 });
 
+test('a send clock that restarts resets the track instead of freezing it', () => {
+  const buffer = new SnapBuffer();
+  let now = 5000;
+  for (let i = 0; i < 10; i++) { buffer.snap(i + 1, now += 50); buffer.add(7, i * 0.1, 0, 0, 900000 + i * 50); }
+  // Their performance.now() starts over (a reload keeping the seat): far behind.
+  for (let i = 0; i < 10; i++) { buffer.snap(i + 11, now += 50); buffer.add(7, 1 + i * 0.1, 0, 0, 20 + i * 50); }
+  buffer.frame(now);
+  const pose = buffer.pose(7);
+  assert.ok(pose.x > 1.5, `follows the new clock (x ${pose.x})`);
+});
+
 test('the delay grows with jitter and stays clamped', () => {
   const steady = new SnapBuffer(), jittery = new SnapBuffer(), awful = new SnapBuffer();
   const line = Array.from({ length: 60 }, (_, i) => [i * 0.1, 0]);
